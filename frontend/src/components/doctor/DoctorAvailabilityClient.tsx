@@ -1,0 +1,409 @@
+'use client';
+
+import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { RecurringAvailability } from '@/types';
+import { DAYS_OF_WEEK } from '@/lib/constants';
+import { formatTime } from '@/lib/utils';
+import { toast } from 'sonner';
+import {
+  Calendar,
+  Clock,
+  Plus,
+  Trash2,
+  Loader2,
+  Sliders,
+  CheckCircle2,
+} from 'lucide-react';
+import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
+
+interface DoctorAvailabilityClientProps {
+  initialAvailability: RecurringAvailability[];
+}
+
+function parseAvailabilityList(input: unknown): RecurringAvailability[] {
+  if (Array.isArray(input)) return input;
+  if (input && typeof input === 'object') {
+    const obj = input as any;
+    if (Array.isArray(obj.recurring)) return obj.recurring;
+    if (Array.isArray(obj.data)) return obj.data;
+  }
+  return [];
+}
+
+export function DoctorAvailabilityClient({
+  initialAvailability,
+}: DoctorAvailabilityClientProps) {
+  const router = useRouter();
+  const [availabilities, setAvailabilities] = useState<RecurringAvailability[]>(() =>
+    parseAvailabilityList(initialAvailability),
+  );
+
+  // Form State
+  const [selectedDays, setSelectedDays] = useState<string[]>([
+    'MONDAY',
+    'TUESDAY',
+    'WEDNESDAY',
+    'THURSDAY',
+    'FRIDAY',
+  ]);
+  const [startTime, setStartTime] = useState('09:00');
+  const [endTime, setEndTime] = useState('17:00');
+  const [slotDuration, setSlotDuration] = useState<number>(30);
+  const [schedulingType, setSchedulingType] = useState<'STREAM' | 'WAVE'>('STREAM');
+  const [bufferTime, setBufferTime] = useState<number>(0);
+  const [maxPatients, setMaxPatients] = useState<number>(1);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Toggle Day Selection
+  const toggleDay = (day: string) => {
+    if (selectedDays.includes(day)) {
+      if (selectedDays.length === 1) {
+        toast.warning('Select at least one day');
+        return;
+      }
+      setSelectedDays(selectedDays.filter((d) => d !== day));
+    } else {
+      setSelectedDays([...selectedDays, day]);
+    }
+  };
+
+  // Calculate Slot Count Preview
+  const calculatePreviewSlots = () => {
+    try {
+      const [sh, sm] = startTime.split(':').map(Number);
+      const [eh, em] = endTime.split(':').map(Number);
+      const startMin = sh * 60 + sm;
+      const endMin = eh * 60 + em;
+
+      if (endMin <= startMin) return 0;
+
+      const totalWorkingMins = endMin - startMin;
+      const slotAndBuffer = slotDuration + bufferTime;
+      if (slotAndBuffer <= 0) return 0;
+
+      return Math.floor(totalWorkingMins / slotAndBuffer);
+    } catch {
+      return 0;
+    }
+  };
+
+  const previewSlotCount = calculatePreviewSlots();
+
+  const handleCreateSchedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (endTime <= startTime) {
+      toast.error('Invalid Time Range', {
+        description: 'End time must be later than start time',
+      });
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await clientAxios.post('/api/doctor/availability-proxy', {
+        daysOfWeek: selectedDays,
+        startTime,
+        endTime,
+        slotDuration,
+        schedulingType,
+        bufferTime,
+        maxPatients: schedulingType === 'WAVE' ? maxPatients : undefined,
+      });
+
+      toast.success('Availability Schedule Saved!');
+      router.refresh();
+
+      // Refetch via Axios
+      const updatedRes = await clientAxios.get<any>(
+        '/api/doctor/availability-proxy',
+      );
+      const rawData = updatedRes.data?.data ?? updatedRes.data;
+      setAvailabilities(parseAvailabilityList(rawData));
+    } catch (err: unknown) {
+      toast.error('Schedule Failed', { description: extractErrorMessage(err) });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      setDeletingId(id);
+      await clientAxios.delete(`/api/doctor/availability-proxy/${id}`);
+
+      toast.success('Availability Slot Removed');
+      setAvailabilities((prev) => (Array.isArray(prev) ? prev.filter((a) => a.id !== id) : []));
+      router.refresh();
+    } catch (err: unknown) {
+      toast.error('Deletion Failed', { description: extractErrorMessage(err) });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const safeAvailabilities = Array.isArray(availabilities) ? availabilities : [];
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      {/* Schedule Configuration Form */}
+      <div className="lg:col-span-5 card p-6 sm:p-7 shadow-xs bg-white space-y-6">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900">
+            Set Weekly Working Hours
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Define recurring consultation slots that automatically open for patient booking.
+          </p>
+        </div>
+
+        <form onSubmit={handleCreateSchedule} className="space-y-5">
+          {/* Days of Week Selector */}
+          <div>
+            <label className="field-label">Select Days of Week</label>
+            <div className="flex flex-wrap gap-2">
+              {DAYS_OF_WEEK.map((day) => {
+                const isSelected = selectedDays.includes(day);
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => toggleDay(day)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-blue-700 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {day.slice(0, 3)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Time Range */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="field-label">Start Time</label>
+              <input
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="field-input text-xs font-semibold"
+                required
+              />
+            </div>
+            <div>
+              <label className="field-label">End Time</label>
+              <input
+                type="time"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                className="field-input text-xs font-semibold"
+                required
+              />
+            </div>
+          </div>
+
+          {/* Slot Duration */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="field-label">Slot Duration</label>
+              <select
+                value={slotDuration}
+                onChange={(e) => setSlotDuration(Number(e.target.value))}
+                className="field-input text-xs font-semibold"
+              >
+                <option value={15}>15 Minutes</option>
+                <option value={20}>20 Minutes</option>
+                <option value={30}>30 Minutes</option>
+                <option value={45}>45 Minutes</option>
+                <option value={60}>60 Minutes</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="field-label">Buffer Time</label>
+              <select
+                value={bufferTime}
+                onChange={(e) => setBufferTime(Number(e.target.value))}
+                className="field-input text-xs font-semibold"
+              >
+                <option value={0}>0 Min (Back to back)</option>
+                <option value={5}>5 Minutes</option>
+                <option value={10}>10 Minutes</option>
+                <option value={15}>15 Minutes</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Scheduling Type */}
+          <div>
+            <label className="field-label">Scheduling Flow</label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setSchedulingType('STREAM')}
+                className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                  schedulingType === 'STREAM'
+                    ? 'border-blue-700 bg-blue-50/80 text-blue-900 shadow-2xs'
+                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <span className="font-bold text-xs block">STREAM</span>
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  1 patient per slot (Linear)
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSchedulingType('WAVE')}
+                className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                  schedulingType === 'WAVE'
+                    ? 'border-blue-700 bg-blue-50/80 text-blue-900 shadow-2xs'
+                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <span className="font-bold text-xs block">WAVE</span>
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  Multiple patients grouped
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {schedulingType === 'WAVE' && (
+            <div>
+              <label className="field-label">Max Patients per Wave</label>
+              <input
+                type="number"
+                min={2}
+                max={10}
+                value={maxPatients}
+                onChange={(e) => setMaxPatients(Number(e.target.value))}
+                className="field-input text-xs font-semibold"
+              />
+            </div>
+          )}
+
+          {/* Slot Count Preview Box */}
+          <div className="p-4 bg-blue-50/70 rounded-2xl border border-blue-200/60 flex items-center justify-between">
+            <div>
+              <span className="text-xs font-bold text-blue-900 block">
+                Estimated Slot Generation:
+              </span>
+              <span className="text-[11px] text-blue-700">
+                {previewSlotCount} slots per active clinic day
+              </span>
+            </div>
+            <span className="text-xl font-black text-blue-800 font-mono">
+              {previewSlotCount * selectedDays.length} slots/wk
+            </span>
+          </div>
+
+          <button
+            type="submit"
+            disabled={saving || previewSlotCount === 0}
+            className="btn-primary w-full py-3"
+          >
+            {saving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Configuring Slots…</span>
+              </>
+            ) : (
+              <>
+                <Plus className="w-4 h-4" />
+                <span>Save Recurring Availability</span>
+              </>
+            )}
+          </button>
+        </form>
+      </div>
+
+      {/* Configured Recurring Availability Table */}
+      <div className="lg:col-span-7 space-y-4">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900">
+            Current Weekly Roster ({safeAvailabilities.length})
+          </h2>
+          <p className="text-xs text-slate-500">
+            Active rules determining when your clinic accepts appointments.
+          </p>
+        </div>
+
+        {safeAvailabilities.length === 0 ? (
+          <div className="card py-16 text-center p-8 space-y-2 bg-white">
+            <Calendar className="w-8 h-8 text-slate-300 mx-auto" />
+            <h3 className="text-sm font-bold text-slate-800">
+              No Weekly Schedule Set
+            </h3>
+            <p className="text-xs text-slate-500 max-w-xs mx-auto">
+              Please use the form on the left to set up your consultation hours so patients can book slots.
+            </p>
+          </div>
+        ) : (
+          <div className="card overflow-hidden bg-white shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 border-b border-slate-200/80 text-slate-500 uppercase font-bold tracking-wider text-[10px]">
+                  <tr>
+                    <th className="py-3 px-4">Day of Week</th>
+                    <th className="py-3 px-4">Time Window</th>
+                    <th className="py-3 px-4">Duration</th>
+                    <th className="py-3 px-4">Type</th>
+                    <th className="py-3 px-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {safeAvailabilities.map((item) => (
+                    <tr
+                      key={item.id}
+                      className="hover:bg-slate-50/60 transition-colors"
+                    >
+                      <td className="py-3.5 px-4 font-bold text-slate-900">
+                        {item.dayOfWeek}
+                      </td>
+                      <td className="py-3.5 px-4 font-semibold text-slate-700">
+                        {formatTime(item.startTime)} - {formatTime(item.endTime)}
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-600">
+                        {item.slotDuration} min
+                        {item.bufferTime > 0 ? ` (+${item.bufferTime}m buffer)` : ''}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className="px-2.5 py-0.5 rounded-full bg-slate-100 font-semibold text-[10px] text-slate-700 border border-slate-200/60">
+                          {item.schedulingType || 'STREAM'}
+                          {item.schedulingType === 'WAVE' ? ` (${item.maxPatients || 2})` : ''}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(item.id)}
+                          disabled={deletingId === item.id}
+                          className="p-1.5 rounded-xl border border-slate-200 hover:bg-rose-50 hover:text-rose-600 text-slate-400 transition-colors cursor-pointer"
+                          title="Remove availability"
+                        >
+                          {deletingId === item.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
