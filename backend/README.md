@@ -1,104 +1,334 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# 🚀 Schedula Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+A NestJS backend server for the Schedula doctor appointment booking application.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## 🌍 Live Links
 
-Doctor Appointment Booking Backend built with [Nest](https://github.com/nestjs/nest) framework and TypeScript.
+-
+- **Postman API Collection:** [View and Test APIs Here](https://www.postman.com/work-anas79-6594293/workspace/anas-ali-s-workspace/collection/50962245-d9f6454f-bca8-472e-91cd-a1de685fce2c?action=share&source=copy-link&creator=50962245)
 
-### Database Design & ER Diagram
-- Detailed Specification: [ER_DIAGRAM.md](../ER_DIAGRAM.md)
-- ER Diagram Image: [er_diagram.png](../er_diagram.png)
+---
 
-![ER Diagram](../er_diagram.png)
+## ✨ Features & Implementations
 
-## Project setup
+- **Role-Based Access Control (RBAC):** Secure access for `DOCTOR` and `PATIENT` roles.
+- **Authentication:** HTTP-Only JWT Cookie-based session management.
+- **Advanced Doctor Scheduling System:**
+  - **Recurring Availability:** Weekly schedules with customizable slot durations.
+  - **Custom Overrides:** Date-specific schedule modifications.
+  - **Unavailability & Auto-Reschedule:** Mark specific dates/times as unavailable and automatically reschedule affected patient appointments.
+- **Appointment Booking System:**
+  - **Wave and Stream Strategies:** Advanced appointment queue management (e.g., token generation for Wave slots).
+  - **Conflict Prevention:** Duplicate booking and overlapping schedule prevention.
+- **Dashboards:** Comprehensive Doctor and Patient dashboards with statistics.
+- **Data Integrity:** Strict input validation, error handling, and structured RESTful responses.
 
-```bash
-$ npm install
+---
+
+## 🗂️ ER Diagram
+
+![ER Diagram](../ER-Diagram/ER-diagram.png)
+
+---
+
+## 🔐 Environment Variables
+
+Create a `.env` file in the root of the `Backend` directory and configure the following variables:
+
+```env
+# Server
+PORT=3000
+NODE_ENV=development
+
+# Auth
+JWT_SECRET=change-this-to-a-long-random-secret
+JWT_EXPIRES_IN=7d
+
+# Option 1: Hosted DB connection string (Neon / Supabase / Railway)
+# DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
+
+# Option 2: Local PostgreSQL (use when DATABASE_URL is not set)
+DB_HOST=localhost
+DB_PORT=5432
+DB_USERNAME=postgres
+DB_PASSWORD=your_password
+DB_NAME=schedula
 ```
 
-## Compile and run the project
+---
 
+## ⚙️ Project Setup & Run
+
+### 1. Prerequisites
+- [Node.js](https://nodejs.org/) (v18 or above)
+- [npm](https://www.npmjs.com/)
+- [PostgreSQL](https://www.postgresql.org/) database
+
+### 2. Install Dependencies
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm install
 ```
 
-## Run tests
-
+### 3. Run Migrations
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npx typeorm migration:run -d dist/data-source.js
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
+### 4. Start Development Server
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+npm run start:dev
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+---
 
-## Resources
+## 📖 API Documentation (Deep Detail)
 
-Check out a few resources that may come in handy when working with NestJS:
+### Base Configuration
+- **Root Prefix:** `/api`
+- **Authentication:** Sessions/Authentications are managed via HTTP-Only JWT Cookie (`token`).
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+---
 
-## Support
+## 1. Authentication Section (`/api/auth`)
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+### A. Signup
+Creates a new user profile with either `DOCTOR` or `PATIENT` role. Saves a JWT cookie named `token`.
 
-## Stay in touch
+- **Route:** `POST /api/auth/signup`
+- **Request Body:**
+```json
+{
+  "email": "doctor.test@example.com",
+  "password": "SecurePassword123",
+  "role": "DOCTOR"
+}
+```
+*Roles can be `"DOCTOR"` or `"PATIENT"`.*
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+- **Response (`201 Created`):**
+```json
+{
+  "message": "User registered successfully",
+  "user": {
+    "id": "e8a93a02-23c2-4a0b-8dfb-f6cd851239aa",
+    "email": "doctor.test@example.com",
+    "role": "DOCTOR"
+  }
+}
+```
 
-## License
+### B. Login
+Authenticates an existing user and sets an HTTP-Only cookie.
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- **Route:** `POST /api/auth/login`
+- **Request Body:**
+```json
+{
+  "email": "doctor.test@example.com",
+  "password": "SecurePassword123"
+}
+```
+
+### C. Logout
+Clears the JWT `token` authentication cookie.
+
+- **Route:** `POST /api/auth/logout`
+
+### D. Get Current User (`me`)
+Returns the authenticated user's details.
+
+- **Route:** `GET /api/auth/me`
+
+---
+
+## 2. Doctor Section (`/api/doctor`)
+
+### A. Create Doctor Profile
+Sets up specialized profile details for an authenticated doctor.
+
+- **Route:** `POST /api/doctor/profile`
+- **Access:** Authenticated `DOCTOR` only.
+- **Request Body:**
+```json
+{
+  "name": "Dr. John Doe",
+  "specialization": "Cardiologist",
+  "experience": 10,
+  "consultationFee": 500,
+  "clinicAddress": "123 Health Street, Clinic City",
+  "phoneNumber": "+1234567890"
+}
+```
+
+### B. Get Doctor Profile
+Retrieves the logged-in doctor's profile.
+
+- **Route:** `GET /api/doctor/profile`
+- **Access:** Authenticated `DOCTOR` only.
+
+### C. Find All Doctors (Discovery)
+Public search route to let patients look up doctors based on specialization, search terms, or name.
+
+- **Route:** `GET /api/doctor`
+- **Query Params:** `specialization`, `search`, `page`, `limit`
+
+### D. Create Recurring Availability
+Enters a weekly availability block (e.g. MONDAYs 09:00 to 12:00) with custom slot duration.
+
+- **Route:** `POST /api/doctor/availability`
+- **Access:** Authenticated `DOCTOR` only.
+- **Request Body:**
+```json
+{
+  "dayOfWeek": "MONDAY",
+  "startTime": "09:00",
+  "endTime": "12:00",
+  "slotDuration": 30
+}
+```
+
+### E. Get Detailed Schedule Dashboard
+Retrieves a 30-day schedule overview with pre-divided slots (`dividedSlots`).
+
+- **Route:** `GET /api/doctor/availability`
+- **Access:** Authenticated `DOCTOR` only.
+
+### F. Create Custom Override
+Allows specifying date-specific work hours that override weekly schedules.
+
+- **Route:** `POST /api/doctor/availability/override`
+- **Access:** Authenticated `DOCTOR` only.
+- **Request Body:**
+```json
+{
+  "date": "2026-06-20",
+  "startTime": "14:00",
+  "endTime": "16:00",
+  "slotDuration": 20
+}
+```
+
+### G. Set Unavailable (Auto-Reschedule)
+Marks a specific slot or an entire day as unavailable for a doctor. Automatically reschedules any affected appointments to the next available slot within 30 days.
+
+- **Route:** `POST /api/doctor/availability/unavailable`
+- **Access:** Authenticated `DOCTOR` only.
+- **Request Body:**
+```json
+{
+  "date": "2026-06-22",
+  "startTime": "09:00",
+  "endTime": "12:00"
+}
+```
+
+### H. Doctor Appointments View
+Returns all appointments booked with the authenticated doctor, with patient details.
+
+- **Route:** `GET /api/doctor/appointments`
+- **Access:** Authenticated `DOCTOR` only.
+
+---
+
+## 3. Patient Section (`/api/patient` & Booking)
+
+### A. Create Patient Profile
+Sets up patient record card details.
+
+- **Route:** `POST /api/patient/profile`
+- **Access:** Authenticated `PATIENT` only.
+- **Request Body:**
+```json
+{
+  "name": "Jane Smith",
+  "dateOfBirth": "1995-08-22",
+  "gender": "FEMALE",
+  "phoneNumber": "+1987654321",
+  "bloodGroup": "O+"
+}
+```
+
+### B. Get Patient Dashboard
+Provides dashboard statistics for patient view.
+
+- **Route:** `GET /api/patient/dashboard`
+- **Access:** Authenticated `PATIENT` only.
+
+### C. Get Patient Bookable Slots
+Allows patients to fetch all bookable slots for a specific doctor. Filters out past times and overlapping appointments.
+
+- **Route:** `GET /api/doctor/:doctorId/slots`
+- **Query Params:** `date` (Required), `duration` (Optional)
+
+### D. Book Appointment
+Patient books an available slot with a doctor.
+
+- **Route:** `POST /api/appointment`
+- **Access:** Authenticated `PATIENT` only.
+- **Request Body:**
+```json
+{
+  "doctorId": "2a15f013-1cf0-4bb5-8664-cd25a2e57303",
+  "date": "2026-06-20",
+  "startTime": "10:00",
+  "endTime": "10:15"
+}
+```
+
+### E. Patient Appointments View
+Returns all appointments for the authenticated patient.
+
+- **Route:** `GET /api/appointment/my`
+- **Access:** Authenticated `PATIENT` only.
+
+### F. Reschedule Appointment
+Patient reschedules their own appointment to a new date and time. Must be done at least 30 minutes prior.
+
+- **Route:** `PATCH /api/appointment/:id/reschedule`
+- **Access:** Authenticated `PATIENT` only.
+- **Request Body:**
+```json
+{
+  "date": "2026-06-21",
+  "startTime": "11:00",
+  "endTime": "11:15"
+}
+```
+- **Response (`200 OK`):**
+```json
+{
+  "message": "Appointment rescheduled successfully",
+  "data": {
+    "previousAppointment": {
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "status": "RESCHEDULED"
+    },
+    "newAppointment": {
+      "id": "b2c3d4e5-f678-90ab-cdef-123456789012",
+      "date": "2026-06-21",
+      "startTime": "11:00",
+      "endTime": "11:15",
+      "status": "BOOKED"
+    }
+  }
+}
+```
+
+### G. Cancel Appointment
+Patient cancels their own appointment.
+
+- **Route:** `PATCH /api/appointment/:id/cancel`
+- **Access:** Authenticated `PATIENT` only.
+
+---
+
+## 📜 Scripts Reference
+
+| Command | Description |
+|---------|-------------|
+| `npm run start:dev` | Run in local hot-reload dev mode |
+| `npm run build` | Compile code for production |
+| `npm run start:prod` | Run the compiled production build |
+| `npx typeorm migration:run -d dist/data-source.js` | Run database schema updates |
