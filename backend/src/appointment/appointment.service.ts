@@ -444,6 +444,109 @@ export class AppointmentService {
     };
   }
 
+  async getAppointmentLiveQueue(userId: string, appointmentId: string) {
+    const patient = await this.getPatientByUserId(userId);
+    const appointment = await this.appointmentRepo.findOne({
+      where: { id: appointmentId },
+      relations: { doctor: true },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException(`Appointment with ID ${appointmentId} not found`);
+    }
+
+    if (appointment.patientId !== patient.id) {
+      throw new ForbiddenException('Access denied: You can only view the live queue for your own appointment');
+    }
+
+    // Fetch all active appointments for this doctor on the appointment's date
+    const allDoctorAppts = await this.appointmentRepo.find({
+      where: {
+        doctorId: appointment.doctorId,
+        date: appointment.date,
+      },
+      order: {
+        startTime: 'ASC',
+      },
+    });
+
+    const activeList = allDoctorAppts.filter(
+      (a) => a.status !== AppointmentStatus.CANCELLED,
+    );
+
+    const currentServing = activeList.find(
+      (a) => a.status === AppointmentStatus.IN_CONSULTATION,
+    );
+
+    // Waiting queue (CHECKED_IN and CONFIRMED)
+    const waitingQueue = activeList
+      .filter(
+        (a) =>
+          a.status === AppointmentStatus.CHECKED_IN ||
+          a.status === AppointmentStatus.CONFIRMED,
+      )
+      .sort((a, b) => {
+        if (a.status === AppointmentStatus.CHECKED_IN && b.status === AppointmentStatus.CONFIRMED) return -1;
+        if (a.status === AppointmentStatus.CONFIRMED && b.status === AppointmentStatus.CHECKED_IN) return 1;
+        return (a.tokenNumber ?? 999) - (b.tokenNumber ?? 999);
+      });
+
+    let peopleAhead = 0;
+    const isMyTurn = currentServing?.id === appointment.id;
+
+    if (!isMyTurn) {
+      const myIndexInWait = waitingQueue.findIndex((a) => a.id === appointment.id);
+      if (myIndexInWait >= 0) {
+        peopleAhead = myIndexInWait + (currentServing ? 1 : 0);
+      } else {
+        peopleAhead = 0;
+      }
+    }
+
+    const consultDuration = 15;
+    const estimatedWaitMinutes = appointment.estimatedWaitTime ?? (peopleAhead * consultDuration);
+
+    const timeline = activeList
+      .sort((a, b) => (a.tokenNumber ?? 999) - (b.tokenNumber ?? 999))
+      .map((a, idx) => ({
+        tokenNumber: a.tokenNumber ?? idx + 1,
+        startTime: a.startTime,
+        status: a.status,
+        isYou: a.id === appointment.id,
+      }));
+
+    return {
+      message: 'Live queue fetched successfully',
+      data: {
+        doctor: {
+          id: appointment.doctor.id,
+          fullName: appointment.doctor.fullName,
+          specialization: appointment.doctor.specialization,
+          clinicAddress: appointment.doctor.profileDetails || 'Clinic Room',
+          roomNumber: '1',
+          consultationDuration: consultDuration,
+        },
+        appointment: {
+          id: appointment.id,
+          tokenNumber: appointment.tokenNumber,
+          date: appointment.date,
+          startTime: appointment.startTime,
+          status: appointment.status,
+          queuePosition: appointment.queuePosition,
+        },
+        queueSummary: {
+          currentServingToken: currentServing?.tokenNumber ?? null,
+          currentServingTime: currentServing?.startTime ?? null,
+          totalWaiting: waitingQueue.length,
+          peopleAhead,
+          estimatedWaitMinutes,
+          isMyTurn,
+        },
+        timeline,
+      },
+    };
+  }
+
   async cancelAppointment(userId: string, appointmentId: string) {
     const patient = await this.getPatientByUserId(userId);
     const appointment = await this.appointmentRepo.findOne({

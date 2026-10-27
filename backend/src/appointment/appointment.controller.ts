@@ -47,6 +47,26 @@ export class AppointmentController {
     return this.appointmentService.getPatientAppointments(user.id);
   }
 
+  // ─── 2b. Patient Appointment Live Queue (Strictly for booked doctor & date) ───
+  // GET /api/appointment/:id/live-queue
+  @Get('appointment/:id/live-queue')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PATIENT)
+  getAppointmentLiveQueue(
+    @CurrentUser() user: { id: string },
+    @Param(
+      'id',
+      new ParseUUIDPipe({
+        version: '4',
+        exceptionFactory: () =>
+          new BadRequestException('Invalid appointment ID format'),
+      }),
+    )
+    id: string,
+  ) {
+    return this.appointmentService.getAppointmentLiveQueue(user.id, id);
+  }
+
   // ─── 3. Cancel Appointment (Patient only) ─────────────────────────────────────
   // PATCH /api/appointment/:id/cancel
   @Patch('appointment/:id/cancel')
