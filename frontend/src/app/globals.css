@@ -1,0 +1,263 @@
+@import "tailwindcss";
+
+@theme {
+  /* ── Primary brand (Medical Blue spectrum) ── */
+  --color-brand-50: #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-200: #bfdbfe;
+  --color-brand-300: #93c5fd;
+  --color-brand-400: #60a5fa;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1d4ed8;
+  --color-brand-800: #1e40af;
+  --color-brand-900: #1e3a8a;
+  --color-brand-950: #172554;
+
+  /* ── Deep navy for dark surfaces ── */
+  --color-navy-800: #0e1c2f;
+  --color-navy-900: #0b192c;
+  --color-navy-950: #060d17;
+
+  /* ── Accent (warm amber for token highlights) ── */
+  --color-accent-400: #fbbf24;
+  --color-accent-500: #f59e0b;
+
+  /* ── Font stack ── */
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* ── Design tokens ── */
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --border: #e2e8f0;
+  --border-subtle: #f1f5f9;
+  --muted: #64748b;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --glow-blue: rgba(37, 99, 235, 0.15);
+  --glow-sky: rgba(14, 165, 233, 0.12);
+  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.02);
+  --shadow-card-hover: 0 8px 30px rgba(15, 23, 42, 0.07), 0 2px 8px rgba(37, 99, 235, 0.08);
+  --shadow-elevated: 0 20px 40px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(37, 99, 235, 0.06);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ════════════════════════════════════════════
+   COMPONENT CLASSES
+   ════════════════════════════════════════════ */
+@layer components {
+
+  /* ── Buttons ── */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-250 ease-out;
+    background: linear-gradient(135deg, #2563eb 0%, #0284c7 100%);
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25), inset 0 1px 0 rgba(255,255,255,0.1);
+  }
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #1d4ed8 0%, #0369a1 100%);
+    box-shadow: 0 4px 16px rgba(37, 99, 235, 0.35), inset 0 1px 0 rgba(255,255,255,0.12);
+    transform: translateY(-1px);
+  }
+  .btn-primary:active {
+    transform: translateY(0) scale(0.99);
+  }
+  .btn-primary:focus-visible {
+    @apply outline-none ring-2 ring-blue-500/40 ring-offset-2;
+  }
+  .btn-primary:disabled {
+    @apply pointer-events-none opacity-50;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200/90 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 transition-all duration-200;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  }
+  .btn-secondary:hover {
+    @apply border-slate-300 bg-slate-50 text-slate-900;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+    transform: translateY(-0.5px);
+  }
+  .btn-secondary:active {
+    transform: translateY(0) scale(0.99);
+  }
+  .btn-secondary:focus-visible {
+    @apply outline-none ring-2 ring-slate-300;
+  }
+  .btn-secondary:disabled {
+    @apply pointer-events-none opacity-50;
+  }
+
+  .btn-outline-brand {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-blue-500/30 bg-blue-50/50 px-5 py-2.5 text-sm font-semibold text-blue-700 transition-all duration-200 hover:bg-blue-100/70 hover:border-blue-500/50 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-5 py-2.5 text-sm font-semibold text-rose-700 transition-all duration-200 hover:bg-rose-100 hover:border-rose-300 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/30 disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  /* ── Cards ── */
+  .card {
+    @apply rounded-2xl border border-slate-200/70 bg-white transition-all duration-300;
+    box-shadow: var(--shadow-card);
+  }
+
+  .card-hover {
+    @apply rounded-2xl border border-slate-200/70 bg-white transition-all duration-300;
+    box-shadow: var(--shadow-card);
+  }
+  .card-hover:hover {
+    border-color: rgba(37, 99, 235, 0.2);
+    box-shadow: var(--shadow-card-hover);
+    transform: translateY(-3px);
+  }
+
+  .card-premium {
+    @apply relative overflow-hidden rounded-2xl border border-slate-200/60 transition-all duration-300;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafb 100%);
+    box-shadow: var(--shadow-elevated);
+  }
+  .card-premium::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(37, 99, 235, 0.3), transparent);
+  }
+
+  /* ── Inputs ── */
+  .field-input {
+    @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-all duration-200 disabled:bg-slate-50 disabled:text-slate-500;
+  }
+  .field-input:focus {
+    @apply border-blue-500 outline-none;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1), 0 1px 2px rgba(0,0,0,0.04);
+  }
+
+  .field-label {
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500;
+  }
+
+  /* ── Layout ── */
+  .page-container {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .nav-link-active {
+    @apply bg-blue-50/80 text-blue-800 font-semibold;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  /* ── Stat badge ── */
+  .badge-stat {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
+  }
+}
+
+/* ════════════════════════════════════════════
+   GLASS MORPHISM
+   ════════════════════════════════════════════ */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid rgba(226, 232, 240, 0.7);
+}
+
+.dark-glass-panel {
+  background: rgba(11, 25, 44, 0.88);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ════════════════════════════════════════════
+   SCROLLBARS
+   ════════════════════════════════════════════ */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ════════════════════════════════════════════
+   ANIMATIONS
+   ════════════════════════════════════════════ */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.15); }
+}
+.animate-pulse-glow {
+  animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.animate-shimmer {
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
+
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradient-shift 4s ease infinite;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up {
+  animation: fade-up 0.4s ease-out both;
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-scale-in {
+  animation: scale-in 0.3s ease-out both;
+}
+
+/* Staggered fade for list items */
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.1s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.2s; }
+.stagger-5 { animation-delay: 0.25s; }
+.stagger-6 { animation-delay: 0.3s; }
