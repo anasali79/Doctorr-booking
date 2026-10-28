@@ -25,9 +25,9 @@ function htmlToPlainText(html: string): string {
 
 function buildHeader(title: string, titleColor: string): string {
   return `
-    <div style="background-color: #1a6b3c; padding: 24px 20px; text-align: center; border-radius: 8px 8px 0 0;">
-      <p style="margin: 0; font-size: 22px; font-weight: bold; color: #ffffff; letter-spacing: 1px;"> Schedula</p>
-      <p style="margin: 4px 0 0 0; font-size: 12px; color: #a8d5b5; letter-spacing: 0.5px; text-transform: uppercase;">Healthcare Appointment Companion</p>
+    <div style="background-color: #0066cc; padding: 24px 20px; text-align: center; border-radius: 8px 8px 0 0;">
+      <p style="margin: 0; font-size: 22px; font-weight: bold; color: #ffffff; letter-spacing: 1px;"> CareUp</p>
+      <p style="margin: 4px 0 0 0; font-size: 12px; color: #bae0fd; letter-spacing: 0.5px; text-transform: uppercase;">Healthcare Appointment Companion</p>
     </div>
     <div style="text-align: center; padding: 24px 20px 0 20px;">
       <h2 style="color: ${titleColor}; margin: 0; font-size: 22px;">${title}</h2>
@@ -43,10 +43,10 @@ function buildFooter(): string {
       <tr>
         <td style="text-align: center; padding-bottom: 8px;">
           <p style="margin: 0; font-size: 12px; color: #9e9e9e;">
-            This is an automated email from <strong>Schedula</strong>. Please do not reply directly.
+            This is an automated email from <strong>CareUp</strong>. Please do not reply directly.
           </p>
           <p style="margin: 6px 0 0 0; font-size: 11px; color: #bdbdbd;">
-            © ${new Date().getFullYear()} Schedula &nbsp;|&nbsp;
+            © ${new Date().getFullYear()} CareUp &nbsp;|&nbsp;
             <a href="https://schedula.app/support" style="color: #bdbdbd; text-decoration: underline;">Support</a> &nbsp;|&nbsp;
             <a href="https://schedula.app/unsubscribe" style="color: #bdbdbd; text-decoration: underline;">Unsubscribe</a>
           </p>
@@ -81,7 +81,7 @@ export class EmailService {
     this.apiKey = this.configService.get<string>('BREVO_API_KEY') || null;
     this.fromEmail =
       this.configService.get<string>('BREVO_FROM_EMAIL') || 'schedula.sh@gmail.com';
-    this.fromName = this.configService.get<string>('BREVO_FROM_NAME') || 'Schedula';
+    this.fromName = this.configService.get<string>('BREVO_FROM_NAME') || 'CareUp';
     this.appBaseUrl = this.configService.get<string>('APP_BASE_URL') || 'https://schedula.app';
 
     if (this.apiKey && this.apiKey !== 'your_brevo_api_key_here') {
@@ -187,7 +187,7 @@ export class EmailService {
           <p style="margin: 0 0 8px 0; color: #333333; font-weight: bold;">Your Check-In QR Code</p>
           <img src="${qrImageUrl}" alt="Appointment QR Code"
                width="180" height="180"
-               style="border: 2px solid #1a6b3c; border-radius: 8px; display: block; margin: 0 auto;" />
+               style="border: 2px solid #0066cc; border-radius: 8px; display: block; margin: 0 auto;" />
           <p style="margin: 8px 0 0 0; font-size: 12px; color: #9e9e9e;">
             Scan this QR at the hospital kiosk. You will receive a notification on your phone — tap Approve to check in.
           </p>
@@ -373,24 +373,24 @@ export class EmailService {
   async sendWelcomeEmail(to: string, name: string, role: string): Promise<void> {
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
-        ${buildHeader('Welcome to Schedula! 🎉', '#1a6b3c')}
+        ${buildHeader('Welcome to CareUp! 🎉', '#0066cc')}
         <div style="padding: 20px;">
           <div style="background-color: #f9f9f9; padding: 20px; border-radius: 6px; margin-bottom: 4px;">
             <p style="color: #333333; font-size: 16px; margin-top: 0;">Hello <strong>${name}</strong>,</p>
             <p style="color: #555555; line-height: 1.5; font-size: 15px;">
-              Thank you for signing up on Schedula! Your account has been successfully created
+              Thank you for signing up on CareUp! Your account has been successfully created
               with the role of <strong>${role.toLowerCase()}</strong>.
             </p>
             <p style="color: #555555; line-height: 1.5; font-size: 15px;">
-              With Schedula, you can manage appointments, connect with healthcare providers,
+              With CareUp, you can manage appointments, connect with healthcare providers,
               and track health details seamlessly.
             </p>
           </div>
-          ${buildCtaButton('Get Started', `${this.appBaseUrl}`, '#1a6b3c')}
+          ${buildCtaButton('Get Started', `${this.appBaseUrl}`, '#0066cc')}
         </div>
         ${buildFooter()}
       </div>
     `;
-    await this.sendEmail(to, 'Welcome to Schedula!', htmlContent);
+    await this.sendEmail(to, 'Welcome to CareUp!', htmlContent);
   }
 }

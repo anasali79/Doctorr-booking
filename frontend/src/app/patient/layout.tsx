@@ -25,14 +25,8 @@ export default async function PatientLayout({
   const unreadCount = notifResult.status === 'fulfilled' ? notifResult.value?.unreadCount || 0 : 0;
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#f8fafc] text-slate-900 selection:bg-blue-500/20 selection:text-blue-900">
+    <div className="flex min-h-screen flex-col bg-[#fafafc] text-zinc-900 relative overflow-hidden">
       <Navbar user={user} unreadCount={unreadCount} />
-      
-      {/* Subtle ambient glow */}
-      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div className="absolute -top-40 right-0 h-96 w-96 rounded-full bg-blue-500/5 blur-3xl" />
-        <div className="absolute top-60 -left-20 h-96 w-96 rounded-full bg-sky-500/5 blur-3xl" />
-      </div>
 
       <main className="flex-1">
         {profile ? (

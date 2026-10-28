@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
 import { getPatientAppointments } from '@/lib/api/patient';
 import { PatientAppointmentsClient } from '@/components/patient/PatientAppointmentsClient';
-import { Calendar, Search } from 'lucide-react';
+import { Calendar, Search, Sparkles } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,13 +24,16 @@ export default async function PatientAppointmentsPage() {
   }
 
   return (
-    <div className="page-container space-y-8 py-8 sm:py-10">
-      <div className="flex flex-col justify-between gap-4 border-b border-neutral-200 pb-6 sm:flex-row sm:items-end">
+    <div className="page-container space-y-8 py-8 sm:py-12">
+      <div className="flex flex-col justify-between gap-4 border-b border-black/[0.06] pb-6 sm:flex-row sm:items-end">
         <div>
-          <p className="text-sm font-medium text-blue-800">Appointments</p>
-          <h1 className="mt-1 text-2xl font-semibold text-neutral-900">My visits</h1>
-          <p className="mt-1 text-sm text-neutral-500">
-            Cancel or reschedule upcoming bookings.
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-black/[0.04] px-3 py-1 text-xs font-semibold text-zinc-800">
+            <Sparkles className="h-3 w-3 text-black" />
+            <span>MY SCHEDULE</span>
+          </div>
+          <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-zinc-950">My visits</h1>
+          <p className="mt-1 text-sm text-zinc-500">
+            Monitor live queue tokens, cancel or reschedule upcoming outpatient appointments.
           </p>
         </div>
         <Link href="/doctors" className="btn-primary text-xs">

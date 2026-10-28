@@ -10,8 +10,12 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Schedula — Book doctor appointments',
-  description: 'Find doctors, book slots, and track your queue in one place.',
+  title: 'CareUp · AI-Powered Doctor Appointments & Healthcare',
+  description:
+    'CareUp doctor appointments. Choose your GP, pick a time that suits you and get a calendar invite. No phone queue at 8am.',
+  icons: {
+    icon: '/icon.svg',
+  },
 };
 
 export default function RootLayout({
@@ -21,8 +25,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={inter.variable}>
-      <body className="flex min-h-screen flex-col bg-neutral-50 font-sans text-neutral-900 antialiased">
-        <Toaster position="top-right" closeButton expand={false} />
+      <body className="relative flex min-h-screen flex-col bg-[#f6f8fb] font-sans text-slate-900 antialiased selection:bg-[#0066cc] selection:text-white">
+        <div className="pointer-events-none fixed inset-0 -z-10 bg-ambient-light-mesh opacity-90" />
+        <Toaster position="top-right" closeButton expand={false} richColors />
         {children}
       </body>
     </html>

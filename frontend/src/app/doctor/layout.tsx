@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
 import { getDoctorProfile } from '@/lib/api/doctors';
-import { Navbar } from '@/components/common/Navbar';
 import { DoctorSocketProvider } from '@/components/doctor/DoctorSocketProvider';
+import { DoctorSidebarLayout } from '@/components/doctor/DoctorSidebarLayout';
 
 export default async function DoctorLayout({
   children,
@@ -24,24 +24,18 @@ export default async function DoctorLayout({
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#f8fafc] text-slate-900 selection:bg-blue-500/20 selection:text-blue-900">
-      <Navbar user={user} />
-      
-      {/* Subtle top ambient glow */}
-      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div className="absolute -top-40 right-0 h-96 w-96 rounded-full bg-blue-500/5 blur-3xl" />
-        <div className="absolute top-60 -left-20 h-96 w-96 rounded-full bg-sky-500/5 blur-3xl" />
-      </div>
-
-      <main className="flex-1">
-        {profile ? (
-          <DoctorSocketProvider doctorId={profile.id}>
+    <div className="min-h-screen bg-[#fafafc] text-zinc-900">
+      {profile ? (
+        <DoctorSocketProvider doctorId={profile.id}>
+          <DoctorSidebarLayout user={user} profile={profile}>
             {children}
-          </DoctorSocketProvider>
-        ) : (
-          children
-        )}
-      </main>
+          </DoctorSidebarLayout>
+        </DoctorSocketProvider>
+      ) : (
+        <DoctorSidebarLayout user={user} profile={null}>
+          {children}
+        </DoctorSidebarLayout>
+      )}
     </div>
   );
 }

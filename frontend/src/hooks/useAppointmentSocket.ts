@@ -89,11 +89,18 @@ export function useAppointmentSocket({ role, profileId, onEvent }: UseSocketOpti
 
         // Patient events
         if (role === 'patient') {
+          const notifyQueueUpdate = (name: string, payload: any) => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('appointment_queue_update', { detail: { event: name, payload } }));
+            }
+          };
+
           socket.on('appointment.checked_in', (data: any) => {
             toast.info(`Checked In to Clinic`, {
               description: `You are checked in. Queue position: #${data.queuePosition || 1}`,
             });
             onEventRef.current?.('appointment.checked_in', data);
+            notifyQueueUpdate('appointment.checked_in', data);
             router.refresh();
           });
 
@@ -103,6 +110,7 @@ export function useAppointmentSocket({ role, profileId, onEvent }: UseSocketOpti
               duration: 8000,
             });
             onEventRef.current?.('appointment.consultation_started', data);
+            notifyQueueUpdate('appointment.consultation_started', data);
             router.refresh();
           });
 
@@ -111,6 +119,7 @@ export function useAppointmentSocket({ role, profileId, onEvent }: UseSocketOpti
               description: `Your consultation has concluded. Have a healthy day!`,
             });
             onEventRef.current?.('appointment.completed', data);
+            notifyQueueUpdate('appointment.completed', data);
             router.refresh();
           });
 
@@ -119,6 +128,7 @@ export function useAppointmentSocket({ role, profileId, onEvent }: UseSocketOpti
               description: `Your appointment was cancelled.`,
             });
             onEventRef.current?.('appointment.cancelled', data);
+            notifyQueueUpdate('appointment.cancelled', data);
             router.refresh();
           });
 
@@ -127,6 +137,7 @@ export function useAppointmentSocket({ role, profileId, onEvent }: UseSocketOpti
               description: `You were marked as no-show for your appointment.`,
             });
             onEventRef.current?.('appointment.no_show', data);
+            notifyQueueUpdate('appointment.no_show', data);
             router.refresh();
           });
 
@@ -135,6 +146,7 @@ export function useAppointmentSocket({ role, profileId, onEvent }: UseSocketOpti
               description: `Your queue position is now #${data.queuePosition}`,
             });
             onEventRef.current?.('queue.position.updated', data);
+            notifyQueueUpdate('queue.position.updated', data);
             router.refresh();
           });
         }

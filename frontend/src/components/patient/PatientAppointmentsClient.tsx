@@ -16,9 +16,11 @@ import {
   Clock,
   CheckCircle2,
   Activity,
+  Sparkles,
 } from 'lucide-react';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import { PatientLiveQueueModal } from './PatientLiveQueueModal';
+import { DoctorAvatar } from '@/components/common/DoctorAvatar';
 
 interface PatientAppointmentsClientProps {
   initialAppointments: Appointment[];
@@ -47,16 +49,32 @@ export function PatientAppointmentsClient({
   const [liveQueueApptId, setLiveQueueApptId] = useState<string | null>(null);
 
   const todayStr = getTodayIST();
+  const now = new Date();
+  const nowIST = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const currentMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
+
+  // Helper to determine if an un-attended appointment slot has already ended
+  const isAppointmentExpired = (a: Appointment) => {
+    if (!a || !a.date) return false;
+    if (a.date < todayStr) return true;
+    if (a.date === todayStr && a.status === 'CONFIRMED') {
+      const [endH, endM] = (a.endTime || a.startTime || '00:00').split(':').map(Number);
+      const slotEndMinutes = (endH || 0) * 60 + (endM || 0);
+      return currentMinutes > slotEndMinutes;
+    }
+    return false;
+  };
 
   const upcomingList = appointments.filter(
     (a) =>
-      a.status === 'CONFIRMED' ||
-      a.status === 'CHECKED_IN' ||
-      a.status === 'IN_CONSULTATION',
+      ['CONFIRMED', 'CHECKED_IN', 'IN_CONSULTATION'].includes(a.status) &&
+      !isAppointmentExpired(a),
   );
 
   const pastList = appointments.filter(
-    (a) => a.status === 'COMPLETED' || a.status === 'NO_SHOW',
+    (a) =>
+      ['COMPLETED', 'NO_SHOW'].includes(a.status) ||
+      isAppointmentExpired(a),
   );
 
   const cancelledList = appointments.filter(
@@ -96,21 +114,29 @@ export function PatientAppointmentsClient({
 
   // Open Reschedule Modal
   const openRescheduleModal = (appt: Appointment) => {
+    const docId = appt.doctorId || appt.doctor?.id;
+    if (!docId) {
+      toast.error('Doctor information missing for this appointment');
+      return;
+    }
     setReschedulingAppt(appt);
-    setSelectedSlot(null);
     setRescheduleDate(appt.date);
-    fetchRescheduleSlots(appt.doctorId, appt.date);
+    setSelectedSlot(null);
+    fetchRescheduleSlots(docId, appt.date);
   };
 
   const fetchRescheduleSlots = async (doctorId: string, date: string) => {
+    if (!doctorId || doctorId === 'undefined') {
+      toast.error('Invalid doctor ID');
+      setRescheduleSlots([]);
+      return;
+    }
     try {
       setLoadingSlots(true);
-      const res = await clientAxios.get<{
-        message?: string;
-        data: Slot[];
-      }>(`/api/doctor/${doctorId}/slots-proxy`, {
-        params: { date },
-      });
+      const res = await clientAxios.get<{ data: Slot[] }>(
+        `/api/doctor/${doctorId}/slots-proxy`,
+        { params: { date } },
+      );
       setRescheduleSlots(res.data.data || []);
     } catch (err: unknown) {
       toast.error('Failed to load slots', { description: extractErrorMessage(err) });
@@ -147,38 +173,26 @@ export function PatientAppointmentsClient({
 
   return (
     <div className="space-y-6">
-      {/* Filter Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200/80 pb-3">
+      {/* Filter Tabs in Frosted Glass */}
+      <div className="flex items-center gap-2 border-b border-black/[0.06] pb-4">
         <button
           type="button"
           onClick={() => setActiveTab('UPCOMING')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'UPCOMING'
-              ? 'bg-blue-700 text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
+          className={activeTab === 'UPCOMING' ? 'pill-filter-active' : 'pill-filter-idle'}
         >
-          Upcoming Visits ({upcomingList.length})
+          Upcoming visits ({upcomingList.length})
         </button>
         <button
           type="button"
           onClick={() => setActiveTab('PAST')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'PAST'
-              ? 'bg-blue-700 text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
+          className={activeTab === 'PAST' ? 'pill-filter-active' : 'pill-filter-idle'}
         >
-          Consultation History ({pastList.length})
+          History ({pastList.length})
         </button>
         <button
           type="button"
           onClick={() => setActiveTab('CANCELLED')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'CANCELLED'
-              ? 'bg-blue-700 text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
+          className={activeTab === 'CANCELLED' ? 'pill-filter-active' : 'pill-filter-idle'}
         >
           Cancelled ({cancelledList.length})
         </button>
@@ -186,102 +200,101 @@ export function PatientAppointmentsClient({
 
       {/* Appointment Cards List */}
       {currentList.length === 0 ? (
-        <div className="py-16 text-center card p-8 space-y-2 bg-white">
-          <CalendarDays className="w-8 h-8 text-slate-300 mx-auto" />
-          <h3 className="text-base font-bold text-slate-800">
+        <div className="py-16 text-center rounded-3xl border border-black/[0.08] bg-white/80 backdrop-blur-2xl p-8 space-y-2 shadow-xs">
+          <CalendarDays className="w-8 h-8 text-zinc-400 mx-auto" />
+          <h3 className="text-base font-bold text-zinc-950">
             No Appointments Found
           </h3>
-          <p className="text-xs text-slate-500 max-w-sm mx-auto">
+          <p className="text-xs text-zinc-500 max-w-sm mx-auto">
             You do not currently have any appointments in the {activeTab.toLowerCase()} category.
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {currentList.map((appt) => {
-            const isConfirmed = appt.status === 'CONFIRMED';
+          {currentList.map((appt, index) => {
+            const isExpired = isAppointmentExpired(appt);
+            const displayStatus = isExpired ? 'NO_SHOW' : appt.status;
+            const isConfirmed = displayStatus === 'CONFIRMED';
+            const displayToken = String(appt.tokenNumber || index + 1).padStart(2, '0');
             return (
               <div
                 key={appt.id}
-                className="card flex flex-col justify-between p-5 bg-white shadow-xs hover:border-blue-500/30 transition-all space-y-4"
+                className="relative rounded-3xl border border-black/[0.08] bg-white/95 p-5 backdrop-blur-2xl shadow-xs transition-all duration-300 hover:border-black/20 hover:shadow-md space-y-4 overflow-hidden"
               >
                 <div className="space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-700 to-sky-600 text-sm font-bold text-white shadow-xs">
-                        {appt.doctor?.fullName?.charAt(0) || 'D'}
-                      </div>
+                      <DoctorAvatar name={appt.doctor?.fullName || 'Doctor'} size="sm" className="rounded-xl border border-black/10" />
                       <div className="overflow-hidden">
-                        <h4 className="font-bold text-slate-900 text-sm truncate">
+                        <h4 className="font-bold text-zinc-950 text-sm truncate">
                           {appt.doctor?.fullName || 'Doctor'}
                         </h4>
-                        <p className="text-xs text-blue-700 font-medium capitalize truncate">
+                        <p className="text-xs text-zinc-500 font-medium capitalize truncate">
                           {appt.doctor?.specialization}
                         </p>
                       </div>
                     </div>
-                    <StatusBadge status={appt.status} />
+                    <StatusBadge status={displayStatus} />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-100">
-                    <div className="p-2.5 bg-slate-50 rounded-xl">
-                      <span className="text-[10px] text-slate-400 uppercase font-semibold block">
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-black/[0.06]">
+                    <div className="p-2.5 bg-black/[0.02] rounded-2xl border border-black/[0.06]">
+                      <span className="text-[10px] text-zinc-500 uppercase font-semibold block">
                         Date
                       </span>
-                      <span className="font-bold text-slate-800">
+                      <span className="font-bold text-zinc-900">
                         {formatDate(appt.date)}
                       </span>
                     </div>
-                    <div className="p-2.5 bg-slate-50 rounded-xl">
-                      <span className="text-[10px] text-slate-400 uppercase font-semibold block">
+                    <div className="p-2.5 bg-black/[0.02] rounded-2xl border border-black/[0.06]">
+                      <span className="text-[10px] text-zinc-500 uppercase font-semibold block">
                         Time Window
                       </span>
-                      <span className="font-bold text-slate-800">
+                      <span className="font-bold text-zinc-900">
                         {formatTime(appt.startTime)} - {formatTime(appt.endTime)}
                       </span>
                     </div>
                   </div>
 
-                  {appt.tokenNumber && (
-                    <div className="flex items-center justify-between px-3.5 py-2 bg-blue-50/70 border border-blue-200/50 rounded-xl text-xs">
-                      <span className="text-blue-800 font-medium flex items-center gap-1.5">
-                        <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse" />
-                        Clinic Token
-                      </span>
-                      <span className="font-mono font-black text-blue-900 text-sm">
-                        #{appt.tokenNumber}
-                      </span>
-                    </div>
-                  )}
+                  <div className="flex items-center justify-between px-3.5 py-2 bg-black/[0.03] border border-black/[0.08] rounded-2xl text-xs">
+                    <span className="text-zinc-800 font-medium flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-black" />
+                      Clinic Token
+                    </span>
+                    <span className="font-mono font-black text-black text-sm">
+                      #{displayToken}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Live Queue Tracker button */}
-                {(appt.status === 'CONFIRMED' || appt.status === 'CHECKED_IN' || appt.status === 'IN_CONSULTATION') && (
+                {!isExpired && (appt.status === 'CONFIRMED' || appt.status === 'CHECKED_IN' || appt.status === 'IN_CONSULTATION') && (
                   <button
                     type="button"
                     onClick={() => setLiveQueueApptId(appt.id)}
-                    className="w-full py-2 px-3 rounded-xl bg-blue-50 border border-blue-200 hover:bg-blue-100 text-xs font-bold text-blue-800 transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                    className="w-full py-2.5 px-3 rounded-full bg-black text-white hover:bg-zinc-800 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
                   >
-                    <Activity className="w-3.5 h-3.5 text-blue-600 animate-pulse" />
-                    <span>Track Live Queue (See who is before you)</span>
+                    <Activity className="w-3.5 h-3.5" />
+                    <span>Track Live Queue (Tokens Ahead)</span>
                   </button>
                 )}
 
                 {isConfirmed && (
-                  <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                  <div className="pt-2 border-t border-black/[0.06] flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => openRescheduleModal(appt)}
-                      className="flex-1 py-2 px-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                      className="btn-secondary flex-1 !py-2 text-xs"
                     >
-                      <RefreshCw className="w-3.5 h-3.5" />
+                      <RefreshCw className="w-3 h-3" />
                       <span>Reschedule</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setCancellingId(appt.id)}
-                      className="py-2 px-3 rounded-xl border border-rose-200 hover:bg-rose-50 text-xs font-semibold text-rose-600 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                      className="btn-danger flex-1 !py-2 text-xs"
                     >
-                      <XCircle className="w-3.5 h-3.5" />
+                      <XCircle className="w-3 h-3" />
                       <span>Cancel</span>
                     </button>
                   </div>
@@ -294,15 +307,15 @@ export function PatientAppointmentsClient({
 
       {/* Cancel Confirmation Modal */}
       {cancellingId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-sm card p-6 space-y-4 bg-white shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-sm rounded-3xl border border-black/[0.08] bg-white p-6 space-y-4 backdrop-blur-2xl shadow-2xl text-zinc-900">
             <div className="flex items-center gap-3 text-rose-600">
               <AlertTriangle className="w-6 h-6" />
-              <h3 className="font-bold text-base text-slate-900">
+              <h3 className="font-bold text-base text-zinc-950">
                 Cancel Appointment?
               </h3>
             </div>
-            <p className="text-xs text-slate-500 leading-relaxed">
+            <p className="text-xs text-zinc-600 leading-relaxed">
               Are you sure you want to release this appointment? The doctor’s dashboard will be updated and the slot freed for others.
             </p>
             <div className="flex items-center gap-2 pt-2">
@@ -329,16 +342,16 @@ export function PatientAppointmentsClient({
 
       {/* Reschedule Modal */}
       {reschedulingAppt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-md card p-6 space-y-5 max-h-[90vh] overflow-y-auto bg-white shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-bold text-slate-900 text-base">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-3xl border border-black/[0.08] bg-white p-6 space-y-5 max-h-[90vh] overflow-y-auto backdrop-blur-2xl shadow-2xl text-zinc-900">
+            <div className="flex items-center justify-between pb-3 border-b border-black/[0.06]">
+              <h3 className="font-bold text-zinc-950 text-base">
                 Reschedule Appointment
               </h3>
               <button
                 type="button"
                 onClick={() => setReschedulingAppt(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                className="p-1 rounded-full text-zinc-400 hover:text-black"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -353,7 +366,10 @@ export function PatientAppointmentsClient({
                 onChange={(e) => {
                   setRescheduleDate(e.target.value);
                   setSelectedSlot(null);
-                  fetchRescheduleSlots(reschedulingAppt.doctorId, e.target.value);
+                  const docId = reschedulingAppt.doctorId || reschedulingAppt.doctor?.id;
+                  if (docId) {
+                    fetchRescheduleSlots(docId, e.target.value);
+                  }
                 }}
                 className="field-input text-xs font-semibold"
               />
@@ -364,11 +380,11 @@ export function PatientAppointmentsClient({
 
               {loadingSlots ? (
                 <div className="py-8 text-center">
-                  <Loader2 className="w-6 h-6 animate-spin text-blue-700 mx-auto" />
-                  <p className="text-[11px] text-slate-400 mt-2">Checking open slots...</p>
+                  <Loader2 className="w-6 h-6 animate-spin text-black mx-auto" />
+                  <p className="text-[11px] text-zinc-400 mt-2">Checking open slots...</p>
                 </div>
               ) : rescheduleSlots.length === 0 ? (
-                <div className="p-4 text-center bg-slate-50 rounded-xl text-xs text-slate-500">
+                <div className="p-4 text-center bg-black/[0.02] border border-black/[0.06] rounded-2xl text-xs text-zinc-500">
                   No open consultation slots found for this date.
                 </div>
               ) : (
@@ -387,10 +403,10 @@ export function PatientAppointmentsClient({
                         onClick={() => setSelectedSlot(slot)}
                         className={`p-2.5 rounded-xl border text-xs font-bold transition-all ${
                           isSelected
-                            ? 'bg-blue-700 border-blue-700 text-white shadow-xs'
+                            ? 'bg-black border-black text-white shadow-xs'
                             : isBookable
-                            ? 'bg-slate-50 border-slate-200 hover:border-blue-500 text-slate-800'
-                            : 'opacity-40 cursor-not-allowed bg-slate-100 text-slate-400'
+                            ? 'bg-white border-black/[0.1] hover:border-black text-zinc-800'
+                            : 'opacity-40 cursor-not-allowed bg-zinc-100 text-zinc-400'
                         }`}
                       >
                         {formatTime(slot.startTime)}
@@ -401,7 +417,7 @@ export function PatientAppointmentsClient({
               )}
             </div>
 
-            <div className="pt-3 border-t border-slate-100 flex gap-2">
+            <div className="pt-3 border-t border-black/[0.06] flex gap-2">
               <button
                 type="button"
                 onClick={() => setReschedulingAppt(null)}
@@ -425,6 +441,7 @@ export function PatientAppointmentsClient({
           </div>
         </div>
       )}
+
       {/* Live Queue Tracker Modal */}
       {liveQueueApptId && (
         <PatientLiveQueueModal

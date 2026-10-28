@@ -1,153 +1,156 @@
 @import "tailwindcss";
 
 @theme {
-  /* ── Primary brand (Medical Blue spectrum) ── */
-  --color-brand-50: #eff6ff;
-  --color-brand-100: #dbeafe;
-  --color-brand-200: #bfdbfe;
-  --color-brand-300: #93c5fd;
-  --color-brand-400: #60a5fa;
-  --color-brand-500: #3b82f6;
-  --color-brand-600: #2563eb;
-  --color-brand-700: #1d4ed8;
-  --color-brand-800: #1e40af;
-  --color-brand-900: #1e3a8a;
-  --color-brand-950: #172554;
+  /* ── Trustworthy Royal Medical Blue Palette (NHS / British Practice) ── */
+  --color-brand-blue-50: #f0f7ff;
+  --color-brand-blue-100: #e0effe;
+  --color-brand-blue-200: #bae0fd;
+  --color-brand-blue-500: #0066cc;
+  --color-brand-blue-600: #0055b3;
+  --color-brand-blue-700: #004494;
+  --color-brand-blue-800: #003777;
 
-  /* ── Deep navy for dark surfaces ── */
-  --color-navy-800: #0e1c2f;
-  --color-navy-900: #0b192c;
-  --color-navy-950: #060d17;
-
-  /* ── Accent (warm amber for token highlights) ── */
-  --color-accent-400: #fbbf24;
-  --color-accent-500: #f59e0b;
+  /* ── Slate Neutral Text Spectrum ── */
+  --color-slate-900: #0f172a;
+  --color-slate-800: #1e293b;
+  --color-slate-700: #334155;
+  --color-slate-600: #475569;
+  --color-slate-500: #64748b;
+  --color-slate-400: #94a3b8;
+  --color-slate-300: #cbd5e1;
+  --color-slate-200: #e2e8f0;
+  --color-slate-100: #f1f5f9;
+  --color-slate-50: #f8fafc;
 
   /* ── Font stack ── */
   --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-/* ── Design tokens ── */
+/* ── Design tokens: Authentic Practice Theme ── */
 :root {
-  --background: #f8fafc;
+  --background: #f6f8fb;
   --foreground: #0f172a;
   --card: #ffffff;
   --card-foreground: #0f172a;
   --border: #e2e8f0;
-  --border-subtle: #f1f5f9;
+  --border-subtle: #edf2f7;
   --muted: #64748b;
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
-  --glow-blue: rgba(37, 99, 235, 0.15);
-  --glow-sky: rgba(14, 165, 233, 0.12);
-  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.02);
-  --shadow-card-hover: 0 8px 30px rgba(15, 23, 42, 0.07), 0 2px 8px rgba(37, 99, 235, 0.08);
-  --shadow-elevated: 0 20px 40px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(37, 99, 235, 0.06);
+  --primary: #0066cc;
+  --primary-hover: #0055b3;
 }
 
 body {
-  background-color: var(--background);
-  color: var(--foreground);
+  background-color: #f6f8fb;
+  color: #0f172a;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Soft ambient background for clinical warmth */
+.bg-ambient-light-mesh {
+  background-image: 
+    radial-gradient(circle at 50% 0%, rgba(224, 239, 254, 0.5), transparent 45%),
+    radial-gradient(circle at 90% 20%, rgba(240, 247, 255, 0.4), transparent 40%);
+}
+
 /* ════════════════════════════════════════════
-   COMPONENT CLASSES
+   COMPONENT CLASSES (Authentic Medical Theme)
    ════════════════════════════════════════════ */
 @layer components {
 
-  /* ── Buttons ── */
+  /* ── Buttons (Royal Medical Blue & Clean White) ── */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-250 ease-out;
-    background: linear-gradient(135deg, #2563eb 0%, #0284c7 100%);
-    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25), inset 0 1px 0 rgba(255,255,255,0.1);
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 ease-out;
+    background-color: #0066cc;
+    box-shadow: 0 2px 8px rgba(0, 102, 204, 0.22);
   }
   .btn-primary:hover {
-    background: linear-gradient(135deg, #1d4ed8 0%, #0369a1 100%);
-    box-shadow: 0 4px 16px rgba(37, 99, 235, 0.35), inset 0 1px 0 rgba(255,255,255,0.12);
+    background-color: #0055b3;
+    box-shadow: 0 4px 14px rgba(0, 102, 204, 0.32);
     transform: translateY(-1px);
   }
   .btn-primary:active {
-    transform: translateY(0) scale(0.99);
+    transform: scale(0.98);
   }
   .btn-primary:focus-visible {
-    @apply outline-none ring-2 ring-blue-500/40 ring-offset-2;
+    @apply outline-none ring-2 ring-[#0066cc] ring-offset-2;
   }
   .btn-primary:disabled {
-    @apply pointer-events-none opacity-50;
+    @apply pointer-events-none opacity-40;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200/90 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 transition-all duration-200;
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 transition-all duration-200;
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
   }
   .btn-secondary:hover {
     @apply border-slate-300 bg-slate-50 text-slate-900;
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
-    transform: translateY(-0.5px);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
   }
   .btn-secondary:active {
-    transform: translateY(0) scale(0.99);
+    transform: scale(0.98);
   }
   .btn-secondary:focus-visible {
     @apply outline-none ring-2 ring-slate-300;
   }
   .btn-secondary:disabled {
-    @apply pointer-events-none opacity-50;
+    @apply pointer-events-none opacity-40;
   }
 
   .btn-outline-brand {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-blue-500/30 bg-blue-50/50 px-5 py-2.5 text-sm font-semibold text-blue-700 transition-all duration-200 hover:bg-blue-100/70 hover:border-blue-500/50 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30;
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-[#bae0fd] bg-[#f0f7ff] px-5 py-2.5 text-sm font-semibold text-[#0066cc] transition-all duration-200 hover:bg-[#e0effe] hover:border-[#0066cc] active:scale-[0.98];
   }
 
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-5 py-2.5 text-sm font-semibold text-rose-700 transition-all duration-200 hover:bg-rose-100 hover:border-rose-300 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/30 disabled:pointer-events-none disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-5 py-2.5 text-sm font-medium text-rose-700 transition-all duration-200 hover:bg-rose-100 hover:border-rose-300 active:scale-[0.98];
   }
 
-  /* ── Cards ── */
+  /* ── Filter Pills ── */
+  .pill-filter-active {
+    @apply inline-flex items-center justify-center rounded-full bg-[#18191f] px-4 py-1.5 text-xs font-semibold text-white shadow-xs transition-all;
+  }
+  .pill-filter-idle {
+    @apply inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-medium text-slate-700 transition-all hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900;
+  }
+
+  /* ── Authentic Medical Cards ── */
   .card {
-    @apply rounded-2xl border border-slate-200/70 bg-white transition-all duration-300;
-    box-shadow: var(--shadow-card);
+    @apply rounded-2xl border border-slate-200/90 bg-white transition-all duration-200;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
   }
 
   .card-hover {
-    @apply rounded-2xl border border-slate-200/70 bg-white transition-all duration-300;
-    box-shadow: var(--shadow-card);
+    @apply rounded-2xl border border-slate-200/90 bg-white transition-all duration-200;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
   }
   .card-hover:hover {
-    border-color: rgba(37, 99, 235, 0.2);
-    box-shadow: var(--shadow-card-hover);
-    transform: translateY(-3px);
+    border-color: #cbd5e1;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.07);
+    transform: translateY(-1px);
   }
 
-  .card-premium {
-    @apply relative overflow-hidden rounded-2xl border border-slate-200/60 transition-all duration-300;
-    background: linear-gradient(180deg, #ffffff 0%, #f8fafb 100%);
-    box-shadow: var(--shadow-elevated);
+  .card-medical {
+    @apply rounded-2xl border border-slate-200/90 bg-white transition-all duration-200;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
   }
-  .card-premium::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(37, 99, 235, 0.3), transparent);
+  .card-medical:hover {
+    border-color: #0066cc;
+    box-shadow: 0 8px 24px rgba(0, 102, 204, 0.08);
+    transform: translateY(-1px);
   }
 
   /* ── Inputs ── */
   .field-input {
-    @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-all duration-200 disabled:bg-slate-50 disabled:text-slate-500;
+    @apply w-full rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-all duration-200 disabled:opacity-40;
   }
   .field-input:focus {
-    @apply border-blue-500 outline-none;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1), 0 1px 2px rgba(0,0,0,0.04);
+    @apply border-[#0066cc] bg-white outline-none ring-2 ring-[#0066cc]/20;
   }
 
   .field-label {
-    @apply mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500;
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-600;
   }
 
   /* ── Layout ── */
@@ -156,108 +159,83 @@ body {
   }
 
   .nav-link-active {
-    @apply bg-blue-50/80 text-blue-800 font-semibold;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    @apply bg-sky-500 text-white font-semibold;
+    box-shadow: 0 2px 8px rgba(14, 165, 233, 0.25);
   }
 
   /* ── Stat badge ── */
   .badge-stat {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium backdrop-blur-md border border-sky-200/80 bg-sky-50 text-sky-800;
   }
 }
 
 /* ════════════════════════════════════════════
-   GLASS MORPHISM
+   GLASS MORPHISM LIGHT UTILITIES
    ════════════════════════════════════════════ */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(16px) saturate(1.4);
-  -webkit-backdrop-filter: blur(16px) saturate(1.4);
-  border: 1px solid rgba(226, 232, 240, 0.7);
-}
-
-.dark-glass-panel {
-  background: rgba(11, 25, 44, 0.88);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(20px) saturate(1.3);
   -webkit-backdrop-filter: blur(20px) saturate(1.3);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(186, 230, 253, 0.5);
+  box-shadow: 0 8px 32px 0 rgba(14, 165, 233, 0.05);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(24px) saturate(1.3);
+  -webkit-backdrop-filter: blur(24px) saturate(1.3);
+  border: 1px solid rgba(186, 230, 253, 0.6);
+  box-shadow: 0 10px 30px -10px rgba(14, 165, 233, 0.08);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card:hover {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(56, 189, 248, 0.6);
+  box-shadow: 0 16px 40px -10px rgba(14, 165, 233, 0.15);
+}
+
+.glass-pill {
+  background: rgba(240, 249, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(186, 230, 253, 0.6);
+  color: #0369a1;
 }
 
 /* ════════════════════════════════════════════
    SCROLLBARS
    ════════════════════════════════════════════ */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: #f8fbff;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #bae6fd;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #7dd3fc;
 }
 
 /* ════════════════════════════════════════════
    ANIMATIONS
    ════════════════════════════════════════════ */
-@keyframes pulse-glow {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.6; transform: scale(1.15); }
-}
-.animate-pulse-glow {
-  animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
 @keyframes float {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
+  50% { transform: translateY(-5px); }
 }
 .animate-float {
-  animation: float 3s ease-in-out infinite;
-}
-
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-.animate-shimmer {
-  background-size: 200% 100%;
-  animation: shimmer 2s linear infinite;
-}
-
-@keyframes gradient-shift {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-}
-.animate-gradient {
-  background-size: 200% 200%;
-  animation: gradient-shift 4s ease infinite;
+  animation: float 4s ease-in-out infinite;
 }
 
 @keyframes fade-up {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 .animate-fade-up {
-  animation: fade-up 0.4s ease-out both;
+  animation: fade-up 0.35s ease-out both;
 }
-
-@keyframes scale-in {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
-}
-.animate-scale-in {
-  animation: scale-in 0.3s ease-out both;
-}
-
-/* Staggered fade for list items */
-.stagger-1 { animation-delay: 0.05s; }
-.stagger-2 { animation-delay: 0.1s; }
-.stagger-3 { animation-delay: 0.15s; }
-.stagger-4 { animation-delay: 0.2s; }
-.stagger-5 { animation-delay: 0.25s; }
-.stagger-6 { animation-delay: 0.3s; }

@@ -10,13 +10,9 @@ import {
   Activity,
   Stethoscope,
   Clock,
-  UserCheck,
   CheckCircle2,
   AlertCircle,
   MapPin,
-  Sparkles,
-  ChevronRight,
-  ShieldCheck,
   Users,
 } from 'lucide-react';
 
@@ -34,6 +30,7 @@ interface PatientLiveQueueData {
     tokenNumber?: number;
     date: string;
     startTime: string;
+    endTime?: string;
     status: string;
     queuePosition?: number;
   };
@@ -48,6 +45,7 @@ interface PatientLiveQueueData {
   timeline: {
     tokenNumber: number;
     startTime: string;
+    endTime?: string;
     status: string;
     isYou: boolean;
   }[];
@@ -79,10 +77,10 @@ export function PatientLiveQueueModal({
         setData(payload);
         setError(null);
       }
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || 'Failed to load live queue';
-      setError(msg);
-      if (!isSilent) toast.error(msg);
+    } catch (err: unknown) {
+      if (!isSilent) {
+        setError('Failed to fetch live queue data. Please try again.');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -90,50 +88,67 @@ export function PatientLiveQueueModal({
   }, [appointmentId]);
 
   useEffect(() => {
-    if (isOpen) {
-      setLoading(true);
-      fetchQueue(false);
+    if (!isOpen) return;
+    setLoading(true);
+    fetchQueue(false);
 
-      // Auto-poll every 12 seconds while modal is open
-      const interval = setInterval(() => {
-        fetchQueue(true);
-      }, 12000);
+    // Auto poll every 3s as fallback to Socket.io for immediate live updates
+    const timer = setInterval(() => {
+      fetchQueue(true);
+    }, 3000);
 
-      return () => clearInterval(interval);
+    const handleQueueUpdate = () => {
+      fetchQueue(true);
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('appointment_queue_update', handleQueueUpdate);
     }
+
+    return () => {
+      clearInterval(timer);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('appointment_queue_update', handleQueueUpdate);
+      }
+    };
   }, [isOpen, fetchQueue]);
 
   if (!isOpen) return null;
 
-  const summary = data?.queueSummary;
   const doctor = data?.doctor;
   const appt = data?.appointment;
+  const summary = data?.queueSummary;
   const timeline = data?.timeline || [];
 
-  const myToken = appt?.tokenNumber;
-  const currentToken = summary?.currentServingToken;
+  const youInTimeline = timeline.find((t) => t.isYou);
+  const myToken = appt?.tokenNumber ?? youInTimeline?.tokenNumber;
+  const servingInTimeline = timeline.find((t) => t.status === 'IN_CONSULTATION');
+  const currentToken = summary?.currentServingToken ?? servingInTimeline?.tokenNumber;
+
+  const isMyTurn = summary?.isMyTurn ?? (currentToken != null && myToken != null && currentToken === myToken);
   const peopleAhead = summary?.peopleAhead ?? 0;
-  const isMyTurn = summary?.isMyTurn || appt?.status === 'IN_CONSULTATION';
+
+  // Use the timeline directly from backend with exact slot start and end times
+  const displayTimeline = timeline;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
-      <div className="relative w-full max-w-2xl bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="relative w-full max-w-2xl bg-white text-zinc-900 rounded-3xl border border-black/[0.08] backdrop-blur-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
         {/* Top Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-blue-700 text-white flex items-center justify-center shadow-xs">
-              <Activity className="w-5 h-5 text-blue-200 animate-pulse" />
+            <div className="w-10 h-10 rounded-xl bg-[#0066cc] text-white flex items-center justify-center shadow-xs">
+              <Activity className="w-5 h-5 text-white animate-pulse" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-slate-900">Live Clinic Queue</h3>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping" />
-                  Live Board
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#e8f2fe] text-[#0066cc]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Live Sync
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                {doctor ? `Dr. ${doctor.fullName} (${doctor.specialization})` : 'Loading clinic details...'}
+                {doctor ? `Dr. ${doctor.fullName} (${doctor.specialization})` : 'Connecting...'}
               </p>
             </div>
           </div>
@@ -142,14 +157,14 @@ export function PatientLiveQueueModal({
             <button
               onClick={() => fetchQueue(false)}
               disabled={refreshing}
-              className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-white border border-transparent hover:border-slate-200 transition-all"
+              className="p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-all"
               title="Refresh Queue"
             >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-blue-700' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#0066cc]' : ''}`} />
             </button>
             <button
               onClick={onClose}
-              className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"
+              className="p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-all"
             >
               <X className="w-5 h-5" />
             </button>
@@ -160,18 +175,18 @@ export function PatientLiveQueueModal({
         <div className="p-6 overflow-y-auto space-y-6">
           {loading ? (
             <div className="py-16 text-center space-y-3">
-              <RefreshCw className="w-8 h-8 text-blue-600 animate-spin mx-auto" />
-              <p className="text-sm font-semibold text-slate-700">Connecting to doctor's live queue...</p>
-              <p className="text-xs text-slate-400">Fetching real-time token sequence</p>
+              <RefreshCw className="w-8 h-8 text-black animate-spin mx-auto" />
+              <p className="text-sm font-semibold text-zinc-900">Connecting to doctor&apos;s live queue...</p>
+              <p className="text-xs text-zinc-400">Fetching real-time token sequence</p>
             </div>
           ) : error ? (
             <div className="p-6 rounded-2xl bg-rose-50 border border-rose-200 text-center space-y-2">
               <AlertCircle className="w-8 h-8 text-rose-500 mx-auto" />
-              <p className="text-sm font-bold text-rose-800">Unable to load live queue</p>
+              <p className="text-sm font-bold text-zinc-950">Unable to load live queue</p>
               <p className="text-xs text-rose-600">{error}</p>
               <button
                 onClick={() => fetchQueue(false)}
-                className="mt-3 px-4 py-2 bg-rose-600 text-white text-xs font-bold rounded-xl hover:bg-rose-700 transition-all"
+                className="btn-primary mt-3 text-xs"
               >
                 Try Again
               </button>
@@ -180,57 +195,57 @@ export function PatientLiveQueueModal({
             <>
               {/* Turn Announcement Banner */}
               {isMyTurn ? (
-                <div className="p-4 rounded-2xl bg-blue-50 border-2 border-blue-500 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center flex-shrink-0 animate-bounce">
+                <div className="p-4 rounded-2xl border border-[#0066cc] bg-[#0066cc] text-white flex items-center gap-3 shadow-md">
+                  <div className="w-10 h-10 rounded-xl bg-white text-[#0066cc] flex items-center justify-center flex-shrink-0 animate-bounce">
                     <Stethoscope className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-blue-900">It's Your Turn Now!</h4>
-                    <p className="text-xs text-blue-700 mt-0.5">
+                    <h4 className="text-sm font-bold text-white">It&apos;s Your Turn Now!</h4>
+                    <p className="text-xs text-blue-100 mt-0.5">
                       Your token is currently being called. Please enter Room {doctor?.roomNumber || '1'}.
                     </p>
                   </div>
                 </div>
               ) : peopleAhead === 0 && appt?.status === 'CHECKED_IN' ? (
-                <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center flex-shrink-0">
+                <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#0066cc] text-white flex items-center justify-center flex-shrink-0">
                     <Clock className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-amber-900">You Are Next In Line!</h4>
-                    <p className="text-xs text-amber-700 mt-0.5">
-                      Please wait directly outside Room {doctor?.roomNumber || '1'}. Your token will be called shortly.
+                    <h4 className="text-sm font-bold text-slate-900">You Are Next In Line!</h4>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      Please wait outside Room {doctor?.roomNumber || '1'}. Your token will be called in moments.
                     </p>
                   </div>
                 </div>
               ) : null}
 
-              {/* Spotlight Cards (Now Serving vs Your Token) */}
+              {/* Spotlight Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {/* Now Serving */}
-                <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4 text-center">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 block">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-center">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
                     Now Serving
                   </span>
-                  <div className="text-3xl font-black text-blue-900 tabular-nums mt-1">
-                    {currentToken ? `#${currentToken}` : '—'}
+                  <div className="text-3xl font-black text-slate-900 tabular-nums mt-1">
+                    {currentToken ? `#${String(currentToken).padStart(2, '0')}` : '—'}
                   </div>
-                  <span className="text-[11px] text-blue-600 font-medium block mt-0.5">Inside with Doctor</span>
+                  <span className="text-[11px] text-slate-500 font-medium block mt-0.5">In Cabin</span>
                 </div>
 
                 {/* Your Token */}
-                <div className="rounded-2xl border-2 border-slate-900 bg-slate-900 p-4 text-center text-white shadow-sm">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-300 block">
+                <div className="rounded-2xl border border-[#0066cc] bg-[#0066cc] p-4 text-center text-white shadow-sm">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-100 block">
                     Your Token
                   </span>
-                  <div className="text-3xl font-black text-amber-400 tabular-nums mt-1">
-                    {myToken ? `#${myToken}` : '—'}
+                  <div className="text-3xl font-black text-white tabular-nums mt-1">
+                    {myToken ? `#${String(myToken).padStart(2, '0')}` : '—'}
                   </div>
-                  <span className="text-[11px] text-slate-300 font-medium block mt-0.5">Your Number</span>
+                  <span className="text-[11px] text-blue-100 font-semibold block mt-0.5">Your Number</span>
                 </div>
 
                 {/* Patients Ahead */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-xs">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-center">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
                     Ahead of You
                   </span>
@@ -243,47 +258,48 @@ export function PatientLiveQueueModal({
                 </div>
 
                 {/* Est Wait */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-xs">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                <div className="rounded-2xl border border-black/[0.08] bg-black/[0.02] p-4 text-center">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block">
                     Est. Wait
                   </span>
-                  <div className="text-3xl font-black text-slate-900 tabular-nums mt-1">
+                  <div className="text-3xl font-black text-zinc-950 tabular-nums mt-1">
                     {isMyTurn ? '0' : summary?.estimatedWaitMinutes ?? 0}
-                    <span className="text-sm font-semibold text-slate-500 ml-0.5">m</span>
+                    <span className="text-sm font-semibold text-zinc-500 ml-0.5">m</span>
                   </div>
-                  <span className="text-[11px] text-slate-500 font-medium block mt-0.5">Approximate time</span>
+                  <span className="text-[11px] text-zinc-500 font-medium block mt-0.5">Approx time</span>
                 </div>
               </div>
 
               {/* Clinic & Room Details */}
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-600">
+              <div className="p-4 rounded-2xl bg-black/[0.02] border border-black/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-zinc-600">
                 <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-blue-700 flex-shrink-0" />
+                  <MapPin className="w-4 h-4 text-black flex-shrink-0" />
                   <span>
-                    <strong className="text-slate-800">Clinic Room:</strong> Room {doctor?.roomNumber || '1'} •{' '}
+                    <strong className="text-zinc-950">Clinic Room:</strong> Room {doctor?.roomNumber || '1'} •{' '}
                     {doctor?.clinicAddress || 'Hospital Main Wing'}
                   </span>
                 </div>
-                <div className="text-slate-500 font-medium">
+                <div className="text-zinc-500 font-medium">
                   Date: {formatDate(appt?.date || '')} • Scheduled: {formatTime(appt?.startTime || '')}
+                  {appt?.endTime ? ` – ${formatTime(appt.endTime)}` : ''}
                 </div>
               </div>
 
-              {/* Sequence Timeline (Who is before you / who is inside) */}
+              {/* Sequence Timeline */}
               <div>
                 <div className="flex items-center justify-between mb-3 px-1">
                   <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-slate-600" />
-                    <h4 className="text-sm font-bold text-slate-900">Doctor's Token Sequence</h4>
+                    <Users className="w-4 h-4 text-zinc-600" />
+                    <h4 className="text-sm font-bold text-zinc-950">Doctor&apos;s Token Sequence</h4>
                   </div>
-                  <span className="text-xs text-slate-400">Strictly for Dr. {doctor?.fullName}</span>
+                  <span className="text-xs text-zinc-400">Dr. {doctor?.fullName}</span>
                 </div>
 
-                {timeline.length === 0 ? (
-                  <p className="text-xs text-slate-400 text-center py-4">No other tokens in queue today.</p>
+                {displayTimeline.length === 0 ? (
+                  <p className="text-xs text-zinc-400 text-center py-4">No other tokens in queue today.</p>
                 ) : (
                   <div className="space-y-2">
-                    {timeline.map((item) => {
+                    {displayTimeline.map((item) => {
                       const isCurrent = item.status === 'IN_CONSULTATION';
                       const isCompleted = item.status === 'COMPLETED';
                       const isYou = item.isYou;
@@ -293,11 +309,11 @@ export function PatientLiveQueueModal({
                           key={item.tokenNumber}
                           className={`rounded-2xl border p-3 flex items-center justify-between gap-3 transition-all ${
                             isYou
-                              ? 'border-2 border-slate-900 bg-slate-900 text-white shadow-sm'
+                              ? 'border-2 border-[#0066cc] bg-blue-50/70 shadow-xs'
                               : isCurrent
-                              ? 'border-2 border-blue-500 bg-blue-50/70'
+                              ? 'border border-blue-200 bg-blue-50/40'
                               : isCompleted
-                              ? 'border-slate-100 bg-slate-50/60 opacity-60'
+                              ? 'border-slate-200 bg-slate-50/60 opacity-60'
                               : 'border-slate-200 bg-white'
                           }`}
                         >
@@ -305,47 +321,44 @@ export function PatientLiveQueueModal({
                             <div
                               className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black flex-shrink-0 ${
                                 isYou
-                                  ? 'bg-amber-400 text-slate-950 font-black'
+                                  ? 'bg-[#0066cc] text-white font-black'
                                   : isCurrent
-                                  ? 'bg-blue-700 text-white'
+                                  ? 'bg-[#0066cc] text-white'
                                   : isCompleted
-                                  ? 'bg-slate-200 text-slate-500'
-                                  : 'bg-slate-100 text-slate-700'
+                                  ? 'bg-slate-200 text-slate-600'
+                                  : 'bg-slate-100 text-slate-800'
                               }`}
                             >
-                              #{item.tokenNumber}
+                              #{String(item.tokenNumber).padStart(2, '0')}
                             </div>
 
                             <div>
                               <div className="flex items-center gap-2">
                                 <span
                                   className={`text-xs font-bold ${
-                                    isYou ? 'text-white' : 'text-slate-900'
+                                    isYou ? 'text-[#0066cc]' : 'text-slate-900'
                                   }`}
                                 >
-                                  {isYou ? 'YOU (Your Appointment)' : `Patient Token #${item.tokenNumber}`}
+                                  {isYou ? 'YOU (Your Appointment)' : `Patient Token #${String(item.tokenNumber).padStart(2, '0')}`}
                                 </span>
-                                {isYou && (
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-400 text-slate-950">
+                                {isYou && isMyTurn && (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#0066cc] text-white">
                                     Your Turn
                                   </span>
                                 )}
                               </div>
-                              <span
-                                className={`text-[11px] block mt-0.5 ${
-                                  isYou ? 'text-slate-300' : 'text-slate-500'
-                                }`}
-                              >
+                              <span className="text-[11px] block mt-0.5 text-slate-500 font-medium">
                                 Slot: {formatTime(item.startTime)}
+                                {item.endTime ? ` – ${formatTime(item.endTime)}` : ''}
                               </span>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-2">
                             {isCurrent && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
-                                <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
-                                Inside Clinic Now
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#0066cc] text-white">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                Inside Now
                               </span>
                             )}
                             {isCompleted && (
@@ -355,11 +368,7 @@ export function PatientLiveQueueModal({
                               </span>
                             )}
                             {!isCurrent && !isCompleted && (
-                              <span
-                                className={`text-[11px] font-medium ${
-                                  isYou ? 'text-slate-300' : 'text-slate-500'
-                                }`}
-                              >
+                              <span className={`text-[11px] font-medium ${isYou ? 'text-[#0066cc]' : 'text-slate-500'}`}>
                                 {item.status === 'CHECKED_IN' ? 'In Waiting Room' : 'Expected'}
                               </span>
                             )}
@@ -375,11 +384,11 @@ export function PatientLiveQueueModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+        <div className="px-6 py-3.5 bg-zinc-50 border-t border-black/[0.06] flex items-center justify-between text-xs text-zinc-500">
           <span>Auto-updates in real time</span>
           <button
             onClick={onClose}
-            className="px-4 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold rounded-xl transition-all shadow-xs"
+            className="btn-secondary !py-1.5 !px-4 text-xs"
           >
             Close Board
           </button>

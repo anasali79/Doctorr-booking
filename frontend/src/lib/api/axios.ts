@@ -23,7 +23,7 @@ export function getNormalizedBaseUrl(): string {
   let raw = (
     process.env.API_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
-    'https://schedula-backend-j9k6.onrender.com'
+    'https://doctorr-booking-1.onrender.com'
   ).trim();
 
   // Strip trailing slashes

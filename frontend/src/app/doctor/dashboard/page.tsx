@@ -6,16 +6,12 @@ import { getDoctorProfile, getDoctorDashboard } from '@/lib/api/doctors';
 import { DoctorAppointmentsTable } from '@/components/doctor/DoctorAppointmentsTable';
 import {
   CalendarDays,
-  ArrowRight,
   Clock,
   Users,
   CheckCircle2,
   Calendar,
   XCircle,
   AlertCircle,
-  Stethoscope,
-  Activity,
-  PlusCircle,
   Sparkles,
 } from 'lucide-react';
 import { formatDate, getTodayIST } from '@/lib/utils';
@@ -59,49 +55,43 @@ export default async function DoctorDashboardPage() {
       label: "Today's Consults",
       value: stats.today,
       icon: Clock,
-      color: 'text-blue-700 bg-blue-50 border-blue-200/60',
     },
     {
-      label: 'Upcoming Scheduled',
+      label: 'Upcoming Visits',
       value: stats.upcoming,
       icon: Calendar,
-      color: 'text-sky-700 bg-sky-50 border-sky-200/60',
     },
     {
       label: 'Completed Visits',
       value: stats.completed,
       icon: CheckCircle2,
-      color: 'text-emerald-700 bg-emerald-50 border-emerald-200/60',
     },
     {
-      label: 'Unique Patients',
+      label: 'Total Patients',
       value: stats.totalPatients,
       icon: Users,
-      color: 'text-indigo-700 bg-indigo-50 border-indigo-200/60',
     },
     {
       label: 'Cancelled',
       value: stats.cancelled,
       icon: XCircle,
-      color: 'text-rose-700 bg-rose-50 border-rose-200/60',
     },
     {
       label: 'No Shows',
       value: stats.noShow,
       icon: AlertCircle,
-      color: 'text-amber-700 bg-amber-50 border-amber-200/60',
     },
   ];
 
   return (
-    <div className="page-container space-y-8 py-8 sm:py-10">
+    <div className="page-container space-y-8 py-8 sm:py-12">
       {/* Header Banner */}
-      <div className="rounded-3xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06)]">
+      <div className="relative rounded-2xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-xs overflow-hidden">
         <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
           <div>
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-200/70 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-800">
-              <span className="h-2 w-2 rounded-full bg-blue-600 animate-pulse" />
-              Clinic Command Center
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#0066cc]" />
+              <span>CAREUP CLINICIAN CONSOLE</span>
             </div>
             <h1 className="mt-2 text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
               {profile.fullName}
@@ -117,13 +107,13 @@ export default async function DoctorDashboardPage() {
               My Day
             </Link>
             <Link href="/doctor/availability" className="btn-secondary text-xs">
-              Availability &amp; Shifts
+              Availability
             </Link>
             <Link href="/doctor/availability?tab=leaves" className="btn-secondary text-xs">
-              Leave Calendar
+              Leave
             </Link>
             <Link href="/doctor/appointments" className="btn-secondary text-xs">
-              Full Patient Log
+              Patient Log
             </Link>
           </div>
         </div>
@@ -134,17 +124,17 @@ export default async function DoctorDashboardPage() {
         {statCards.map((item) => (
           <div
             key={item.label}
-            className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-[0_2px_12px_-2px_rgba(15,23,42,0.04)]"
+            className="rounded-2xl border border-slate-200/90 bg-white p-4 transition-all hover:border-slate-300 shadow-2xs"
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-400 block truncate">
+              <span className="text-[11px] font-semibold text-slate-500 block truncate">
                 {item.label}
               </span>
-              <div className={`p-1.5 rounded-xl border ${item.color}`}>
+              <div className="p-1.5 rounded-lg bg-[#e8f2fe] text-[#0066cc]">
                 <item.icon className="h-3.5 w-3.5" />
               </div>
             </div>
-            <p className="mt-2 text-2xl font-black text-slate-900 font-mono">
+            <p className="mt-2 text-2xl font-bold text-slate-900 font-mono">
               {item.value}
             </p>
           </div>
@@ -153,25 +143,25 @@ export default async function DoctorDashboardPage() {
 
       {/* Real-time Today's Queue Section */}
       <section className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 pb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 pb-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#e8f2fe] text-[#0066cc]">
               <CalendarDays className="h-4 w-4" />
             </div>
             <div>
               <h2 className="font-bold text-slate-900 text-base">
-                Today&apos;s Live Patient Queue ({todayAppointments.length})
+                Today&apos;s Patient Queue ({todayAppointments.length})
               </h2>
               <span className="text-xs text-slate-500 font-medium">
-                {formatDate(todayIST)} • Outpatient Roster
+                {formatDate(todayIST)} • Outpatient Schedule
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-2 text-xs">
-            <span className="inline-flex items-center gap-1.5 text-blue-800 font-bold bg-blue-50 px-3 py-1.5 rounded-full border border-blue-200/60 shadow-2xs">
-              <Activity className="h-3.5 w-3.5 text-blue-600 animate-pulse" />
-              Socket.IO Live Queue Connected
+            <span className="inline-flex items-center gap-2 text-slate-700 font-medium bg-white px-3.5 py-1.5 rounded-full border border-slate-200 shadow-2xs">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              Live Queue Gateway Connected
             </span>
           </div>
         </div>

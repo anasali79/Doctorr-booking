@@ -98,14 +98,14 @@ export function DoctorAppointmentsTable({
 
   if (appointments.length === 0) {
     return (
-      <div className="rounded-3xl border border-slate-200/90 bg-white py-16 px-8 text-center space-y-3 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06)]">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50 text-slate-400 mx-auto border border-slate-100">
+      <div className="rounded-3xl border border-black/[0.08] bg-white/90 py-16 px-8 text-center space-y-3 backdrop-blur-2xl shadow-xs">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-black/[0.04] text-zinc-500 mx-auto border border-black/[0.06]">
           <Clock className="w-7 h-7" />
         </div>
-        <h3 className="text-base font-bold text-slate-800">
+        <h3 className="text-base font-bold text-zinc-950">
           No Appointments in Queue
         </h3>
-        <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+        <p className="text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed">
           No patients are scheduled for this timeframe. New bookings will automatically synchronize here live.
         </p>
       </div>
@@ -113,10 +113,10 @@ export function DoctorAppointmentsTable({
   }
 
   return (
-    <div className="rounded-3xl border border-slate-200/90 bg-white shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06)] overflow-hidden">
+    <div className="rounded-3xl border border-black/[0.08] bg-white/95 backdrop-blur-2xl shadow-sm overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs">
-          <thead className="bg-slate-50/80 border-b border-slate-200/80 text-slate-400 uppercase font-bold tracking-wider text-[10px]">
+          <thead className="bg-black/[0.02] border-b border-black/[0.06] text-zinc-500 uppercase font-bold tracking-wider text-[10px]">
             <tr>
               <th className="py-3.5 px-5">Token / Queue</th>
               <th className="py-3.5 px-5">Slot Time</th>
@@ -127,22 +127,22 @@ export function DoctorAppointmentsTable({
               <th className="py-3.5 px-5 text-right">Queue Operations</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
-            {appointments.map((appt) => {
+          <tbody className="divide-y divide-black/[0.04]">
+            {appointments.map((appt, index) => {
               const patient = appt.patient;
               return (
                 <tr
                   key={appt.id}
-                  className="hover:bg-slate-50/70 transition-colors"
+                  className="hover:bg-black/[0.015] transition-colors"
                 >
                   {/* Token & Queue Position */}
                   <td className="py-4 px-5 whitespace-nowrap">
                     <div className="flex items-center gap-2.5">
-                      <span className="h-9 w-9 rounded-xl bg-blue-50 border border-blue-200/70 text-blue-800 font-mono font-black flex items-center justify-center text-sm shadow-2xs">
-                        {appt.tokenNumber ? `#${appt.tokenNumber}` : '—'}
+                      <span className="h-9 w-9 rounded-xl bg-black text-white font-mono font-black flex items-center justify-center text-sm shadow-xs">
+                        #{String(appt.tokenNumber || index + 1).padStart(2, '0')}
                       </span>
                       {appt.queuePosition && appt.status !== 'COMPLETED' && appt.status !== 'CANCELLED' && (
-                        <span className="text-[11px] font-semibold text-slate-400">
+                        <span className="text-[11px] font-semibold text-zinc-400">
                           Pos: #{appt.queuePosition}
                         </span>
                       )}
@@ -150,13 +150,13 @@ export function DoctorAppointmentsTable({
                   </td>
 
                   {/* Slot Time */}
-                  <td className="py-4 px-5 whitespace-nowrap font-bold text-slate-900">
+                  <td className="py-4 px-5 whitespace-nowrap font-bold text-zinc-950">
                     {formatTime(appt.startTime)} - {formatTime(appt.endTime)}
                   </td>
 
                   {/* Date if not today only */}
                   {!isTodayOnly && (
-                    <td className="py-4 px-5 whitespace-nowrap text-slate-600 font-semibold">
+                    <td className="py-4 px-5 whitespace-nowrap text-zinc-700 font-semibold">
                       {formatDate(appt.date)}
                     </td>
                   )}
@@ -164,10 +164,10 @@ export function DoctorAppointmentsTable({
                   {/* Patient Info */}
                   <td className="py-4 px-5 whitespace-nowrap">
                     <div>
-                      <span className="font-bold text-slate-900 block text-sm">
+                      <span className="font-bold text-zinc-950 block text-sm">
                         {patient?.fullName || 'Patient'}
                       </span>
-                      <span className="text-[11px] text-slate-400 font-medium">
+                      <span className="text-[11px] text-zinc-500 font-medium">
                         {patient?.age ? `${patient.age} yrs` : ''}
                         {patient?.gender ? ` • ${patient.gender}` : ''}
                       </span>
@@ -175,14 +175,14 @@ export function DoctorAppointmentsTable({
                   </td>
 
                   {/* Contact */}
-                  <td className="py-4 px-5 whitespace-nowrap text-slate-600">
+                  <td className="py-4 px-5 whitespace-nowrap text-zinc-700">
                     {patient?.phone ? (
                       <span className="flex items-center gap-1.5 font-mono text-xs font-semibold">
-                        <Phone className="w-3.5 h-3.5 text-slate-400" />
+                        <Phone className="w-3.5 h-3.5 text-zinc-400" />
                         {patient.phone}
                       </span>
                     ) : (
-                      <span className="text-slate-400">—</span>
+                      <span className="text-zinc-400">—</span>
                     )}
                   </td>
 
@@ -193,14 +193,14 @@ export function DoctorAppointmentsTable({
 
                   {/* Actions */}
                   <td className="py-4 px-5 whitespace-nowrap text-right">
-                    <div className="flex items-center justify-end gap-1.5">
+                    <div className="flex items-center justify-end gap-2">
                       {appt.status === 'CONFIRMED' && (
                         <>
                           <button
                             type="button"
                             onClick={() => handleAction(appt.id, 'manual-check-in')}
                             disabled={loadingId === `${appt.id}-manual-check-in`}
-                            className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+                            className="px-3.5 py-1.5 rounded-full border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 font-semibold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-2xs"
                             title="Check-in patient into clinic queue"
                           >
                             {loadingId === `${appt.id}-manual-check-in` ? (
@@ -214,7 +214,7 @@ export function DoctorAppointmentsTable({
                             type="button"
                             onClick={() => handleAction(appt.id, 'no-show')}
                             disabled={loadingId === `${appt.id}-no-show`}
-                            className="p-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 text-xs transition-colors cursor-pointer"
+                            className="p-1.5 rounded-full border border-black/[0.08] hover:bg-black/5 text-zinc-500 text-xs transition-colors cursor-pointer"
                             title="Mark as No Show"
                           >
                             <UserX className="w-3.5 h-3.5" />
@@ -223,7 +223,7 @@ export function DoctorAppointmentsTable({
                             type="button"
                             onClick={() => handleCancel(appt.id)}
                             disabled={loadingId === `${appt.id}-cancel`}
-                            className="p-2 rounded-xl border border-rose-200 hover:bg-rose-50 text-rose-500 text-xs transition-colors cursor-pointer"
+                            className="p-1.5 rounded-full border border-rose-200 hover:bg-rose-50 text-rose-600 text-xs transition-colors cursor-pointer"
                             title="Cancel Appointment"
                           >
                             <XCircle className="w-3.5 h-3.5" />
@@ -236,7 +236,7 @@ export function DoctorAppointmentsTable({
                           type="button"
                           onClick={() => handleAction(appt.id, 'start-consultation')}
                           disabled={loadingId === `${appt.id}-start-consultation`}
-                          className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-700 to-blue-800 px-4 py-1.5 text-[11px] font-bold text-white transition-all hover:from-blue-800 hover:to-blue-900 shadow-xs cursor-pointer active:scale-95"
+                          className="btn-primary !py-1.5 !px-4 text-[11px]"
                           title="Call patient into doctor cabin"
                         >
                           {loadingId === `${appt.id}-start-consultation` ? (
@@ -253,7 +253,7 @@ export function DoctorAppointmentsTable({
                           type="button"
                           onClick={() => handleAction(appt.id, 'complete')}
                           disabled={loadingId === `${appt.id}-complete`}
-                          className="flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-1.5 text-[11px] font-bold text-white transition-all hover:bg-slate-800 shadow-xs cursor-pointer active:scale-95"
+                          className="btn-primary !py-1.5 !px-4 text-[11px]"
                           title="Mark consultation completed"
                         >
                           {loadingId === `${appt.id}-complete` ? (
@@ -261,7 +261,7 @@ export function DoctorAppointmentsTable({
                           ) : (
                             <CheckCheck className="w-3.5 h-3.5" />
                           )}
-                          <span>Complete Consultation</span>
+                          <span>Complete Visit</span>
                         </button>
                       )}
 
@@ -269,7 +269,7 @@ export function DoctorAppointmentsTable({
                         appt.status === 'CANCELLED' ||
                         appt.status === 'NO_SHOW' ||
                         appt.status === 'RESCHEDULED') && (
-                        <span className="text-[11px] text-slate-400 font-medium italic">
+                        <span className="text-[11px] text-zinc-400 font-medium italic">
                           Finished
                         </span>
                       )}

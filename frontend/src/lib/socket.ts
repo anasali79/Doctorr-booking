@@ -10,7 +10,7 @@ export const getSocket = (token?: string): Socket => {
   let socketUrl = (
     process.env.NEXT_PUBLIC_SOCKET_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
-    'https://schedula-backend-j9k6.onrender.com'
+    'https://doctorr-booking-1.onrender.com'
   ).trim().replace(/\/+$/, '');
 
   if (socketUrl.endsWith('/api')) {

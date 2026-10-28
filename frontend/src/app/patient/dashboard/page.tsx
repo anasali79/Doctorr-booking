@@ -2,22 +2,31 @@ import React from 'react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
-import { getPatientProfile, getPatientDashboard } from '@/lib/api/patient';
-import { StatusBadge } from '@/components/common/StatusBadge';
+import { getPatientProfile, getPatientDashboard, getPatientAppointments } from '@/lib/api/patient';
+import { getUnreadCount } from '@/lib/api/notifications';
 import { formatDate, formatTime, getTodayIST } from '@/lib/utils';
+import { DoctorAvatar } from '@/components/common/DoctorAvatar';
+import { PatientLiveQueueButton } from '@/components/patient/PatientLiveQueueButton';
 import {
-  ArrowRight,
   Calendar,
   Clock,
-  User,
-  Activity,
-  UserCheck,
   Stethoscope,
-  Sparkles,
+  FileText,
+  Bell,
+  Phone,
+  MapPin,
+  User,
+  PlusCircle,
+  CheckCircle2,
+  ArrowRight,
   ChevronRight,
   ShieldCheck,
+  AlertCircle,
+  Building2,
+  Sparkles,
+  HeartPulse,
+  ExternalLink,
 } from 'lucide-react';
-import { PatientLiveQueueButton } from '@/components/patient/PatientLiveQueueButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,9 +37,11 @@ export default async function PatientDashboardPage() {
     redirect('/login');
   }
 
-  const [profileResult, dashboardResult] = await Promise.allSettled([
+  const [profileResult, dashboardResult, apptsResult, notifResult] = await Promise.allSettled([
     getPatientProfile(token),
     getPatientDashboard(token),
+    getPatientAppointments(token),
+    getUnreadCount(token),
   ]);
 
   const profile = profileResult.status === 'fulfilled' ? profileResult.value?.data : null;
@@ -40,227 +51,502 @@ export default async function PatientDashboardPage() {
   }
 
   const dashRes: any = dashboardResult.status === 'fulfilled' ? dashboardResult.value : null;
-  const dashboardData = dashRes?.data || dashRes || { upcoming: [], past: [], liveQueue: null };
+  const dashboardData = dashRes?.data || dashRes || {};
+  const apptsRes: any = apptsResult.status === 'fulfilled' ? apptsResult.value : null;
+  const apptsList: any[] = apptsRes?.data || apptsRes || [];
+  const unreadCount: number = notifResult.status === 'fulfilled' ? notifResult.value?.unreadCount || 0 : 0;
 
-  const upcoming: any[] = dashboardData?.upcoming || [];
+  const rawAppointments: any[] = [
+    ...(dashboardData?.upcoming || []),
+    ...(dashboardData?.past || []),
+    ...(Array.isArray(apptsList) ? apptsList : []),
+  ];
+
+  // De-duplicate by id
+  const apptMap = new Map<string, any>();
+  rawAppointments.forEach((a) => {
+    if (a && a.id) apptMap.set(a.id, a);
+  });
+  const allAppointments = Array.from(apptMap.values());
+
   const todayIST = getTodayIST();
+  const now = new Date();
+  const nowIST = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const currentMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
 
-  const activeToday = upcoming.find(
-    (a: any) =>
-      a.date === todayIST &&
-      (a.status === 'CONFIRMED' || a.status === 'CHECKED_IN' || a.status === 'IN_CONSULTATION'),
-  );
+  // Helper to determine if an un-attended appointment slot has already ended
+  const isAppointmentExpired = (a: any) => {
+    if (!a || !a.date) return false;
+    if (a.date < todayIST) return true;
+    if (a.date === todayIST && a.status === 'CONFIRMED') {
+      const [endH, endM] = (a.endTime || a.startTime || '00:00').split(':').map(Number);
+      const slotEndMinutes = (endH || 0) * 60 + (endM || 0);
+      return currentMinutes > slotEndMinutes;
+    }
+    return false;
+  };
+
+  // Upcoming / Active Appointments (must not be expired!)
+  const upcoming = allAppointments
+    .filter(
+      (a: any) =>
+        ['CONFIRMED', 'CHECKED_IN', 'IN_CONSULTATION'].includes(a.status) &&
+        !isAppointmentExpired(a),
+    )
+    .sort((a: any, b: any) => {
+      const dComp = a.date.localeCompare(b.date);
+      if (dComp !== 0) return dComp;
+      return (a.startTime || '').localeCompare(b.startTime || '');
+    });
+
+  // Past / Completed / Missed Appointments
+  const past = allAppointments
+    .filter(
+      (a: any) =>
+        ['COMPLETED', 'CANCELLED', 'NO_SHOW'].includes(a.status) ||
+        isAppointmentExpired(a),
+    )
+    .sort((a: any, b: any) => {
+      const dComp = b.date.localeCompare(a.date);
+      if (dComp !== 0) return dComp;
+      return (b.startTime || '').localeCompare(a.startTime || '');
+    });
+
+  // Check if there is a truly active (unexpired) appointment today
+  const activeToday = upcoming.find((a: any) => a.date === todayIST);
+  const nextVisit = activeToday || upcoming[0];
+
+  const firstName = profile.fullName ? profile.fullName.split(' ')[0] : 'there';
+  const patientIdShort = profile.id ? profile.id.slice(0, 8).toUpperCase() : 'PATIENT';
 
   return (
     <div className="page-container space-y-8 py-8 sm:py-10">
-      {/* Top Banner */}
-      <div className="rounded-3xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06)]">
-        <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
-          <div>
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-200/70 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-800">
-              <span className="h-2 w-2 rounded-full bg-blue-600 animate-pulse" />
-              Real-Time Patient Portal
-            </div>
-            <h1 className="mt-2 text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
-              Welcome back, {profile.fullName}
-            </h1>
-            <p className="mt-1 text-xs sm:text-sm text-slate-500 font-medium">
-              Live token broadcasting, queue wait forecasts, and verified doctors appointments.
-            </p>
+      {/* ═══════════════ PATIENT WELCOME & IDENTITY HEADER ═══════════════ */}
+      <div className="rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-bold text-[#0066cc]">
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>CAREUP PATIENT PORTAL</span>
+            </span>
+            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-mono font-semibold text-slate-600 border border-slate-200">
+              ID: #{patientIdShort}
+            </span>
           </div>
 
-          <div className="flex items-center gap-3">
-            <Link href="/doctors" className="btn-primary text-xs">
-              <Calendar className="h-3.5 w-3.5" />
-              Book New Visit
-            </Link>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
+            Welcome back, {profile.fullName}
+          </h1>
+
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 font-medium">
+            <span className="flex items-center gap-1.5 text-slate-700">
+              <User className="h-3.5 w-3.5 text-slate-400" />
+              {profile.age ? `${profile.age} yrs • ${profile.gender}` : 'Patient Profile'}
+            </span>
+            <span className="text-slate-300">•</span>
+            <span className="flex items-center gap-1.5 text-slate-700">
+              <Phone className="h-3.5 w-3.5 text-slate-400" />
+              {profile.phone}
+            </span>
+            <span className="text-slate-300">•</span>
+            <span className="flex items-center gap-1.5 text-slate-700">
+              <Building2 className="h-3.5 w-3.5 text-slate-400" />
+              CareUp Medical Clinic
+            </span>
           </div>
+        </div>
+
+        {/* Quick CTA Actions */}
+        <div className="flex items-center gap-3 shrink-0">
+          <Link
+            href="/doctors"
+            className="btn-primary inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold shadow-xs"
+          >
+            <PlusCircle className="h-4 w-4" />
+            <span>Book New Appointment</span>
+          </Link>
+
+          <Link
+            href="/patient/profile"
+            className="btn-secondary inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold shadow-xs"
+          >
+            <User className="h-3.5 w-3.5 text-slate-500" />
+            <span>My Profile</span>
+          </Link>
         </div>
       </div>
 
-      {/* Active Today Live Queue Card */}
-      {activeToday ? (
-        <div className="relative overflow-hidden rounded-3xl border border-blue-900 bg-gradient-to-br from-blue-950 via-slate-900 to-slate-950 p-6 text-white shadow-xl sm:p-8">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-5">
-            <div>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/20 px-3 py-1 text-xs font-semibold text-blue-200 border border-blue-400/30">
-                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                Scheduled for Today (IST)
-              </span>
-              <h2 className="mt-3 text-2xl font-bold">
-                {activeToday.doctor?.fullName || 'Doctor Consultation'}
-              </h2>
-              <p className="mt-1 text-xs text-blue-200 capitalize font-medium flex items-center gap-1.5">
-                <Stethoscope className="h-3.5 w-3.5" />
-                {activeToday.doctor?.specialization} • Slot: {formatTime(activeToday.startTime)}
-              </p>
+      {/* ═══════════════ TODAY'S ACTIVE LIVE QUEUE BANNER (IF VISIT TODAY) ═══════════════ */}
+      {activeToday && (
+        <div className="rounded-3xl border-2 border-[#0066cc] bg-gradient-to-r from-blue-50/80 via-white to-sky-50/40 p-6 sm:p-7 shadow-sm">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            <div className="flex items-start gap-4">
+              <div className="h-16 w-16 rounded-2xl bg-[#0066cc] text-white flex flex-col items-center justify-center shrink-0 shadow-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-85">TOKEN</span>
+                <span className="text-2xl font-black leading-none mt-0.5">
+                  #{String(activeToday.tokenNumber || 1).padStart(2, '0')}
+                </span>
+              </div>
+
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#0066cc] px-2.5 py-0.5 text-[10px] font-bold text-white uppercase tracking-wider">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 animate-pulse" />
+                    Appointment Scheduled for Today
+                  </span>
+                  <span className="text-xs font-semibold text-slate-600">
+                    Slot: {formatTime(activeToday.startTime)}
+                    {activeToday.endTime ? ` – ${formatTime(activeToday.endTime)}` : ''}
+                  </span>
+                </div>
+
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900 mt-1">
+                  Dr. {activeToday.doctor?.fullName} • {activeToday.doctor?.specialization}
+                </h3>
+
+                <p className="text-xs text-slate-600 mt-0.5 flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 text-[#0066cc]" />
+                  <span>Room 1 • CareUp Consultation Suite</span>
+                </p>
+              </div>
             </div>
 
-            <div className="flex flex-col items-start sm:items-end gap-2">
-              <StatusBadge status={activeToday.status} />
-              <span className="text-[11px] text-blue-300">
-                {activeToday.status === 'CONFIRMED' && 'Slot confirmed. Check in at clinic.'}
-                {activeToday.status === 'CHECKED_IN' && 'Checked in! Please wait for token call.'}
-                {activeToday.status === 'IN_CONSULTATION' && 'Your consultation is now active.'}
-              </span>
-            </div>
-          </div>
-
-          {/* Large Live Metrics */}
-          <div className="mt-6 grid grid-cols-3 gap-3 sm:gap-6 rounded-2xl bg-white/5 backdrop-blur-md p-4 sm:p-6 border border-white/10 text-center">
-            <div className="space-y-1">
-              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-blue-300 block">
-                Your Token
-              </span>
-              <span className="font-mono text-3xl sm:text-5xl font-black text-amber-400 drop-shadow-[0_0_15px_rgba(251,191,36,0.2)]">
-                {activeToday.tokenNumber ? `#${activeToday.tokenNumber}` : '—'}
-              </span>
-              <span className="text-[10px] text-slate-300 block">Official sequence</span>
-            </div>
-
-            <div className="space-y-1 border-x border-white/10">
-              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-blue-300 block">
-                Queue Position
-              </span>
-              <span className="font-mono text-3xl sm:text-5xl font-black text-blue-400 drop-shadow-[0_0_15px_rgba(59,130,246,0.2)]">
-                {activeToday.queuePosition ? `#${activeToday.queuePosition}` : '—'}
-              </span>
-              <span className="text-[10px] text-slate-300 block">Ahead in line</span>
-            </div>
-
-            <div className="space-y-1">
-              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-blue-300 block">
-                Estimated Wait
-              </span>
-              <span className="font-mono text-3xl sm:text-5xl font-black text-sky-300 drop-shadow-[0_0_15px_rgba(56,189,248,0.2)]">
-                {activeToday.estimatedWaitTime ?? 0}<span className="text-xl sm:text-2xl font-bold text-blue-200">m</span>
-              </span>
-              <span className="text-[10px] text-slate-300 block">Real-time estimate</span>
-            </div>
-          </div>
-
-          <div className="mt-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-white/10 text-xs text-blue-200">
-            <span className="flex items-center gap-1.5">
-              <Activity className="h-4 w-4 text-emerald-400 animate-pulse" />
-              Live Clinic Queue connection active
-            </span>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <PatientLiveQueueButton
                 appointmentId={activeToday.id}
                 variant="card"
-                label="Track Doctor Live Queue (See who is before you)"
+                label="Open Live Queue & Room Tracker"
               />
-              <Link
-                href="/patient/appointments"
-                className="font-semibold text-white/90 hover:text-white transition-colors flex items-center gap-1"
+
+              <a
+                href="tel:01314960280"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-xs"
               >
-                Manage visit <ChevronRight className="h-3.5 w-3.5" />
-              </Link>
+                <Phone className="h-3.5 w-3.5 text-slate-500" />
+                <span>Clinic Desk</span>
+              </a>
             </div>
           </div>
-        </div>
-      ) : (
-        <div className="rounded-3xl border border-slate-200/90 bg-white p-6 sm:p-7 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
-              <Clock className="h-6 w-6" />
-            </div>
-            <div>
-              <h2 className="font-bold text-slate-900 text-base">No consultation scheduled for today</h2>
-              <p className="mt-0.5 text-xs text-slate-500">
-                When you book a visit for today, your live token and queue position will broadcast here.
-              </p>
-            </div>
-          </div>
-          <Link href="/doctors" className="btn-secondary text-xs whitespace-nowrap">
-            Find an open slot
-          </Link>
         </div>
       )}
 
-      {/* Upcoming Section */}
+      {/* ═══════════════ CLINICAL SUMMARY KPI METRICS ═══════════════ */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Upcoming Consultations */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500">Upcoming Visits</span>
+            <div className="h-8 w-8 rounded-xl bg-sky-50 text-[#0066cc] flex items-center justify-center">
+              <Calendar className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-3 text-3xl font-black text-slate-900 tabular-nums">{upcoming.length}</div>
+          <p className="text-[11px] text-slate-500 mt-1">Confirmed appointments</p>
+        </div>
+
+        {/* Completed Visits */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500">Completed Visits</span>
+            <div className="h-8 w-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+              <CheckCircle2 className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-3 text-3xl font-black text-slate-900 tabular-nums">{past.length}</div>
+          <p className="text-[11px] text-slate-500 mt-1">Consultation history</p>
+        </div>
+
+        {/* Notification Alerts */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500">Messages & Alerts</span>
+            <div className="h-8 w-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
+              <Bell className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-3 text-3xl font-black text-slate-900 tabular-nums">{unreadCount}</div>
+          <p className="text-[11px] text-slate-500 mt-1">Unread notifications</p>
+        </div>
+
+        {/* Registered Clinic Practice */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500">Clinic Practice</span>
+            <div className="h-8 w-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
+              <Building2 className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-3 text-lg font-bold text-slate-900 leading-tight">CareUp GP</div>
+          <p className="text-[11px] text-slate-500 mt-1">NHS & Private Healthcare</p>
+        </div>
+      </div>
+
+      {/* ═══════════════ UPCOMING APPOINTMENTS SECTION ═══════════════ */}
       <section className="space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
-          <h2 className="font-bold text-slate-900 text-base flex items-center gap-2">
-            Upcoming Appointments
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
-              {upcoming.length}
-            </span>
-          </h2>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-5 w-5 text-[#0066cc]" />
+            <h2 className="text-lg font-bold text-slate-900">
+              Upcoming Consultations ({upcoming.length})
+            </h2>
+          </div>
           <Link
             href="/patient/appointments"
-            className="text-xs font-semibold text-blue-700 hover:text-blue-800 transition-colors flex items-center gap-1"
+            className="text-xs font-semibold text-[#0066cc] hover:underline inline-flex items-center gap-1"
           >
-            View all appointments <ChevronRight className="h-3.5 w-3.5" />
+            <span>Manage All Visits</span>
+            <ChevronRight className="h-3.5 w-3.5" />
           </Link>
         </div>
 
         {upcoming.length === 0 ? (
-          <div className="rounded-3xl border border-slate-200/90 bg-white p-12 text-center shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06)]">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-slate-400">
-              <Calendar className="h-6 w-6" />
-            </div>
-            <p className="mt-3 text-sm font-bold text-slate-800">No upcoming appointments</p>
-            <p className="mt-1 text-xs text-slate-500">Search from verified specialists and pick an open slot.</p>
-            <Link
-              href="/doctors"
-              className="btn-primary mt-5 inline-flex text-xs"
-            >
-              Browse Doctors Directory
-              <ArrowRight className="h-4 w-4" />
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center shadow-xs">
+            <Calendar className="h-10 w-10 text-slate-300 mx-auto mb-2" />
+            <h3 className="text-sm font-bold text-slate-800">No Active Appointments Scheduled</h3>
+            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+              You do not have any pending doctor visits. Book a certified general practitioner or specialist anytime.
+            </p>
+            <Link href="/doctors" className="btn-primary mt-4 inline-flex items-center gap-1.5 text-xs">
+              <PlusCircle className="h-3.5 w-3.5" />
+              <span>Book an Appointment</span>
             </Link>
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {upcoming.map((appt: any) => (
-              <article
-                key={appt.id}
-                className="group flex flex-col justify-between rounded-3xl border border-slate-200/90 bg-white p-5 shadow-[0_4px_20px_-4px_rgba(15,23,42,0.05)] hover:border-blue-300 hover:shadow-md transition-all duration-200"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-700 to-blue-800 text-sm font-bold text-white shadow-xs">
-                        {appt.doctor?.fullName?.charAt(0) || 'D'}
-                      </div>
-                      <div className="min-w-0">
-                        <h3 className="truncate text-sm font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
-                          {appt.doctor?.fullName || 'Doctor'}
-                        </h3>
-                        <p className="truncate text-xs font-semibold capitalize text-blue-700">
-                          {appt.doctor?.specialization}
-                        </p>
+          <div className="grid md:grid-cols-2 gap-4">
+            {upcoming.map((appt, i) => {
+              const isToday = appt.date === todayIST;
+              return (
+                <div
+                  key={appt.id}
+                  className={`rounded-2xl border bg-white p-5 shadow-xs transition-all hover:shadow-sm ${
+                    isToday ? 'border-[#0066cc] ring-1 ring-[#0066cc]/20' : 'border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-3.5">
+                      <DoctorAvatar
+                        name={appt.doctor?.fullName || 'Doctor'}
+                        size="md"
+                        className="rounded-xl border border-slate-100 shadow-2xs"
+                      />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-bold text-slate-900">
+                            Dr. {appt.doctor?.fullName}
+                          </h4>
+                          {isToday ? (
+                            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700 border border-emerald-200 uppercase">
+                              Today
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-semibold text-slate-600 border border-slate-200">
+                              Upcoming
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 capitalize">{appt.doctor?.specialization}</p>
                       </div>
                     </div>
-                    <StatusBadge status={appt.status} />
-                  </div>
 
-                  <div className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 text-xs">
-                    <div className="rounded-xl bg-slate-50/80 p-2.5">
-                      <span className="text-[10px] text-slate-400 uppercase font-semibold block">Date</span>
-                      <span className="font-bold text-slate-800">{formatDate(appt.date)}</span>
-                    </div>
-                    <div className="rounded-xl bg-slate-50/80 p-2.5">
-                      <span className="text-[10px] text-slate-400 uppercase font-semibold block">Time</span>
-                      <span className="font-bold text-slate-800">
-                        {formatTime(appt.startTime)}
+                    <div className="rounded-xl bg-slate-100 border border-slate-200 px-2.5 py-1 text-center">
+                      <span className="text-[9px] font-bold uppercase text-slate-500 block">Token</span>
+                      <span className="text-xs font-black text-slate-900 leading-tight">
+                        #{String(appt.tokenNumber || (i + 1)).padStart(2, '0')}
                       </span>
                     </div>
                   </div>
-                </div>
 
-                <Link
-                  href="/patient/appointments"
-                  className="mt-4 flex items-center justify-between text-xs font-bold text-blue-700 hover:text-blue-800 border-t border-slate-100 pt-3"
-                >
-                  <span>Manage Appointment</span>
-                  <ChevronRight className="h-4 w-4" />
-                </Link>
-              </article>
-            ))}
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-2 text-slate-700 font-semibold">
+                      <Clock className="h-3.5 w-3.5 text-[#0066cc]" />
+                      <span>
+                        {isToday ? 'Today' : formatDate(appt.date)} • {formatTime(appt.startTime)}
+                        {appt.endTime ? ` – ${formatTime(appt.endTime)}` : ''}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {isToday ? (
+                        <PatientLiveQueueButton
+                          appointmentId={appt.id}
+                          variant="primary"
+                          label="Live Queue"
+                        />
+                      ) : (
+                        <Link
+                          href="/patient/appointments"
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                        >
+                          View Details
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
+
+      {/* ═══════════════ ESSENTIAL PATIENT QUICK ACTIONS ═══════════════ */}
+      <section className="space-y-4">
+        <h2 className="text-lg font-bold text-slate-900">Patient Health Actions</h2>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {/* Action 1: Book Visit */}
+          <Link
+            href="/doctors"
+            className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-xs hover:border-[#0066cc] hover:shadow-sm transition-all"
+          >
+            <div className="h-10 w-10 rounded-xl bg-blue-50 text-[#0066cc] flex items-center justify-center mb-3 group-hover:bg-[#0066cc] group-hover:text-white transition-colors">
+              <Stethoscope className="h-5 w-5" />
+            </div>
+            <h3 className="text-sm font-bold text-slate-900 group-hover:text-[#0066cc] transition-colors">
+              Book a Doctor
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">Select a general physician or specialist & slot</p>
+          </Link>
+
+          {/* Action 2: Appointments & Reschedule */}
+          <Link
+            href="/patient/appointments"
+            className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-xs hover:border-[#0066cc] hover:shadow-sm transition-all"
+          >
+            <div className="h-10 w-10 rounded-xl bg-sky-50 text-[#0066cc] flex items-center justify-center mb-3 group-hover:bg-[#0066cc] group-hover:text-white transition-colors">
+              <Calendar className="h-5 w-5" />
+            </div>
+            <h3 className="text-sm font-bold text-slate-900 group-hover:text-[#0066cc] transition-colors">
+              My Appointments
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">View scheduled visits, live queue & reschedule</p>
+          </Link>
+
+          {/* Action 3: Health Profile & Allergies */}
+          <Link
+            href="/patient/profile"
+            className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-xs hover:border-[#0066cc] hover:shadow-sm transition-all"
+          >
+            <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center mb-3 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+              <FileText className="h-5 w-5" />
+            </div>
+            <h3 className="text-sm font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">
+              Medical Notes
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">Update basic health history, allergies & contact</p>
+          </Link>
+
+          {/* Action 4: Notifications */}
+          <Link
+            href="/patient/notifications"
+            className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-xs hover:border-[#0066cc] hover:shadow-sm transition-all"
+          >
+            <div className="h-10 w-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center mb-3 group-hover:bg-amber-600 group-hover:text-white transition-colors">
+              <Bell className="h-5 w-5" />
+            </div>
+            <h3 className="text-sm font-bold text-slate-900 group-hover:text-amber-700 transition-colors">
+              Alerts & Inbox
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">Consultation reminders & live token alerts</p>
+          </Link>
+        </div>
+      </section>
+
+      {/* ═══════════════ RECENT VISITS & CLINIC CONTACT ═══════════════ */}
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Past Visits Preview */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <span>Recent Consultations ({past.length})</span>
+            </h3>
+            <Link href="/patient/appointments" className="text-xs font-semibold text-[#0066cc] hover:underline">
+              Full History
+            </Link>
+          </div>
+
+          {past.length === 0 ? (
+            <p className="text-xs text-slate-500 py-4 text-center">No previous consultations on record.</p>
+          ) : (
+            <div className="space-y-3">
+              {past.slice(0, 3).map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-xl border border-slate-100 bg-slate-50/60 p-3.5 flex items-center justify-between text-xs"
+                >
+                  <div>
+                    <span className="font-bold text-slate-900 block">
+                      Dr. {item.doctor?.fullName || 'General Physician'}
+                    </span>
+                    <span className="text-slate-500 text-[11px] block mt-0.5">
+                      {formatDate(item.date)} • {formatTime(item.startTime)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                        item.status === 'COMPLETED'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      {item.status === 'COMPLETED' ? 'Completed' : item.status}
+                    </span>
+
+                    {item.doctor?.id && (
+                      <Link
+                        href={`/doctors/${item.doctor.id}`}
+                        className="rounded-lg bg-white border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-[#0066cc] hover:bg-sky-50 transition-colors"
+                      >
+                        Book Again
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Practice & Support Card */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-4">
+          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-[#0066cc]" />
+            <span>Clinic & Healthcare Support</span>
+          </h3>
+
+          <div className="space-y-3 text-xs text-slate-600">
+            <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-200/80 space-y-1">
+              <span className="font-bold text-slate-900 block">CareUp Medical Clinic</span>
+              <p>Consultation Suites • Main Clinic Wing</p>
+              <p className="text-slate-500">Appointments, Patient Triage & Live Token Queue</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Reception Desk</span>
+                <a href="tel:01314960280" className="font-bold text-[#0066cc] hover:underline block mt-0.5">
+                  0131 496 0280
+                </a>
+              </div>
+
+              <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Clinic Hours</span>
+                <span className="font-semibold text-slate-800 block mt-0.5">Mon–Fri: 08:00 – 18:30</span>
+              </div>
+            </div>
+
+            {profile.basicHealthInfo && (
+              <div className="rounded-xl bg-blue-50/50 border border-blue-100 p-3 text-[11px] text-slate-700">
+                <span className="font-bold text-[#0066cc] block mb-0.5">Your Recorded Health Notes:</span>
+                <p className="line-clamp-2">{profile.basicHealthInfo}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

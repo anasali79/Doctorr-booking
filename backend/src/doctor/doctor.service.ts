@@ -98,9 +98,39 @@ export class DoctorService {
       return String(val).split('T')[0];
     };
 
+    const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const currentMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
+
+    // Check each appointment: if CONFIRMED and slot end time has elapsed on todayStr (or past date), auto-mark NO_SHOW
+    for (const a of allAppointments) {
+      const aDate = getDateStr(a.date);
+      if (a.status === AppointmentStatus.CONFIRMED) {
+        let isPastTime = false;
+        if (aDate === todayStr) {
+          const [endH, endM] = (a.endTime || a.startTime).split(':').map(Number);
+          const endMinutes = (endH || 0) * 60 + (endM || 0);
+          isPastTime = currentMinutes > endMinutes;
+        }
+        if (aDate < todayStr || isPastTime) {
+          a.status = AppointmentStatus.NO_SHOW;
+          this.appointmentRepository.update(a.id, { status: AppointmentStatus.NO_SHOW }).catch(() => {});
+        }
+      }
+    }
+
     const todayAppointments = allAppointments.filter(
       a => getDateStr(a.date) === todayStr && a.status !== AppointmentStatus.RESCHEDULED,
     );
+
+    // Ensure sequential real tokens for today's appointments
+    const sortedToday = todayAppointments.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    sortedToday.forEach((appt, idx) => {
+      if (!appt.tokenNumber || appt.tokenNumber <= 0) {
+        appt.tokenNumber = idx + 1;
+        this.appointmentRepository.update(appt.id, { tokenNumber: idx + 1 }).catch(() => {});
+      }
+    });
+
     const upcoming = allAppointments.filter(
       a =>
         getDateStr(a.date) >= todayStr &&

@@ -8,7 +8,7 @@ export default function Loading() {
         <div className="h-10 w-10 rounded-full border-3 border-blue-600 border-t-transparent animate-spin" />
       </div>
       <p className="mt-4 text-xs font-bold text-slate-500 uppercase tracking-wider animate-pulse">
-        Loading Schedula…
+        Loading CareUp…
       </p>
     </div>
   );

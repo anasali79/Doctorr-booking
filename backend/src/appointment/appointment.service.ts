@@ -10,7 +10,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Not, DataSource, EntityManager } from 'typeorm';
+import { Repository, Not, DataSource, EntityManager, In } from 'typeorm';
 import { Appointment } from './entities/appointment.entity';
 import { Doctor } from '../doctor/entities/doctor.entity';
 import { Patient } from '../patient/entities/patient.entity';
@@ -212,8 +212,8 @@ export class AppointmentService {
     manager: EntityManager,
     doctorId: string,
     date: string,
-    startTime: string,
-    endTime: string,
+    startTime?: string,
+    endTime?: string,
   ): Promise<number> {
     const appointments = await manager.find(Appointment, {
       select: {
@@ -222,8 +222,7 @@ export class AppointmentService {
       where: {
         doctorId,
         date,
-        startTime,
-        endTime,
+        status: Not(In([AppointmentStatus.CANCELLED, AppointmentStatus.RESCHEDULED])),
       },
       lock: { mode: 'pessimistic_write' },
       loadEagerRelations: false,
@@ -231,7 +230,7 @@ export class AppointmentService {
 
     const tokens = appointments
       .map((appt) => appt.tokenNumber)
-      .filter((t): t is number => t !== null);
+      .filter((t): t is number => typeof t === 'number' && t > 0);
 
     const currentMax = tokens.length > 0 ? Math.max(...tokens) : 0;
     return currentMax + 1;
@@ -346,16 +345,14 @@ export class AppointmentService {
         if (existingBooking) throw new ConflictException('This slot is already booked');
       }
 
-      let tokenNumber: number | null = null;
-      if (slotInfo.schedulingType === 'WAVE') {
-        tokenNumber = await this.assignTokenNumber(
-          queryRunner.manager,
-          dto.doctorId,
-          dto.date,
-          dto.startTime,
-          dto.endTime,
-        );
-      }
+      // Always assign a real sequential token number per doctor per day
+      const tokenNumber = await this.assignTokenNumber(
+        queryRunner.manager,
+        dto.doctorId,
+        dto.date,
+        dto.startTime,
+        dto.endTime,
+      );
 
       const appointment = this.appointmentRepo.create({
         doctorId: dto.doctorId,
@@ -541,7 +538,7 @@ export class AppointmentService {
 
     const currentServingTimelineEntry = currentServing
       ? timeline.find((t) => t.tokenNumber === (currentServing.tokenNumber ?? -1)) ||
-        timeline.find((t) => t.status === AppointmentStatus.IN_CONSULTATION)
+      timeline.find((t) => t.status === AppointmentStatus.IN_CONSULTATION)
       : null;
 
     return {
@@ -874,16 +871,14 @@ export class AppointmentService {
       appToLock.status = AppointmentStatus.RESCHEDULED;
       await queryRunner.manager.save(appToLock);
 
-      let tokenNumber: number | null = null;
-      if (slotInfo.schedulingType === 'WAVE') {
-        tokenNumber = await this.assignTokenNumber(
-          queryRunner.manager,
-          appointment.doctorId,
-          dto.date,
-          dto.startTime,
-          dto.endTime,
-        );
-      }
+      // Always assign a real sequential token number per doctor per day
+      const tokenNumber = await this.assignTokenNumber(
+        queryRunner.manager,
+        appointment.doctorId,
+        dto.date,
+        dto.startTime,
+        dto.endTime,
+      );
 
       const newAppointment = this.appointmentRepo.create({
         doctorId: appointment.doctorId,
@@ -988,7 +983,42 @@ export class AppointmentService {
     const appointments = await this.appointmentRepo.find({
       where: whereClause,
       relations: { patient: true },
-      order: { date: 'DESC', startTime: 'DESC' },
+      order: { date: 'DESC', startTime: 'ASC' },
+    });
+
+    const todayStr = getTodayIST();
+    const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const currentMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
+
+    // Check for expired CONFIRMED appointments & guarantee sequential tokens
+    const byDate = new Map<string, Appointment[]>();
+    for (const appt of appointments) {
+      if (!byDate.has(appt.date)) byDate.set(appt.date, []);
+      byDate.get(appt.date)!.push(appt);
+
+      if (appt.status === AppointmentStatus.CONFIRMED) {
+        const isPastDate = appt.date < todayStr;
+        let isPastTime = false;
+        if (appt.date === todayStr) {
+          const [endH, endM] = (appt.endTime || appt.startTime).split(':').map(Number);
+          const endMinutes = (endH || 0) * 60 + (endM || 0);
+          isPastTime = currentMinutes > endMinutes;
+        }
+        if (isPastDate || isPastTime) {
+          appt.status = AppointmentStatus.NO_SHOW;
+          this.appointmentRepo.update(appt.id, { status: AppointmentStatus.NO_SHOW }).catch(() => { });
+        }
+      }
+    }
+
+    byDate.forEach((dayAppts) => {
+      dayAppts.sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+      dayAppts.forEach((appt, idx) => {
+        if (!appt.tokenNumber || appt.tokenNumber <= 0) {
+          appt.tokenNumber = idx + 1;
+          this.appointmentRepo.update(appt.id, { tokenNumber: idx + 1 }).catch(() => { });
+        }
+      });
     });
 
     return {
@@ -1092,6 +1122,26 @@ export class AppointmentService {
       relations: { doctor: true },
       order: { date: 'DESC', startTime: 'DESC' },
     });
+
+    const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const currentMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
+
+    // Check each appointment: if CONFIRMED and slot end time has elapsed on todayStr (or past date)
+    for (const appt of allPatientAppts) {
+      if (appt.status === AppointmentStatus.CONFIRMED) {
+        const isPastDate = appt.date < todayStr;
+        let isPastTime = false;
+        if (appt.date === todayStr) {
+          const [endH, endM] = (appt.endTime || appt.startTime).split(':').map(Number);
+          const endMinutes = (endH || 0) * 60 + (endM || 0);
+          isPastTime = currentMinutes > endMinutes;
+        }
+        if (isPastDate || isPastTime) {
+          appt.status = AppointmentStatus.NO_SHOW;
+          this.appointmentRepo.update(appt.id, { status: AppointmentStatus.NO_SHOW }).catch(() => { });
+        }
+      }
+    }
 
     const upcoming = allPatientAppts
       .filter(
@@ -1389,8 +1439,8 @@ export class AppointmentService {
       startTime: appointment.startTime,
       endTime: appointment.endTime,
       status: appointment.status,
+      tokenNumber: appointment.tokenNumber ?? null,
       schedulingType: appointment.tokenNumber !== null ? 'WAVE' : 'STREAM',
-      ...(appointment.tokenNumber !== null && { tokenNumber: appointment.tokenNumber }),
       patient: appointment.patient
         ? {
           id: appointment.patient.id,

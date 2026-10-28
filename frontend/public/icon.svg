@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <defs>
+    <linearGradient id="careup-bg" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0066cc" />
+      <stop offset="0.6" stop-color="#0055b3" />
+      <stop offset="1" stop-color="#00408a" />
+    </linearGradient>
+  </defs>
+  <!-- Squircle Background -->
+  <rect width="32" height="32" rx="9" fill="url(#careup-bg)" />
+  <rect width="32" height="32" rx="9" stroke="#ffffff" stroke-opacity="0.2" stroke-width="1" />
+  
+  <!-- CareUp Symbol (Heart + Vitality Pulse + Upward Arrow) -->
+  <g transform="translate(4, 4) scale(1)">
+    <path
+      d="M11.5 21C11.5 21 3 15.5 3 9.5C3 6.46 5.46 4 8.5 4C10.24 4 11.5 5 11.5 5"
+      stroke="#ffffff"
+      stroke-width="2.2"
+      stroke-linecap="round"
+    />
+    <path
+      d="M20 12.5C19.5 15.5 16 18.5 11.5 21"
+      stroke="#ffffff"
+      stroke-width="2.2"
+      stroke-linecap="round"
+    />
+    <path
+      d="M7 11.5H9.2L10.6 8L12.4 15L13.8 11.5H16.2"
+      stroke="#ffffff"
+      stroke-width="2.1"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M15.5 4H20.5V9M20.5 4L14 10.5"
+      stroke="#ffffff"
+      stroke-width="2.3"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </g>
+</svg>

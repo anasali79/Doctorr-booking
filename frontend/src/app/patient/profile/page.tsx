@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
 import { getPatientProfile } from '@/lib/api/patient';
 import { PatientProfileForm } from '@/components/patient/PatientProfileForm';
-import { UserCheck } from 'lucide-react';
+import { UserCheck, Sparkles } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,22 +26,26 @@ export default async function PatientProfilePage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      <div className="flex items-center gap-3 mb-8">
-        <div className="w-12 h-12 rounded-2xl bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 flex items-center justify-center">
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16">
+      <div className="flex items-center gap-3.5 mb-8">
+        <div className="w-12 h-12 rounded-2xl bg-black text-white flex items-center justify-center shadow-xs">
           <UserCheck className="w-6 h-6" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-black/[0.04] px-2.5 py-0.5 text-[10px] font-semibold text-zinc-800">
+            <Sparkles className="h-3 w-3 text-black" />
+            <span>ACCOUNT SETTINGS</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-zinc-950 mt-1">
             Patient Profile
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <p className="text-xs sm:text-sm text-zinc-500">
             Manage your personal clinical contact details and health history
           </p>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm p-6 sm:p-8">
+      <div className="rounded-3xl border border-black/[0.08] bg-white/95 backdrop-blur-2xl shadow-sm p-6 sm:p-8">
         <PatientProfileForm initialData={profile} isSetup={false} />
       </div>
     </div>

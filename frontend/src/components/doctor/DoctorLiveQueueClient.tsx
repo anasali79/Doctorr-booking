@@ -346,7 +346,7 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
               ) : nextUp && nextUp.status === 'CHECKED_IN' ? (
                 <div className="w-full flex items-center justify-between gap-3">
                   <div className="text-xs text-slate-600 font-medium">
-                    Ready to call: <span className="font-bold text-slate-900">{nextUp.patient?.fullName}</span> (Token #{nextUp.tokenNumber})
+                    Ready to call: <span className="font-bold text-slate-900">{nextUp.patient?.fullName}</span> (Token #{String(nextUp.tokenNumber || 1).padStart(2, '0')})
                   </div>
                   <button
                     onClick={() => handleAction(nextUp.id, 'start-consultation')}
@@ -358,7 +358,7 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
                     ) : (
                       <PlayCircle className="w-4 h-4" />
                     )}
-                    Call Next Token (#{nextUp.tokenNumber})
+                    Call Next Token (#{String(nextUp.tokenNumber || 1).padStart(2, '0')})
                   </button>
                 </div>
               ) : (
@@ -446,7 +446,7 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
                     ) : (
                       <PlayCircle className="w-3.5 h-3.5" />
                     )}
-                    Start Consultation with Token #{nextUp.tokenNumber}
+                    Start Consultation with Token #{String(nextUp.tokenNumber || 1).padStart(2, '0')}
                   </button>
                 ) : (
                   <button

@@ -5,7 +5,7 @@ export class AppController {
   @Get()
   getRoot() {
     return {
-      message: 'Schedula Backend API is running',
+      message: 'CareUp Backend API is running',
       status: 'ok',
       apiBase: '/api',
       routes: {

@@ -8,47 +8,65 @@ interface BrandMarkProps {
 }
 
 const sizeClasses = {
-  sm: 'h-8 w-8 rounded-lg',
-  md: 'h-10 w-10 rounded-xl',
+  sm: 'h-8 w-8 rounded-xl',
+  md: 'h-10 w-10 rounded-2xl',
   lg: 'h-12 w-12 rounded-2xl',
   xl: 'h-16 w-16 rounded-3xl',
 };
 
 const iconSizes = {
-  sm: 'h-4.5 w-4.5',
-  md: 'h-5.5 w-5.5',
-  lg: 'h-6.5 w-6.5',
-  xl: 'h-9 w-9',
+  sm: 'h-4 w-4',
+  md: 'h-5 w-5',
+  lg: 'h-6 w-6',
+  xl: 'h-8 w-8',
 };
 
-export function BrandMark({ size = 'md', className, withGlow = true }: BrandMarkProps) {
+export function BrandMark({ size = 'md', className }: BrandMarkProps) {
   return (
     <div
       className={cn(
-        'relative flex shrink-0 items-center justify-center bg-gradient-to-tr from-blue-700 via-blue-600 to-sky-500 text-white shadow-sm transition-transform duration-300 hover:scale-105',
+        'relative flex shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#0066cc] via-[#0055b3] to-[#00408a] text-white shadow-xs transition-all duration-200 hover:scale-105 hover:shadow-md ring-1 ring-white/20 overflow-hidden',
         sizeClasses[size],
-        withGlow && 'shadow-blue-500/20 shadow-md',
         className,
       )}
       aria-hidden="true"
     >
-      {/* Subtle inner highlight */}
-      <div className="absolute inset-x-0 top-0 h-[40%] rounded-t-[inherit] bg-gradient-to-b from-white/25 to-transparent pointer-events-none" />
+      {/* Subtle top gloss highlight */}
+      <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/25 to-transparent pointer-events-none" />
 
-      {/* Modern Medical Pulse + Caduceus Cross SVG */}
+      {/* Signature CareUp Symbol: Care Heart + Upward Vitality Arrow */}
       <svg
         viewBox="0 0 24 24"
         fill="none"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className={cn(iconSizes[size], 'drop-shadow-sm')}
+        xmlns="http://www.w3.org/2000/svg"
+        className={cn('relative z-10 text-white stroke-white drop-shadow-2xs', iconSizes[size])}
       >
-        {/* Shield / Node shape */}
-        <path d="M12 2L4 5v6.5C4 16.5 7.4 21.2 12 22c4.6-.8 8-5.5 8-10.5V5l-8-3z" fill="currentColor" fillOpacity="0.15" />
-        {/* Pulse waveform inside shield */}
-        <path d="M7.5 12h2l1.5-3 2 6 1.5-3h2" />
+        {/* Heart Left Wing (Care) */}
+        <path
+          d="M11.5 21C11.5 21 3 15.5 3 9.5C3 6.46 5.46 4 8.5 4C10.24 4 11.5 5 11.5 5"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+        />
+        {/* Heart Right Lower Curve */}
+        <path
+          d="M20 12.5C19.5 15.5 16 18.5 11.5 21"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+        />
+        {/* ECG Vitality Pulse in Core */}
+        <path
+          d="M7 11.5H9.2L10.6 8L12.4 15L13.8 11.5H16.2"
+          strokeWidth="2.1"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {/* Upward Rising Arrow Accent (Up) */}
+        <path
+          d="M15.5 4H20.5V9M20.5 4L14 10.5"
+          strokeWidth="2.3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     </div>
   );
