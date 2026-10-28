@@ -19,7 +19,9 @@ export const getSocket = (token?: string): Socket => {
 
   if (!socketInstance) {
     socketInstance = io(`${socketUrl}/appointments`, {
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
+      query: token ? { token } : undefined,
+      withCredentials: true,
       auth: { token },
       autoConnect: false,
       reconnection: true,

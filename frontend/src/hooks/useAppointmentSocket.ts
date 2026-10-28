@@ -27,8 +27,19 @@ export function useAppointmentSocket({ role, profileId, onEvent }: UseSocketOpti
 
     async function initSocket() {
       try {
-        const res = await clientAxios.get<{ token: string }>('/api/auth/token');
-        const token = res.data?.token;
+        let token = '';
+        try {
+          const res = await clientAxios.get<{ token: string }>('/api/auth/token');
+          token = res.data?.token || '';
+        } catch {
+          token = '';
+        }
+
+        if (!token && typeof document !== 'undefined') {
+          const match = document.cookie.match(/(?:^|;\s*)(?:token|jwt|access_token)=([^;]+)/);
+          if (match) token = match[1];
+        }
+
         if (isCancelled || !token) return;
 
         socket = getSocket(token);
@@ -48,8 +59,13 @@ export function useAppointmentSocket({ role, profileId, onEvent }: UseSocketOpti
           setIsConnected(false);
         }
 
+        function handleConnectError(err: any) {
+          setIsConnected(false);
+        }
+
         socket.on('connect', handleConnect);
         socket.on('disconnect', handleDisconnect);
+        socket.on('connect_error', handleConnectError);
 
         // Doctor events
         if (role === 'doctor') {

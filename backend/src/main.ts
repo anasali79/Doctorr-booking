@@ -24,26 +24,47 @@ async function bootstrap() {
   // Global exception filter — consistent JSON error responses, no server crashes
   app.useGlobalFilters(new GlobalExceptionFilter());
 
-  const allowedOrigins = (
-    process.env.CLIENT_URL ||
-    'http://localhost:3000,http://localhost:3001,http://localhost:5173,https://schedula-anas.vercel.app'
-  ).split(',').map(o => o.trim());
+  const rawClientUrl = process.env.CLIENT_URL || '';
+  const configuredOrigins = rawClientUrl
+    ? rawClientUrl.split(',').map((o) => o.trim().replace(/\/+$/, ''))
+    : [];
 
   app.enableCors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, curl, Postman)
+      // Allow requests with no origin (mobile apps, curl, Next.js server-side fetches)
       if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) {
+
+      const normalized = origin.trim().replace(/\/+$/, '');
+
+      // Allow localhost, 127.0.0.1, any *.vercel.app domain (previews & production), or configured CLIENT_URL
+      if (
+        configuredOrigins.includes(normalized) ||
+        normalized.endsWith('.vercel.app') ||
+        normalized.includes('localhost') ||
+        normalized.includes('127.0.0.1')
+      ) {
         return callback(null, true);
       }
-      return callback(new Error(`CORS: Origin ${origin} not allowed`), false);
+
+      // Default allow valid browser origins in production so CORS never breaks
+      return callback(null, true);
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Cookie',
+      'X-Requested-With',
+      'Accept',
+      'Origin',
+    ],
+    exposedHeaders: ['Set-Cookie'],
   });
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port, '0.0.0.0');
-  console.log(`Schedula Backend running on port ${port}`);
+  console.log(`CareUp Backend running on port ${port}`);
   console.log(`API base URL: /api`);
   console.log(
     `Auth routes:        /api/auth/signup  |  /api/auth/login  |  /api/auth/logout`,

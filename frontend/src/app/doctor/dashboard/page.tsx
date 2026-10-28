@@ -2,7 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
-import { getDoctorProfile, getDoctorDashboard } from '@/lib/api/doctors';
+import { getDoctorProfile, getDoctorDashboard, getDoctorAppointments } from '@/lib/api/doctors';
 import { DoctorAppointmentsTable } from '@/components/doctor/DoctorAppointmentsTable';
 import {
   CalendarDays,
@@ -15,6 +15,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { formatDate, getTodayIST } from '@/lib/utils';
+import { Appointment } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,9 +26,10 @@ export default async function DoctorDashboardPage() {
     redirect('/login');
   }
 
-  const [profileResult, dashboardResult] = await Promise.allSettled([
+  const [profileResult, dashboardResult, appointmentsResult] = await Promise.allSettled([
     getDoctorProfile(token),
     getDoctorDashboard(token),
+    getDoctorAppointments('', token),
   ]);
 
   const profile = profileResult.status === 'fulfilled' ? profileResult.value?.data : null;
@@ -38,17 +40,28 @@ export default async function DoctorDashboardPage() {
 
   const res: any = dashboardResult.status === 'fulfilled' ? dashboardResult.value : null;
   const resolvedData = res?.data || res;
-  const stats = resolvedData?.stats || {
-    today: 0,
-    upcoming: 0,
-    completed: 0,
-    cancelled: 0,
-    noShow: 0,
-    totalPatients: 0,
-  };
-  const todayAppointments = resolvedData?.todayAppointments || [];
+
+  const allAppointments: Appointment[] =
+    appointmentsResult.status === 'fulfilled'
+      ? appointmentsResult.value?.data || []
+      : [];
 
   const todayIST = getTodayIST();
+  const todayAppointments: Appointment[] =
+    resolvedData?.todayAppointments && resolvedData.todayAppointments.length > 0
+      ? resolvedData.todayAppointments
+      : allAppointments.filter((a) => a.date === todayIST);
+
+  const stats = resolvedData?.stats || {
+    today: todayAppointments.length,
+    upcoming: allAppointments.filter(
+      (a) => a.date >= todayIST && a.status !== 'CANCELLED',
+    ).length,
+    completed: allAppointments.filter((a) => a.status === 'COMPLETED').length,
+    cancelled: allAppointments.filter((a) => a.status === 'CANCELLED').length,
+    noShow: allAppointments.filter((a) => a.status === 'NO_SHOW').length,
+    totalPatients: new Set(allAppointments.map((a) => a.patientId).filter(Boolean)).size,
+  };
 
   const statCards = [
     {
@@ -141,7 +154,7 @@ export default async function DoctorDashboardPage() {
         ))}
       </div>
 
-      {/* Real-time Today's Queue Section */}
+      {/* Appointments & Live Queue Section */}
       <section className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 pb-4">
           <div className="flex items-center gap-2.5">
@@ -150,23 +163,30 @@ export default async function DoctorDashboardPage() {
             </div>
             <div>
               <h2 className="font-bold text-slate-900 text-base">
-                Today&apos;s Patient Queue ({todayAppointments.length})
+                Doctor Appointments & Consultation Queue
               </h2>
               <span className="text-xs text-slate-500 font-medium">
-                {formatDate(todayIST)} • Outpatient Schedule
+                {formatDate(todayIST)} • Outpatient & Online Bookings
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-2 text-xs">
-            <span className="inline-flex items-center gap-2 text-slate-700 font-medium bg-white px-3.5 py-1.5 rounded-full border border-slate-200 shadow-2xs">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              Live Queue Gateway Connected
-            </span>
+            <Link
+              href="/doctor/my-day"
+              className="btn-primary !py-1.5 !px-3.5 text-xs inline-flex items-center gap-1.5"
+            >
+              <span>Launch Live Cabin Queue</span>
+              <span>→</span>
+            </Link>
           </div>
         </div>
 
-        <DoctorAppointmentsTable appointments={todayAppointments} isTodayOnly={true} />
+        <DoctorAppointmentsTable
+          appointments={todayAppointments}
+          allAppointments={allAppointments}
+          isTodayOnly={false}
+        />
       </section>
     </div>
   );

@@ -68,12 +68,10 @@ export const buildPatientRoom = (patientId: string) => `patient:${patientId}`;
 @WebSocketGateway({
   namespace: '/appointments',
   cors: {
-    origin: (process.env.CLIENT_URL || 'http://localhost:5173,http://localhost:3000')
-      .split(',')
-      .map((o: string) => o.trim()),
+    origin: true,
     credentials: true,
   },
-  transports: ['websocket'],
+  transports: ['websocket', 'polling'],
 })
 export class AppointmentGateway
   implements OnGatewayConnection, OnGatewayDisconnect {
@@ -100,7 +98,10 @@ export class AppointmentGateway
       const authHeader = client.handshake.headers.authorization;
       const token =
         extractCookieValue(cookieHeader, 'token') ??
+        extractCookieValue(cookieHeader, 'jwt') ??
+        extractCookieValue(cookieHeader, 'access_token') ??
         (client.handshake.auth as any)?.token ??
+        (client.handshake.query as any)?.token ??
         (authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null) ??
         null;
 
