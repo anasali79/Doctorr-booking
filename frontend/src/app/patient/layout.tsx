@@ -30,7 +30,7 @@ export default async function PatientLayout({
 
       <main className="flex-1">
         {profile ? (
-          <PatientSocketProvider patientId={profile.id}>
+          <PatientSocketProvider patientId={profile.id} initialToken={token}>
             {children}
           </PatientSocketProvider>
         ) : (

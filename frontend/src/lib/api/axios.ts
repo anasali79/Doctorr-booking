@@ -19,11 +19,17 @@ export class ApiError extends Error {
  * Checks API_URL, NEXT_PUBLIC_API_URL, or defaults to the production Render backend.
  * Ensures no duplicate trailing slashes and handles if /api is appended.
  */
+/**
+ * Normalizes the backend base URL.
+ * Strictly reads from environment variables (API_URL or NEXT_PUBLIC_API_URL).
+ * If undefined in development, falls back to local backend port.
+ * Ensures no duplicate trailing slashes and handles if /api is appended.
+ */
 export function getNormalizedBaseUrl(): string {
   let raw = (
     process.env.API_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
-    'https://doctorr-booking-1.onrender.com'
+    (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001')
   ).trim();
 
   // Strip trailing slashes
@@ -69,7 +75,7 @@ export function extractErrorMessage(error: unknown): string {
     }
 
     if (error.message === 'Network Error' || !error.response) {
-      return 'Network error: Unable to connect to Schedula server. Please check your internet connection.';
+      return 'Network error: Unable to connect to CareUp server. Please check your internet connection.';
     }
 
     const status = error.response?.status;
@@ -78,7 +84,7 @@ export function extractErrorMessage(error: unknown): string {
     if (status === 404) return 'The requested resource was not found.';
     if (status === 409) return 'Conflict detected (e.g. slot is already booked or appointment exists).';
     if (status === 422) return 'Unprocessable request. Please check submitted data.';
-    if (status >= 500) return 'Server error occurred on Schedula backend. Please try again later.';
+    if (status >= 500) return 'Server error occurred on CareUp backend. Please try again later.';
 
     return error.message || 'An unexpected error occurred.';
   }

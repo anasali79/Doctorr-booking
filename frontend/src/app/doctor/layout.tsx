@@ -26,7 +26,7 @@ export default async function DoctorLayout({
   return (
     <div className="min-h-screen bg-[#fafafc] text-zinc-900">
       {profile ? (
-        <DoctorSocketProvider doctorId={profile.id}>
+        <DoctorSocketProvider doctorId={profile.id} initialToken={token}>
           <DoctorSidebarLayout user={user} profile={profile}>
             {children}
           </DoctorSidebarLayout>

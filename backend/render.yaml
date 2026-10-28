@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: schedula-backend
+    name: doctorr-booking-1
     runtime: node
     rootDir: backend
     buildCommand: npm install --include=dev && npm run build

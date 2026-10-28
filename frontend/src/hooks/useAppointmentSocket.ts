@@ -10,10 +10,11 @@ import { clientAxios } from '@/lib/api/axios';
 interface UseSocketOptions {
   role: 'doctor' | 'patient';
   profileId?: string; // doctorId or patientId
+  initialToken?: string;
   onEvent?: (event: string, data: any) => void;
 }
 
-export function useAppointmentSocket({ role, profileId, onEvent }: UseSocketOptions) {
+export function useAppointmentSocket({ role, profileId, initialToken, onEvent }: UseSocketOptions) {
   const router = useRouter();
   const [isConnected, setIsConnected] = useState(false);
   const onEventRef = useRef(onEvent);
@@ -27,12 +28,15 @@ export function useAppointmentSocket({ role, profileId, onEvent }: UseSocketOpti
 
     async function initSocket() {
       try {
-        let token = '';
-        try {
-          const res = await clientAxios.get<{ token: string }>('/api/auth/token');
-          token = res.data?.token || '';
-        } catch {
-          token = '';
+        let token = initialToken || '';
+
+        if (!token) {
+          try {
+            const res = await clientAxios.get<{ token: string }>('/api/auth/token');
+            token = res.data?.token || '';
+          } catch {
+            token = '';
+          }
         }
 
         if (!token && typeof document !== 'undefined') {

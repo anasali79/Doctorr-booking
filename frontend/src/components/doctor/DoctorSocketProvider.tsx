@@ -6,16 +6,19 @@ import { LiveIndicator } from '../common/LiveIndicator';
 
 interface DoctorSocketProviderProps {
   doctorId: string;
+  initialToken?: string;
   children: React.ReactNode;
 }
 
 export function DoctorSocketProvider({
   doctorId,
+  initialToken,
   children,
 }: DoctorSocketProviderProps) {
   const { isConnected } = useAppointmentSocket({
     role: 'doctor',
     profileId: doctorId,
+    initialToken,
   });
 
   return (
