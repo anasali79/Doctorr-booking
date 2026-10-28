@@ -147,7 +147,7 @@ export function PatientProfileForm({
             {...register('address')}
             rows={2}
             placeholder="Residential address or locality"
-            className="field-input pl-10"
+            className="field-textarea pl-10"
           />
         </div>
       </div>
@@ -162,7 +162,7 @@ export function PatientProfileForm({
             {...register('basicHealthInfo')}
             rows={3}
             placeholder="Blood group (e.g. B+), medication allergies (e.g. Sulfa, Penicillin), existing conditions (e.g. Hypertension)"
-            className="field-input pl-10"
+            className="field-textarea pl-10"
           />
         </div>
       </div>

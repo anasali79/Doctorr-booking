@@ -1,8 +1,10 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { getSession } from '@/lib/auth/session';
 import { getDoctorProfile } from '@/lib/api/doctors';
 import { DoctorProfileForm } from '@/components/doctor/DoctorProfileForm';
-import { Stethoscope } from 'lucide-react';
+import { BrandMark } from '@/components/ui/BrandMark';
+import { Stethoscope, CheckCircle2, Sparkles, ShieldCheck } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,30 +31,73 @@ export default async function DoctorProfileSetupPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-12">
-      <div className="bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 rounded-2xl p-4 mb-8 flex items-start gap-3">
-        <Stethoscope className="w-5 h-5 text-sky-600 dark:text-sky-400 mt-0.5 shrink-0" />
-        <div>
-          <h2 className="text-sm font-semibold text-sky-900 dark:text-sky-200">
-            Welcome, Doctor! Complete Your Practitioner Profile
-          </h2>
-          <p className="text-xs text-sky-700 dark:text-sky-300 mt-0.5">
-            Patients discover your practice by specialty, credentials, and consultation fees. Please set up your professional credentials below.
-          </p>
-        </div>
-      </div>
+    <div className="min-h-screen bg-[#f6f8fb] text-slate-900 py-10 sm:py-16 px-4 relative overflow-hidden flex flex-col justify-center items-center">
+      {/* Background Subtle Gradient Glow */}
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-ambient-light-mesh opacity-90" />
 
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xl shadow-slate-200/40 dark:shadow-none p-6 sm:p-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-            Practitioner Profile Setup
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Provide your qualifications and clinical consultation terms.
-          </p>
+      <div className="w-full max-w-2xl space-y-6">
+        {/* Brand Header & Stepper */}
+        <div className="text-center space-y-3">
+          <Link href="/" className="inline-flex items-center gap-2.5 group">
+            <BrandMark size="md" />
+            <div className="text-left">
+              <span className="block text-lg font-extrabold leading-none text-slate-900">
+                Care<span className="text-[#0066cc]">Up</span>
+              </span>
+              <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">
+                Doctor Onboarding
+              </span>
+            </div>
+          </Link>
+
+          {/* Stepper Indicator */}
+          <div className="flex items-center justify-center gap-2 pt-1 text-xs">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              1. Account Created
+            </span>
+            <span className="text-slate-300">→</span>
+            <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full font-bold bg-[#e8f2fe] text-[#0066cc] border border-blue-200 shadow-2xs">
+              <Sparkles className="w-3.5 h-3.5 text-[#0066cc]" />
+              2. Practitioner Profile (Setup)
+            </span>
+          </div>
         </div>
 
-        <DoctorProfileForm isSetup={true} />
+        {/* Clinical Info Banner */}
+        <div className="rounded-2xl border border-blue-100 bg-[#eef6ff] p-4.5 flex items-start gap-3.5 shadow-2xs">
+          <div className="w-10 h-10 rounded-xl bg-[#0066cc] text-white flex items-center justify-center shrink-0 shadow-xs">
+            <Stethoscope className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">
+              Welcome, Doctor! Complete Your Practitioner Profile
+            </h2>
+            <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+              Patients search by clinical specialty and book consultation slots based on your credentials and consultation fee. Please configure your profile details below.
+            </p>
+          </div>
+        </div>
+
+        {/* Main Card */}
+        <div className="rounded-3xl border border-slate-200/90 bg-white p-6 sm:p-9 shadow-sm">
+          <div className="mb-6 pb-5 border-b border-slate-100 flex items-center justify-between">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900">
+                Practitioner Details
+              </h1>
+              <p className="text-xs text-slate-500 mt-1">
+                Provide your medical qualifications, clinic timings, and consultation fee.
+              </p>
+            </div>
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 border border-slate-200 text-[11px] font-semibold text-slate-600">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#0066cc]" />
+              <span>Verified Portal</span>
+            </div>
+          </div>
+
+          <DoctorProfileForm isSetup={true} />
+        </div>
       </div>
     </div>
   );

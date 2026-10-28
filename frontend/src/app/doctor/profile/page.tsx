@@ -28,24 +28,24 @@ export default async function DoctorProfilePage() {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16">
       <div className="flex items-center gap-3.5 mb-8">
-        <div className="w-12 h-12 rounded-2xl bg-black text-white flex items-center justify-center shadow-xs">
+        <div className="w-12 h-12 rounded-2xl bg-[#0066cc] text-white flex items-center justify-center shadow-xs">
           <Stethoscope className="w-6 h-6" />
         </div>
         <div>
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-black/[0.04] px-2.5 py-0.5 text-[10px] font-semibold text-zinc-800">
-            <Sparkles className="h-3 w-3 text-black" />
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-bold text-[#0066cc]">
+            <Sparkles className="h-3.5 w-3.5 text-[#0066cc]" />
             <span>CLINICAL CREDENTIALS</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-zinc-950 mt-1">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 mt-1">
             Doctor Profile & Settings
           </h1>
-          <p className="text-xs sm:text-sm text-zinc-500">
+          <p className="text-xs sm:text-sm text-slate-500">
             Update your professional qualifications, consultation fees, and future booking limits
           </p>
         </div>
       </div>
 
-      <div className="rounded-3xl border border-black/[0.08] bg-white/95 backdrop-blur-2xl shadow-sm p-6 sm:p-8">
+      <div className="rounded-3xl border border-slate-200/90 bg-white shadow-sm p-6 sm:p-8">
         <DoctorProfileForm initialData={profile} isSetup={false} />
       </div>
     </div>

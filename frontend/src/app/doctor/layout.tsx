@@ -32,9 +32,9 @@ export default async function DoctorLayout({
           </DoctorSidebarLayout>
         </DoctorSocketProvider>
       ) : (
-        <DoctorSidebarLayout user={user} profile={null}>
+        <div className="min-h-screen bg-[#f6f8fb]">
           {children}
-        </DoctorSidebarLayout>
+        </div>
       )}
     </div>
   );

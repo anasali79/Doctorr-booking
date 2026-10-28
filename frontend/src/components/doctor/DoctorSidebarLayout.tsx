@@ -110,17 +110,17 @@ export function DoctorSidebarLayout({
       <div>
         {/* Brand Header */}
         <div className="px-5 py-6 flex items-center gap-3 border-b border-slate-100">
-          <div className="h-10 w-10 rounded-xl bg-[#0066cc] text-white flex items-center justify-center shadow-sm">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#0066cc] via-[#0055b3] to-[#00408a] text-white flex items-center justify-center shadow-xs ring-1 ring-white/20">
             <span className="text-xl font-bold leading-none">+</span>
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="text-lg font-bold tracking-tight text-slate-900 leading-none">
-                DocCare
+              <span className="text-lg font-extrabold tracking-tight text-slate-900 leading-none">
+                Care<span className="text-[#0066cc]">Up</span>
               </span>
             </div>
             <p className="text-[11px] text-slate-400 font-medium mt-1">
-              Better Care. Together.
+              Clinician Console
             </p>
           </div>
         </div>

@@ -143,9 +143,16 @@ body {
 
   /* ── Inputs ── */
   .field-input {
-    @apply w-full rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-all duration-200 disabled:opacity-40;
+    @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-all duration-200 disabled:opacity-40;
   }
   .field-input:focus {
+    @apply border-[#0066cc] bg-white outline-none ring-2 ring-[#0066cc]/20;
+  }
+
+  .field-textarea {
+    @apply w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition-all duration-200 disabled:opacity-40;
+  }
+  .field-textarea:focus {
     @apply border-[#0066cc] bg-white outline-none ring-2 ring-[#0066cc]/20;
   }
 

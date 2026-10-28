@@ -184,7 +184,7 @@ export function DoctorProfileForm({
               min={1}
               max={90}
               placeholder="7"
-              className="field-input pl-10"
+              className="field-textarea pl-10"
             />
           </div>
           <p className="text-[11px] text-slate-400 mt-1">
@@ -203,7 +203,7 @@ export function DoctorProfileForm({
             {...register('profileDetails')}
             rows={4}
             placeholder="Describe your background, areas of clinical focus, clinic location, and patient care hours..."
-            className="field-input pl-10"
+            className="field-textarea pl-10"
           />
         </div>
       </div>
