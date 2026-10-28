@@ -2,7 +2,7 @@ services:
   - type: web
     name: schedula-backend
     runtime: node
-    rootDir: Backend
+    rootDir: backend
     buildCommand: npm install --include=dev && npm run build
     startCommand: npm run start:prod
     envVars:

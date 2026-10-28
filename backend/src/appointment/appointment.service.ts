@@ -503,17 +503,46 @@ export class AppointmentService {
       }
     }
 
-    const consultDuration = 15;
+    const consultDuration = this.getDurationMinutes(appointment.startTime, appointment.endTime);
     const estimatedWaitMinutes = appointment.estimatedWaitTime ?? (peopleAhead * consultDuration);
 
-    const timeline = activeList
-      .sort((a, b) => (a.tokenNumber ?? 999) - (b.tokenNumber ?? 999))
-      .map((a, idx) => ({
-        tokenNumber: a.tokenNumber ?? idx + 1,
-        startTime: a.startTime,
+    const sameTimeCounters: Record<string, number> = {};
+    const sortedActive = activeList.sort((a, b) => {
+      const timeComp = a.startTime.localeCompare(b.startTime);
+      if (timeComp !== 0) return timeComp;
+      return (a.tokenNumber ?? 999) - (b.tokenNumber ?? 999);
+    });
+
+    const timeline = sortedActive.map((a, idx) => {
+      const tokenNum = a.tokenNumber ?? idx + 1;
+      const slotDuration = this.getDurationMinutes(a.startTime, a.endTime);
+      const countForThisTime = sameTimeCounters[a.startTime] || 0;
+      sameTimeCounters[a.startTime] = countForThisTime + 1;
+
+      const staggeredStartTime = countForThisTime > 0
+        ? this.addMinutesToTime(a.startTime, countForThisTime * slotDuration)
+        : a.startTime;
+      const staggeredEndTime = countForThisTime > 0
+        ? this.addMinutesToTime(a.endTime, countForThisTime * slotDuration)
+        : a.endTime;
+
+      return {
+        tokenNumber: tokenNum,
+        startTime: staggeredStartTime,
+        endTime: staggeredEndTime,
         status: a.status,
         isYou: a.id === appointment.id,
-      }));
+      };
+    });
+
+    const myTimelineEntry = timeline.find((t) => t.isYou);
+    const myTokenNumber = appointment.tokenNumber ?? myTimelineEntry?.tokenNumber ?? 1;
+    const myStaggeredStartTime = myTimelineEntry?.startTime ?? appointment.startTime;
+
+    const currentServingTimelineEntry = currentServing
+      ? timeline.find((t) => t.tokenNumber === (currentServing.tokenNumber ?? -1)) ||
+        timeline.find((t) => t.status === AppointmentStatus.IN_CONSULTATION)
+      : null;
 
     return {
       message: 'Live queue fetched successfully',
@@ -528,15 +557,16 @@ export class AppointmentService {
         },
         appointment: {
           id: appointment.id,
-          tokenNumber: appointment.tokenNumber,
+          tokenNumber: myTokenNumber,
           date: appointment.date,
-          startTime: appointment.startTime,
+          startTime: myStaggeredStartTime,
+          endTime: myTimelineEntry?.endTime ?? appointment.endTime,
           status: appointment.status,
           queuePosition: appointment.queuePosition,
         },
         queueSummary: {
-          currentServingToken: currentServing?.tokenNumber ?? null,
-          currentServingTime: currentServing?.startTime ?? null,
+          currentServingToken: currentServing?.tokenNumber ?? currentServingTimelineEntry?.tokenNumber ?? null,
+          currentServingTime: currentServingTimelineEntry?.startTime ?? currentServing?.startTime ?? null,
           totalWaiting: waitingQueue.length,
           peopleAhead,
           estimatedWaitMinutes,
@@ -1055,25 +1085,40 @@ export class AppointmentService {
 
   async getPatientDashboardStats(userId: string) {
     const patient = await this.getPatientByUserId(userId);
-
     const todayStr = getTodayIST();
 
-    const upcomingAppointments = await this.appointmentRepo
-      .createQueryBuilder('appointment')
-      .where('appointment.patientId = :patientId', { patientId: patient.id })
-      .andWhere('appointment.date >= :today', { today: todayStr })
-      .andWhere('appointment.status = :status', { status: AppointmentStatus.CONFIRMED })
-      .getCount();
+    const allPatientAppts = await this.appointmentRepo.find({
+      where: { patientId: patient.id },
+      relations: { doctor: true },
+      order: { date: 'DESC', startTime: 'DESC' },
+    });
 
-    const pastAppointments = await this.appointmentRepo
-      .createQueryBuilder('appointment')
-      .where('appointment.patientId = :patientId', { patientId: patient.id })
-      .andWhere('appointment.date < :today', { today: todayStr })
-      .getCount();
+    const upcoming = allPatientAppts
+      .filter(
+        (a) =>
+          ['CONFIRMED', 'CHECKED_IN', 'IN_CONSULTATION'].includes(a.status) &&
+          a.date >= todayStr,
+      )
+      .sort((a, b) => {
+        const dComp = a.date.localeCompare(b.date);
+        if (dComp !== 0) return dComp;
+        return a.startTime.localeCompare(b.startTime);
+      });
+
+    const past = allPatientAppts.filter(
+      (a) =>
+        ['COMPLETED', 'CANCELLED', 'NO_SHOW'].includes(a.status) ||
+        a.date < todayStr,
+    );
 
     return {
       message: 'Dashboard statistics retrieved successfully',
-      data: { upcomingAppointments, pastAppointments },
+      data: {
+        upcomingAppointments: upcoming.length,
+        pastAppointments: past.length,
+        upcoming: upcoming.map((a) => this.toPatientAppointmentResponse(a)),
+        past: past.map((a) => this.toPatientAppointmentResponse(a)),
+      },
     };
   }
 
@@ -1291,14 +1336,34 @@ export class AppointmentService {
     }
   }
 
+  private getDurationMinutes(startTime: string, endTime: string): number {
+    if (!startTime || !endTime) return 15;
+    const [sh, sm] = startTime.split(':').map(Number);
+    const [eh, em] = endTime.split(':').map(Number);
+    if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return 15;
+    const diff = (eh * 60 + em) - (sh * 60 + sm);
+    return diff > 0 ? diff : 15;
+  }
+
+  private addMinutesToTime(timeStr: string, minutes: number): string {
+    if (!timeStr) return timeStr;
+    const [h, m] = timeStr.split(':').map(Number);
+    if (isNaN(h) || isNaN(m)) return timeStr;
+    const totalMinutes = h * 60 + m + minutes;
+    const newH = Math.floor(totalMinutes / 60) % 24;
+    const newM = totalMinutes % 60;
+    return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
+  }
+
   private toPatientAppointmentResponse(appointment: Appointment) {
     return {
       id: appointment.id,
+      doctorId: appointment.doctorId,
       date: appointment.date,
       startTime: appointment.startTime,
       endTime: appointment.endTime,
       status: appointment.status,
-      ...(appointment.tokenNumber !== null && { tokenNumber: appointment.tokenNumber }),
+      tokenNumber: appointment.tokenNumber ?? null,
       doctor: appointment.doctor
         ? {
           id: appointment.doctor.id,

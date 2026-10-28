@@ -1210,7 +1210,7 @@ export class AvailabilityService {
   async getDoctorIntervalsForDate(
     doctorId: string,
     dateStr: string,
-  ): Promise<Array<{ startTime: string; endTime: string }>> {
+  ): Promise<Array<{ startTime: string; endTime: string; slotDuration?: number }>> {
     const cleanDate = dateStr.trim();
     const dayOfWeek = getDayOfWeekFromDate(cleanDate);
 
@@ -1227,6 +1227,7 @@ export class AvailabilityService {
         .map((s) => ({
           startTime: s.startTime,
           endTime: s.endTime,
+          slotDuration: s.slotDuration,
         }));
     }
 
@@ -1239,6 +1240,7 @@ export class AvailabilityService {
     return recurringSlots.map((s) => ({
       startTime: s.startTime,
       endTime: s.endTime,
+      slotDuration: s.slotDuration,
     }));
   }
 
