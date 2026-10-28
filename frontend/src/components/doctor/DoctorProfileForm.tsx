@@ -19,6 +19,8 @@ import { doctorProfileSchema, DoctorProfileInput } from '@/lib/schemas';
 import { SPECIALIZATIONS, SPECIALIZATION_LABELS } from '@/lib/constants';
 import { Doctor } from '@/types';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 interface DoctorProfileFormProps {
   initialData?: Doctor | null;
@@ -87,7 +89,7 @@ export function DoctorProfileForm({
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
               <User className="w-4 h-4" />
             </div>
-            <input
+            <Input
               {...register('fullName')}
               type="text"
               placeholder="e.g. Dr. Priya Sharma, MD"
@@ -122,7 +124,7 @@ export function DoctorProfileForm({
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
               <Briefcase className="w-4 h-4" />
             </div>
-            <input
+            <Input
               {...register('experience')}
               type="number"
               min={0}
@@ -141,7 +143,7 @@ export function DoctorProfileForm({
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
               <Award className="w-4 h-4" />
             </div>
-            <input
+            <Input
               {...register('qualification')}
               type="text"
               placeholder="e.g. MBBS, MD (Cardiology)"
@@ -159,7 +161,7 @@ export function DoctorProfileForm({
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 font-bold text-sm">
               ₹
             </div>
-            <input
+            <Input
               {...register('consultationFee')}
               type="number"
               min={0}
@@ -178,7 +180,7 @@ export function DoctorProfileForm({
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
               <Calendar className="w-4 h-4" />
             </div>
-            <input
+            <Input
               {...register('maxFutureBookingDays')}
               type="number"
               min={1}
@@ -224,10 +226,11 @@ export function DoctorProfileForm({
       </div>
 
       <div className="pt-4 border-t border-slate-100 flex justify-end">
-        <button
+        <Button
           type="submit"
+          variant="ghost"
           disabled={loading}
-          className="btn-primary"
+          className="btn-primary h-auto"
         >
           {loading ? (
             <>
@@ -240,7 +243,7 @@ export function DoctorProfileForm({
               <span>{isSetup ? 'Complete Doctor Setup & Launch Dashboard' : 'Save Changes'}</span>
             </>
           )}
-        </button>
+        </Button>
       </div>
     </form>
   );

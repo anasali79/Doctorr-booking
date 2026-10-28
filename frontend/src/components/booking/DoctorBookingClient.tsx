@@ -6,22 +6,28 @@ import { formatTime, formatDate, formatCurrency, getTodayIST } from '@/lib/utils
 import { Doctor, Slot, SessionUser } from '@/types';
 import { toast } from 'sonner';
 import {
-  Calendar as CalendarIcon,
   Clock,
   ShieldCheck,
   ArrowRight,
   Loader2,
-  X,
   AlertCircle,
   Sun,
   Sunset,
   Moon,
   CheckCircle2,
-  Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import { DoctorAvatar } from '@/components/common/DoctorAvatar';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface DoctorBookingClientProps {
   doctor: Doctor;
@@ -154,40 +160,32 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
   const eveningSlots = slots.filter((s) => parseInt(s.startTime.split(':')[0], 10) >= 17);
 
   const availableCount = slots.filter(
-    (s) => s.status === 'available' || s.status === 'cancel and available for booking',
+    (s) =>
+      s.status === 'available' ||
+      s.status === 'cancel and available for booking',
   ).length;
 
   return (
     <div className="space-y-6">
-      {/* Date Carousel */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#e8f2fe] text-[#0066cc]">
-              <CalendarIcon className="h-4 w-4" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-slate-900">Choose Consultation Date</h2>
-              <p className="text-[11px] text-slate-500">Select a day to view real-time physician openings</p>
-            </div>
-          </div>
-          <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-700">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            Asia/Kolkata (IST)
-          </span>
+      {/* Date Picker Strip */}
+      <Card className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
+        <div className="flex items-center gap-2 text-xs font-bold text-slate-800 uppercase tracking-wider mb-4">
+          <Clock className="w-4 h-4 text-[#0066cc]" />
+          Select Consultation Date
         </div>
 
         <div className="flex items-center gap-2.5 overflow-x-auto pb-2 scrollbar-none">
           {availableDates.map((item) => {
             const isSelected = selectedDate === item.dateStr;
             return (
-              <button
+              <Button
                 key={item.dateStr}
                 type="button"
+                variant="ghost"
                 onClick={() => setSelectedDate(item.dateStr)}
-                className={`flex min-w-[92px] cursor-pointer flex-col items-center justify-center rounded-2xl border p-3.5 text-center transition-all duration-200 ${
+                className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border py-3 px-4 min-w-[72px] text-center transition-all duration-150 h-auto ${
                   isSelected
-                    ? 'border-[#0066cc] bg-[#0066cc] text-white shadow-sm'
+                    ? 'border-[#0066cc] bg-[#0066cc] text-white shadow-sm hover:bg-[#0055b3] hover:text-white'
                     : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
                 }`}
               >
@@ -200,14 +198,14 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
                 <span className={`text-[11px] font-semibold mt-1.5 ${isSelected ? 'text-white' : 'text-slate-600'}`}>
                   {item.label}
                 </span>
-              </button>
+              </Button>
             );
           })}
         </div>
-      </div>
+      </Card>
 
       {/* Slots Section */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
+      <Card className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4 mb-6">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#e8f2fe] text-[#0066cc]">
@@ -221,10 +219,10 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
             </div>
           </div>
           {!loadingSlots && !onLeave && slots.length > 0 && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3.5 py-1 text-xs font-semibold text-slate-800">
+            <Badge variant="outline" className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3.5 py-1 text-xs font-semibold text-slate-800">
               <span className="h-2 w-2 rounded-full bg-emerald-500" />
               {availableCount} {availableCount === 1 ? 'Slot' : 'Slots'} Open
-            </span>
+            </Badge>
           )}
         </div>
 
@@ -306,25 +304,18 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
             </div>
           </div>
         )}
-      </div>
+      </Card>
 
-      {/* Confirmation Modal */}
-      {showConfirmModal && selectedSlot && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-md space-y-6 rounded-2xl border border-slate-200 bg-white p-6 sm:p-7 shadow-xl text-slate-900">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+      {/* Confirmation Modal via shadcn Dialog */}
+      <Dialog open={showConfirmModal && !!selectedSlot} onOpenChange={(open) => !open && setShowConfirmModal(false)}>
+        {selectedSlot && (
+          <DialogContent className="w-full max-w-md space-y-6 rounded-2xl border border-slate-200 bg-white p-6 sm:p-7 shadow-xl text-slate-900">
+            <DialogHeader>
               <div className="flex items-center gap-2">
                 <ShieldCheck className="h-5 w-5 text-[#0066cc]" />
-                <h3 className="text-base font-bold text-slate-900">Confirm Your Appointment</h3>
+                <DialogTitle className="text-base font-bold text-slate-900">Confirm Your Appointment</DialogTitle>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowConfirmModal(false)}
-                className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+            </DialogHeader>
 
             <div className="space-y-4">
               <div className="flex items-center gap-3.5 rounded-xl bg-slate-50 p-4 border border-slate-100">
@@ -378,28 +369,29 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
                 You are currently signed in as a Doctor. Please log in with a Patient account to book visits.
               </div>
             ) : !user ? (
-              <Link
-                href={`/login?next=/doctors/${doctor.id}`}
-                className="btn-primary w-full py-3 text-xs font-semibold rounded-xl"
-              >
-                <span>Sign In to Complete Booking</span>
-                <ArrowRight className="w-4 h-4" />
-              </Link>
+              <Button asChild className="btn-primary w-full py-3 text-xs font-semibold rounded-xl h-auto">
+                <Link href={`/login?next=/doctors/${doctor.id}`}>
+                  <span>Sign In to Complete Booking</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </Button>
             ) : (
               <div className="flex items-center gap-3">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   onClick={() => setShowConfirmModal(false)}
                   disabled={bookingInProgress}
-                  className="btn-secondary flex-1 py-2.5 text-xs font-semibold rounded-xl"
+                  className="btn-secondary flex-1 py-2.5 text-xs font-semibold rounded-xl h-auto"
                 >
                   Change Slot
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant="ghost"
                   onClick={handleConfirmBooking}
                   disabled={bookingInProgress}
-                  className="btn-primary flex-1 py-2.5 text-xs font-semibold rounded-xl"
+                  className="btn-primary flex-1 py-2.5 text-xs font-semibold rounded-xl h-auto"
                 >
                   {bookingInProgress ? (
                     <>
@@ -412,12 +404,12 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}
-                </button>
+                </Button>
               </div>
             )}
-          </div>
-        </div>
-      )}
+          </DialogContent>
+        )}
+      </Dialog>
     </div>
   );
 
@@ -427,12 +419,13 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
       slot.status === 'cancel and available for booking';
 
     return (
-      <button
+      <Button
         key={`${slot.startTime}-${index}`}
         type="button"
+        variant="ghost"
         disabled={!isBookable}
         onClick={() => handleSelectSlot(slot)}
-        className={`flex cursor-pointer flex-col items-center justify-center gap-0.5 rounded-full border py-2 px-3 text-center transition-all duration-150 ${
+        className={`flex cursor-pointer flex-col items-center justify-center gap-0.5 rounded-full border py-2 px-3 text-center transition-all duration-150 h-auto ${
           isBookable
             ? 'border-slate-200 bg-white text-slate-800 hover:border-[#0066cc] hover:bg-[#0066cc] hover:text-white shadow-2xs active:scale-95'
             : 'cursor-not-allowed border-slate-100 bg-slate-100 text-slate-400 opacity-60'
@@ -444,7 +437,7 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
         <span className="text-[9px] uppercase font-bold tracking-wider opacity-75">
           {isBookable ? 'Available' : 'Booked'}
         </span>
-      </button>
+      </Button>
     );
   }
 }

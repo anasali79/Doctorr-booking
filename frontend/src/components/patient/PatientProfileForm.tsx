@@ -5,10 +5,12 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
-import { User, Phone, MapPin, Heart, AlertCircle, Loader2, Save, CheckCircle2 } from 'lucide-react';
+import { User, Phone, MapPin, Heart, AlertCircle, Loader2, Save } from 'lucide-react';
 import { patientProfileSchema, PatientProfileInput } from '@/lib/schemas';
 import { Patient } from '@/types';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 interface PatientProfileFormProps {
   initialData?: Patient | null;
@@ -75,7 +77,7 @@ export function PatientProfileForm({
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
               <User className="w-4 h-4" />
             </div>
-            <input
+            <Input
               {...register('fullName')}
               type="text"
               placeholder="e.g. Rahul Sharma"
@@ -93,7 +95,7 @@ export function PatientProfileForm({
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
               <Phone className="w-4 h-4" />
             </div>
-            <input
+            <Input
               {...register('phone')}
               type="tel"
               placeholder="9876543210"
@@ -108,7 +110,7 @@ export function PatientProfileForm({
 
         <div>
           <label className="field-label">Age *</label>
-          <input
+          <Input
             {...register('age')}
             type="number"
             min={0}
@@ -168,10 +170,11 @@ export function PatientProfileForm({
       </div>
 
       <div className="pt-4 border-t border-slate-100 flex justify-end">
-        <button
+        <Button
           type="submit"
+          variant="ghost"
           disabled={loading}
-          className="btn-primary"
+          className="btn-primary h-auto"
         >
           {loading ? (
             <>
@@ -184,7 +187,7 @@ export function PatientProfileForm({
               <span>{isSetup ? 'Complete Setup & Enter Dashboard' : 'Save Changes'}</span>
             </>
           )}
-        </button>
+        </Button>
       </div>
     </form>
   );

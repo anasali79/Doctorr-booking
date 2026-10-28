@@ -13,7 +13,6 @@ import {
   Stethoscope,
   ArrowRight,
   AlertCircle,
-  CheckCircle2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { signupSchema, SignupInput } from '@/lib/schemas';

@@ -11,16 +11,22 @@ import {
   XCircle,
   RefreshCw,
   Loader2,
-  X,
   AlertTriangle,
-  Clock,
-  CheckCircle2,
   Activity,
-  Sparkles,
 } from 'lucide-react';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import { PatientLiveQueueModal } from './PatientLiveQueueModal';
 import { DoctorAvatar } from '@/components/common/DoctorAvatar';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 
 interface PatientAppointmentsClientProps {
   initialAppointments: Appointment[];
@@ -151,21 +157,26 @@ export function PatientAppointmentsClient({
 
     try {
       setRescheduleLoading(true);
-      await clientAxios.patch(`/api/appointment/${reschedulingAppt.id}/reschedule`, {
-        date: rescheduleDate,
-        startTime: selectedSlot.startTime,
-        endTime: selectedSlot.endTime,
+      const res = await clientAxios.patch<{
+        message: string;
+        data: Appointment;
+      }>(`/api/appointment/${reschedulingAppt.id}/reschedule`, {
+        newDate: rescheduleDate,
+        newStartTime: selectedSlot.startTime,
+        newEndTime: selectedSlot.endTime,
       });
 
       toast.success('Appointment Rescheduled!', {
-        description: `Moved to ${formatDate(rescheduleDate)} at ${formatTime(selectedSlot.startTime)}`,
+        description: `New slot on ${formatDate(rescheduleDate)} at ${formatTime(selectedSlot.startTime)}`,
       });
 
+      setAppointments((prev) =>
+        prev.map((a) => (a.id === reschedulingAppt.id ? res.data.data : a)),
+      );
       setReschedulingAppt(null);
       router.refresh();
-      window.location.reload();
     } catch (err: unknown) {
-      toast.error('Reschedule Conflict', { description: extractErrorMessage(err) });
+      toast.error('Reschedule Failed', { description: extractErrorMessage(err) });
     } finally {
       setRescheduleLoading(false);
     }
@@ -175,32 +186,35 @@ export function PatientAppointmentsClient({
     <div className="space-y-6">
       {/* Filter Tabs in Frosted Glass */}
       <div className="flex items-center gap-2 border-b border-black/[0.06] pb-4">
-        <button
+        <Button
           type="button"
+          variant="ghost"
           onClick={() => setActiveTab('UPCOMING')}
-          className={activeTab === 'UPCOMING' ? 'pill-filter-active' : 'pill-filter-idle'}
+          className={`h-auto ${activeTab === 'UPCOMING' ? 'pill-filter-active' : 'pill-filter-idle'}`}
         >
           Upcoming visits ({upcomingList.length})
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="ghost"
           onClick={() => setActiveTab('PAST')}
-          className={activeTab === 'PAST' ? 'pill-filter-active' : 'pill-filter-idle'}
+          className={`h-auto ${activeTab === 'PAST' ? 'pill-filter-active' : 'pill-filter-idle'}`}
         >
           History ({pastList.length})
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="ghost"
           onClick={() => setActiveTab('CANCELLED')}
-          className={activeTab === 'CANCELLED' ? 'pill-filter-active' : 'pill-filter-idle'}
+          className={`h-auto ${activeTab === 'CANCELLED' ? 'pill-filter-active' : 'pill-filter-idle'}`}
         >
           Cancelled ({cancelledList.length})
-        </button>
+        </Button>
       </div>
 
       {/* Appointment Cards List */}
       {currentList.length === 0 ? (
-        <div className="py-16 text-center rounded-3xl border border-black/[0.08] bg-white/80 backdrop-blur-2xl p-8 space-y-2 shadow-xs">
+        <Card className="py-16 text-center rounded-3xl border border-black/[0.08] bg-white/80 backdrop-blur-2xl p-8 space-y-2 shadow-xs">
           <CalendarDays className="w-8 h-8 text-zinc-400 mx-auto" />
           <h3 className="text-base font-bold text-zinc-950">
             No Appointments Found
@@ -208,7 +222,7 @@ export function PatientAppointmentsClient({
           <p className="text-xs text-zinc-500 max-w-sm mx-auto">
             You do not currently have any appointments in the {activeTab.toLowerCase()} category.
           </p>
-        </div>
+        </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {currentList.map((appt, index) => {
@@ -217,7 +231,7 @@ export function PatientAppointmentsClient({
             const isConfirmed = displayStatus === 'CONFIRMED';
             const displayToken = String(appt.tokenNumber || index + 1).padStart(2, '0');
             return (
-              <div
+              <Card
                 key={appt.id}
                 className="relative rounded-3xl border border-black/[0.08] bg-white/95 p-5 backdrop-blur-2xl shadow-xs transition-all duration-300 hover:border-black/20 hover:shadow-md space-y-4 overflow-hidden"
               >
@@ -269,114 +283,112 @@ export function PatientAppointmentsClient({
 
                 {/* Live Queue Tracker button */}
                 {!isExpired && (appt.status === 'CONFIRMED' || appt.status === 'CHECKED_IN' || appt.status === 'IN_CONSULTATION') && (
-                  <button
+                  <Button
                     type="button"
+                    variant="black"
                     onClick={() => setLiveQueueApptId(appt.id)}
-                    className="w-full py-2.5 px-3 rounded-full bg-black text-white hover:bg-zinc-800 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                    className="w-full py-2.5 px-3 rounded-full bg-black text-white hover:bg-zinc-800 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs h-auto"
                   >
                     <Activity className="w-3.5 h-3.5" />
                     <span>Track Live Queue (Tokens Ahead)</span>
-                  </button>
+                  </Button>
                 )}
 
                 {isConfirmed && (
                   <div className="pt-2 border-t border-black/[0.06] flex items-center gap-2">
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
                       onClick={() => openRescheduleModal(appt)}
-                      className="btn-secondary flex-1 !py-2 text-xs"
+                      className="btn-secondary flex-1 !py-2 text-xs h-auto"
                     >
                       <RefreshCw className="w-3 h-3" />
                       <span>Reschedule</span>
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
+                      variant="ghost"
                       onClick={() => setCancellingId(appt.id)}
-                      className="btn-danger flex-1 !py-2 text-xs"
+                      className="btn-danger flex-1 !py-2 text-xs h-auto"
                     >
                       <XCircle className="w-3 h-3" />
                       <span>Cancel</span>
-                    </button>
+                    </Button>
                   </div>
                 )}
-              </div>
+              </Card>
             );
           })}
         </div>
       )}
 
       {/* Cancel Confirmation Modal */}
-      {cancellingId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-sm rounded-3xl border border-black/[0.08] bg-white p-6 space-y-4 backdrop-blur-2xl shadow-2xl text-zinc-900">
+      <Dialog open={!!cancellingId} onOpenChange={(open) => !open && setCancellingId(null)}>
+        <DialogContent className="w-full max-w-sm rounded-3xl border border-black/[0.08] bg-white p-6 space-y-4 backdrop-blur-2xl shadow-2xl text-zinc-900">
+          <DialogHeader>
             <div className="flex items-center gap-3 text-rose-600">
               <AlertTriangle className="w-6 h-6" />
-              <h3 className="font-bold text-base text-zinc-950">
+              <DialogTitle className="font-bold text-base text-zinc-950">
                 Cancel Appointment?
-              </h3>
+              </DialogTitle>
             </div>
-            <p className="text-xs text-zinc-600 leading-relaxed">
+            <DialogDescription className="text-xs text-zinc-600 leading-relaxed pt-1">
               Are you sure you want to release this appointment? The doctor’s dashboard will be updated and the slot freed for others.
-            </p>
-            <div className="flex items-center gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setCancellingId(null)}
-                disabled={cancelLoading}
-                className="btn-secondary flex-1 py-2.5 text-xs font-semibold"
-              >
-                Keep Booking
-              </button>
-              <button
-                type="button"
-                onClick={handleCancel}
-                disabled={cancelLoading}
-                className="btn-danger flex-1 py-2.5 text-xs font-semibold"
-              >
-                {cancelLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Yes, Cancel'}
-              </button>
-            </div>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2 pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setCancellingId(null)}
+              disabled={cancelLoading}
+              className="btn-secondary flex-1 py-2.5 text-xs font-semibold h-auto"
+            >
+              Keep Booking
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={handleCancel}
+              disabled={cancelLoading}
+              className="btn-danger flex-1 py-2.5 text-xs font-semibold h-auto"
+            >
+              {cancelLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Yes, Cancel'}
+            </Button>
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
       {/* Reschedule Modal */}
-      {reschedulingAppt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-md rounded-3xl border border-black/[0.08] bg-white p-6 space-y-5 max-h-[90vh] overflow-y-auto backdrop-blur-2xl shadow-2xl text-zinc-900">
-            <div className="flex items-center justify-between pb-3 border-b border-black/[0.06]">
-              <h3 className="font-bold text-zinc-950 text-base">
-                Reschedule Appointment
-              </h3>
-              <button
-                type="button"
-                onClick={() => setReschedulingAppt(null)}
-                className="p-1 rounded-full text-zinc-400 hover:text-black"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      <Dialog open={!!reschedulingAppt} onOpenChange={(open) => !open && setReschedulingAppt(null)}>
+        <DialogContent className="w-full max-w-md rounded-3xl border border-black/[0.08] bg-white p-6 space-y-5 max-h-[90vh] overflow-y-auto backdrop-blur-2xl shadow-2xl text-zinc-900">
+          <DialogHeader>
+            <DialogTitle className="font-bold text-zinc-950 text-base pb-3 border-b border-black/[0.06]">
+              Reschedule Appointment
+            </DialogTitle>
+          </DialogHeader>
 
+          <div className="space-y-4">
             <div>
-              <label className="field-label">Select New Date</label>
-              <input
+              <label className="text-xs font-semibold text-slate-700 block mb-1">Select New Date</label>
+              <Input
                 type="date"
                 min={todayStr}
                 value={rescheduleDate}
                 onChange={(e) => {
                   setRescheduleDate(e.target.value);
                   setSelectedSlot(null);
-                  const docId = reschedulingAppt.doctorId || reschedulingAppt.doctor?.id;
+                  const docId = reschedulingAppt?.doctorId || reschedulingAppt?.doctor?.id;
                   if (docId) {
                     fetchRescheduleSlots(docId, e.target.value);
                   }
                 }}
-                className="field-input text-xs font-semibold"
+                className="text-xs font-semibold"
               />
             </div>
 
             <div>
-              <label className="field-label">Select Open Slot</label>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">Select Open Slot</label>
 
               {loadingSlots ? (
                 <div className="py-8 text-center">
@@ -396,21 +408,22 @@ export function PatientAppointmentsClient({
                     const isSelected = selectedSlot?.startTime === slot.startTime;
 
                     return (
-                      <button
+                      <Button
                         key={`${slot.startTime}-${idx}`}
                         type="button"
                         disabled={!isBookable}
+                        variant="ghost"
                         onClick={() => setSelectedSlot(slot)}
-                        className={`p-2.5 rounded-xl border text-xs font-bold transition-all ${
+                        className={`p-2.5 rounded-xl border text-xs font-bold transition-all h-auto ${
                           isSelected
-                            ? 'bg-black border-black text-white shadow-xs'
+                            ? 'bg-black border-black text-white shadow-xs hover:bg-black hover:text-white'
                             : isBookable
                             ? 'bg-white border-black/[0.1] hover:border-black text-zinc-800'
                             : 'opacity-40 cursor-not-allowed bg-zinc-100 text-zinc-400'
                         }`}
                       >
                         {formatTime(slot.startTime)}
-                      </button>
+                      </Button>
                     );
                   })}
                 </div>
@@ -418,29 +431,31 @@ export function PatientAppointmentsClient({
             </div>
 
             <div className="pt-3 border-t border-black/[0.06] flex gap-2">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 onClick={() => setReschedulingAppt(null)}
-                className="btn-secondary flex-1 py-2.5 text-xs font-semibold"
+                className="btn-secondary flex-1 py-2.5 text-xs font-semibold h-auto"
               >
                 Close
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="ghost"
                 onClick={handleRescheduleSubmit}
                 disabled={!selectedSlot || rescheduleLoading}
-                className="btn-primary flex-1 py-2.5 text-xs font-semibold"
+                className="btn-primary flex-1 py-2.5 text-xs font-semibold h-auto"
               >
                 {rescheduleLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   'Confirm Reschedule'
                 )}
-              </button>
+              </Button>
             </div>
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
       {/* Live Queue Tracker Modal */}
       {liveQueueApptId && (

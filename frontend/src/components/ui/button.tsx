@@ -4,24 +4,28 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 cursor-pointer active:scale-[0.98]",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0066cc] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 cursor-pointer active:scale-[0.98]",
   {
     variants: {
       variant: {
         default:
-          "bg-blue-600 text-white shadow-xs hover:bg-blue-700 active:bg-blue-800",
+          "bg-[#0066cc] text-white shadow-xs hover:bg-[#0055b3] active:bg-[#004494]",
+        black:
+          "bg-black text-white shadow-xs hover:bg-zinc-800 active:bg-zinc-900",
         destructive:
           "bg-rose-600 text-white shadow-xs hover:bg-rose-700 active:bg-rose-800",
         outline:
-          "border border-slate-200 bg-white text-slate-800 shadow-xs hover:bg-slate-50 hover:text-slate-900 border-slate-200",
+          "border border-slate-200 bg-white text-slate-800 shadow-xs hover:bg-slate-50 hover:text-slate-900",
         secondary:
           "bg-slate-100 text-slate-800 shadow-xs hover:bg-slate-200",
         ghost: "hover:bg-slate-100 hover:text-slate-900",
-        link: "text-blue-600 underline-offset-4 hover:underline",
+        link: "text-[#0066cc] underline-offset-4 hover:underline",
         success:
           "bg-emerald-600 text-white shadow-xs hover:bg-emerald-700 active:bg-emerald-800",
         warning:
           "bg-amber-600 text-white shadow-xs hover:bg-amber-700 active:bg-amber-800",
+        info:
+          "bg-sky-600 text-white shadow-xs hover:bg-sky-700 active:bg-sky-800",
       },
       size: {
         default: "h-10 px-4 py-2",
@@ -34,7 +38,6 @@ const buttonVariants = cva(
     },
     defaultVariants: {
       variant: "default",
-      size: "default",
     },
   }
 )
@@ -51,7 +54,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const Comp = asChild ? Slot : "button"
     return (
       <Comp
-        className={cn(buttonVariants({ variant, size, className }))}
+        className={cn(buttonVariants({ variant, size }), className)}
         ref={ref}
         disabled={disabled || isLoading}
         {...props}
