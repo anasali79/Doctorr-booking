@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Loader2, Eye, EyeOff, ArrowRight, AlertCircle, Stethoscope, User, Activity, Sparkles } from 'lucide-react';
+import { Loader2, Eye, EyeOff, ArrowRight, AlertCircle, Stethoscope, User, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { loginSchema, LoginInput } from '@/lib/schemas';
 import { BrandMark } from '@/components/ui/BrandMark';

@@ -8,14 +8,23 @@ import { formatTime } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
   Calendar,
-  Clock,
   Plus,
   Trash2,
   Loader2,
-  Sliders,
-  CheckCircle2,
 } from 'lucide-react';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from '@/components/ui/table';
 
 interface DoctorAvailabilityClientProps {
   initialAvailability: RecurringAvailability[];
@@ -149,7 +158,7 @@ export function DoctorAvailabilityClient({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
       {/* Schedule Configuration Form */}
-      <div className="lg:col-span-5 card p-6 sm:p-7 shadow-xs bg-white space-y-6">
+      <Card className="lg:col-span-5 card p-6 sm:p-7 shadow-xs bg-white space-y-6">
         <div>
           <h2 className="text-lg font-bold text-slate-900">
             Set Weekly Working Hours
@@ -167,18 +176,19 @@ export function DoctorAvailabilityClient({
               {DAYS_OF_WEEK.map((day) => {
                 const isSelected = selectedDays.includes(day);
                 return (
-                  <button
+                  <Button
                     key={day}
                     type="button"
+                    variant="ghost"
                     onClick={() => toggleDay(day)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer h-auto ${
                       isSelected
-                        ? 'bg-blue-700 text-white shadow-xs'
+                        ? 'bg-blue-700 text-white shadow-xs hover:bg-blue-800 hover:text-white'
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                   >
                     {day.slice(0, 3)}
-                  </button>
+                  </Button>
                 );
               })}
             </div>
@@ -188,7 +198,7 @@ export function DoctorAvailabilityClient({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="field-label">Start Time</label>
-              <input
+              <Input
                 type="time"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
@@ -198,7 +208,7 @@ export function DoctorAvailabilityClient({
             </div>
             <div>
               <label className="field-label">End Time</label>
-              <input
+              <Input
                 type="time"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
@@ -244,12 +254,13 @@ export function DoctorAvailabilityClient({
           <div>
             <label className="field-label">Scheduling Flow</label>
             <div className="grid grid-cols-2 gap-3">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 onClick={() => setSchedulingType('STREAM')}
-                className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                className={`p-3 rounded-2xl border text-left transition-all cursor-pointer h-auto flex flex-col items-start ${
                   schedulingType === 'STREAM'
-                    ? 'border-blue-700 bg-blue-50/80 text-blue-900 shadow-2xs'
+                    ? 'border-blue-700 bg-blue-50/80 text-blue-900 shadow-2xs hover:bg-blue-50/80'
                     : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
               >
@@ -257,14 +268,15 @@ export function DoctorAvailabilityClient({
                 <span className="text-[10px] text-slate-400 mt-0.5 block">
                   1 patient per slot (Linear)
                 </span>
-              </button>
+              </Button>
 
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 onClick={() => setSchedulingType('WAVE')}
-                className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                className={`p-3 rounded-2xl border text-left transition-all cursor-pointer h-auto flex flex-col items-start ${
                   schedulingType === 'WAVE'
-                    ? 'border-blue-700 bg-blue-50/80 text-blue-900 shadow-2xs'
+                    ? 'border-blue-700 bg-blue-50/80 text-blue-900 shadow-2xs hover:bg-blue-50/80'
                     : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
               >
@@ -272,14 +284,14 @@ export function DoctorAvailabilityClient({
                 <span className="text-[10px] text-slate-400 mt-0.5 block">
                   Multiple patients grouped
                 </span>
-              </button>
+              </Button>
             </div>
           </div>
 
           {schedulingType === 'WAVE' && (
             <div>
               <label className="field-label">Max Patients per Wave</label>
-              <input
+              <Input
                 type="number"
                 min={2}
                 max={10}
@@ -305,10 +317,11 @@ export function DoctorAvailabilityClient({
             </span>
           </div>
 
-          <button
+          <Button
             type="submit"
+            variant="ghost"
             disabled={saving || previewSlotCount === 0}
-            className="btn-primary w-full py-3"
+            className="btn-primary w-full py-3 h-auto"
           >
             {saving ? (
               <>
@@ -321,9 +334,9 @@ export function DoctorAvailabilityClient({
                 <span>Save Recurring Availability</span>
               </>
             )}
-          </button>
+          </Button>
         </form>
-      </div>
+      </Card>
 
       {/* Configured Recurring Availability Table */}
       <div className="lg:col-span-7 space-y-4">
@@ -337,7 +350,7 @@ export function DoctorAvailabilityClient({
         </div>
 
         {safeAvailabilities.length === 0 ? (
-          <div className="card py-16 text-center p-8 space-y-2 bg-white">
+          <Card className="card py-16 text-center p-8 space-y-2 bg-white">
             <Calendar className="w-8 h-8 text-slate-300 mx-auto" />
             <h3 className="text-sm font-bold text-slate-800">
               No Weekly Schedule Set
@@ -345,63 +358,63 @@ export function DoctorAvailabilityClient({
             <p className="text-xs text-slate-500 max-w-xs mx-auto">
               Please use the form on the left to set up your consultation hours so patients can book slots.
             </p>
-          </div>
+          </Card>
         ) : (
-          <div className="card overflow-hidden bg-white shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200/80 text-slate-500 uppercase font-bold tracking-wider text-[10px]">
-                  <tr>
-                    <th className="py-3 px-4">Day of Week</th>
-                    <th className="py-3 px-4">Time Window</th>
-                    <th className="py-3 px-4">Duration</th>
-                    <th className="py-3 px-4">Type</th>
-                    <th className="py-3 px-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {safeAvailabilities.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="hover:bg-slate-50/60 transition-colors"
-                    >
-                      <td className="py-3.5 px-4 font-bold text-slate-900">
-                        {item.dayOfWeek}
-                      </td>
-                      <td className="py-3.5 px-4 font-semibold text-slate-700">
-                        {formatTime(item.startTime)} - {formatTime(item.endTime)}
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-600">
-                        {item.slotDuration} min
-                        {item.bufferTime > 0 ? ` (+${item.bufferTime}m buffer)` : ''}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className="px-2.5 py-0.5 rounded-full bg-slate-100 font-semibold text-[10px] text-slate-700 border border-slate-200/60">
-                          {item.schedulingType || 'STREAM'}
-                          {item.schedulingType === 'WAVE' ? ` (${item.maxPatients || 2})` : ''}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(item.id)}
-                          disabled={deletingId === item.id}
-                          className="p-1.5 rounded-xl border border-slate-200 hover:bg-rose-50 hover:text-rose-600 text-slate-400 transition-colors cursor-pointer"
-                          title="Remove availability"
-                        >
-                          {deletingId === item.id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-3.5 h-3.5" />
-                          )}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <Card className="card overflow-hidden bg-white shadow-xs p-0">
+            <Table className="w-full text-left text-xs">
+              <TableHeader className="bg-slate-50 border-b border-slate-200/80 text-slate-500 uppercase font-bold tracking-wider text-[10px]">
+                <TableRow>
+                  <TableHead className="py-3 px-4">Day of Week</TableHead>
+                  <TableHead className="py-3 px-4">Time Window</TableHead>
+                  <TableHead className="py-3 px-4">Duration</TableHead>
+                  <TableHead className="py-3 px-4">Type</TableHead>
+                  <TableHead className="py-3 px-4 text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="divide-y divide-slate-100">
+                {safeAvailabilities.map((item) => (
+                  <TableRow
+                    key={item.id}
+                    className="hover:bg-slate-50/60 transition-colors"
+                  >
+                    <TableCell className="py-3.5 px-4 font-bold text-slate-900">
+                      {item.dayOfWeek}
+                    </TableCell>
+                    <TableCell className="py-3.5 px-4 font-semibold text-slate-700">
+                      {formatTime(item.startTime)} - {formatTime(item.endTime)}
+                    </TableCell>
+                    <TableCell className="py-3.5 px-4 text-slate-600">
+                      {item.slotDuration} min
+                      {item.bufferTime > 0 ? ` (+${item.bufferTime}m buffer)` : ''}
+                    </TableCell>
+                    <TableCell className="py-3.5 px-4">
+                      <Badge variant="outline" className="px-2.5 py-0.5 rounded-full bg-slate-100 font-semibold text-[10px] text-slate-700 border border-slate-200/60">
+                        {item.schedulingType || 'STREAM'}
+                        {item.schedulingType === 'WAVE' ? ` (${item.maxPatients || 2})` : ''}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="py-3.5 px-4 text-right">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="iconSm"
+                        onClick={() => handleDelete(item.id)}
+                        disabled={deletingId === item.id}
+                        className="p-1.5 rounded-xl border border-slate-200 hover:bg-rose-50 hover:text-rose-600 text-slate-400 transition-colors cursor-pointer"
+                        title="Remove availability"
+                      >
+                        {deletingId === item.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3.5 h-3.5" />
+                        )}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
         )}
       </div>
     </div>

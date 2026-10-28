@@ -6,7 +6,6 @@ import { DoctorLeave } from '@/types';
 import { formatDate, getTodayIST } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
-  Calendar,
   AlertTriangle,
   Plus,
   Trash2,
@@ -14,6 +13,17 @@ import {
   CalendarX2,
 } from 'lucide-react';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from '@/components/ui/table';
 
 interface DoctorLeaveClientProps {
   initialLeaves: DoctorLeave[];
@@ -82,7 +92,7 @@ export function DoctorLeaveClient({ initialLeaves }: DoctorLeaveClientProps) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
       {/* Add Leave Form */}
-      <div className="lg:col-span-5 card p-6 sm:p-7 shadow-xs bg-white space-y-6">
+      <Card className="lg:col-span-5 card p-6 sm:p-7 shadow-xs bg-white space-y-6">
         <div>
           <h2 className="text-lg font-bold text-slate-900">
             Block Clinical Leave Date
@@ -103,7 +113,7 @@ export function DoctorLeaveClient({ initialLeaves }: DoctorLeaveClientProps) {
         <form onSubmit={handleAddLeave} className="space-y-4">
           <div>
             <label className="field-label">Select Leave Date *</label>
-            <input
+            <Input
               type="date"
               min={getTodayIST()}
               value={date}
@@ -124,10 +134,11 @@ export function DoctorLeaveClient({ initialLeaves }: DoctorLeaveClientProps) {
             />
           </div>
 
-          <button
+          <Button
             type="submit"
+            variant="ghost"
             disabled={saving}
-            className="btn-primary w-full py-3"
+            className="btn-primary w-full py-3 h-auto"
           >
             {saving ? (
               <>
@@ -140,9 +151,9 @@ export function DoctorLeaveClient({ initialLeaves }: DoctorLeaveClientProps) {
                 <span>Confirm & Block Date</span>
               </>
             )}
-          </button>
+          </Button>
         </form>
-      </div>
+      </Card>
 
       {/* Planned Leaves Table */}
       <div className="lg:col-span-7 space-y-4">
@@ -156,7 +167,7 @@ export function DoctorLeaveClient({ initialLeaves }: DoctorLeaveClientProps) {
         </div>
 
         {safeLeaves.length === 0 ? (
-          <div className="card py-16 text-center p-8 space-y-2 bg-white">
+          <Card className="card py-16 text-center p-8 space-y-2 bg-white">
             <CalendarX2 className="w-8 h-8 text-slate-300 mx-auto" />
             <h3 className="text-sm font-bold text-slate-800">
               No Leaves Scheduled
@@ -164,32 +175,34 @@ export function DoctorLeaveClient({ initialLeaves }: DoctorLeaveClientProps) {
             <p className="text-xs text-slate-500 max-w-xs mx-auto">
               Your clinical calendar is currently active for all recurring weekly slots.
             </p>
-          </div>
+          </Card>
         ) : (
-          <div className="card overflow-hidden bg-white shadow-xs">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 border-b border-slate-200/80 text-slate-500 uppercase font-bold tracking-wider text-[10px]">
-                <tr>
-                  <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4">Reason</th>
-                  <th className="py-3 px-4 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
+          <Card className="card overflow-hidden bg-white shadow-xs p-0">
+            <Table className="w-full text-left text-xs">
+              <TableHeader className="bg-slate-50 border-b border-slate-200/80 text-slate-500 uppercase font-bold tracking-wider text-[10px]">
+                <TableRow>
+                  <TableHead className="py-3 px-4">Date</TableHead>
+                  <TableHead className="py-3 px-4">Reason</TableHead>
+                  <TableHead className="py-3 px-4 text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="divide-y divide-slate-100">
                 {safeLeaves.map((leave) => (
-                  <tr
+                  <TableRow
                     key={leave.id}
                     className="hover:bg-slate-50/60 transition-colors"
                   >
-                    <td className="py-3.5 px-4 font-bold text-slate-900 whitespace-nowrap">
+                    <TableCell className="py-3.5 px-4 font-bold text-slate-900 whitespace-nowrap">
                       {formatDate(leave.date)}
-                    </td>
-                    <td className="py-3.5 px-4 text-slate-600">
+                    </TableCell>
+                    <TableCell className="py-3.5 px-4 text-slate-600">
                       {leave.reason || <span className="italic text-slate-400">No reason specified</span>}
-                    </td>
-                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                      <button
+                    </TableCell>
+                    <TableCell className="py-3.5 px-4 text-right whitespace-nowrap">
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="iconSm"
                         onClick={() => handleDeleteLeave(leave.id)}
                         disabled={deletingId === leave.id}
                         className="p-1.5 rounded-xl border border-slate-200 hover:bg-rose-50 hover:text-rose-600 text-slate-400 transition-colors cursor-pointer"
@@ -200,13 +213,13 @@ export function DoctorLeaveClient({ initialLeaves }: DoctorLeaveClientProps) {
                         ) : (
                           <Trash2 className="w-3.5 h-3.5" />
                         )}
-                      </button>
-                    </td>
-                  </tr>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </TableBody>
+            </Table>
+          </Card>
         )}
       </div>
     </div>

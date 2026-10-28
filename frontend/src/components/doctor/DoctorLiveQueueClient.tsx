@@ -4,7 +4,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Appointment } from '@/types';
-import { formatTime, formatDate } from '@/lib/utils';
+import { formatTime, formatDate, cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { clientAxios } from '@/lib/api/axios';
 import {
@@ -18,18 +18,12 @@ import {
   Clock,
   Activity,
   Stethoscope,
-  Info,
-  Users,
-  CheckCircle2,
-  XCircle,
   Hash,
-  ChevronRight,
   Sun,
-  ArrowRight,
-  User,
-  ShieldCheck,
-  AlertCircle,
 } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 type ActionType = 'manual-check-in' | 'start-consultation' | 'complete' | 'no-show';
 
@@ -120,8 +114,12 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
         }),
       );
       router.refresh();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Action failed');
+    } catch (err: unknown) {
+      const errorMsg =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : 'Action failed';
+      toast.error(errorMsg || 'Action failed');
     } finally {
       setLoadingId(null);
     }
@@ -143,7 +141,6 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
   const totalPatients = appointments.length;
   const waitingCount = checkedInList.length;
   const stillArrivingCount = confirmedList.length;
-  const totalRemaining = (activeAppt ? 1 : 0) + waitingCount + stillArrivingCount;
   const nextUp = checkedInList[0] || confirmedList[0];
 
   const isToday = selectedDate === todayIST;
@@ -194,9 +191,9 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
                 defaultValue={selectedDate}
                 className="text-xs font-semibold text-slate-700 bg-transparent focus:outline-none"
               />
-              <button type="submit" className="text-xs font-bold text-blue-700 hover:text-blue-900 px-1">
+              <Button type="submit" size="xs" variant="ghost" className="text-xs font-bold text-blue-700 hover:text-blue-900 px-1">
                 Go
-              </button>
+              </Button>
               {!isToday && (
                 <Link href="/doctor/appointments" className="text-xs text-slate-400 hover:text-slate-700 font-medium ml-1">
                   Today
@@ -204,55 +201,56 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
               )}
             </form>
 
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={handleRefresh}
               disabled={refreshing}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-all shadow-xs"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">Refresh</span>
-            </button>
+            </Button>
 
-            <Link
-              href="/doctor/my-day"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all shadow-xs"
-            >
-              <Sun className="w-3.5 h-3.5 text-amber-600" />
-              <span className="hidden sm:inline">My Day</span>
-            </Link>
+            <Button asChild variant="secondary" size="sm" className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all shadow-xs">
+              <Link href="/doctor/my-day">
+                <Sun className="w-3.5 h-3.5 text-amber-600" />
+                <span className="hidden sm:inline">My Day</span>
+              </Link>
+            </Button>
           </div>
         </div>
       </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-        {/* ── Summary Stats Strip ── */}
+        {/* ── Summary Stats Strip (shadcn Card with Original Color Palette) ── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+          <Card className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block">Total Patients</span>
             <div className="text-2xl font-black text-slate-900 tabular-nums mt-1">{totalPatients}</div>
             <span className="text-[11px] text-slate-400 block mt-0.5">Scheduled on this date</span>
-          </div>
-          <div className="bg-white rounded-2xl border border-amber-200 bg-amber-50/40 p-4 shadow-xs">
+          </Card>
+          <Card className="bg-white rounded-2xl border border-amber-200 bg-amber-50/40 p-4 shadow-xs">
             <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wide block">Waiting in Clinic</span>
             <div className="text-2xl font-black text-amber-800 tabular-nums mt-1">{waitingCount}</div>
             <span className="text-[11px] text-amber-600 block mt-0.5">Checked in & ready</span>
-          </div>
-          <div className="bg-white rounded-2xl border border-sky-200 bg-sky-50/40 p-4 shadow-xs">
+          </Card>
+          <Card className="bg-white rounded-2xl border border-sky-200 bg-sky-50/40 p-4 shadow-xs">
             <span className="text-[11px] font-bold text-sky-700 uppercase tracking-wide block">Still Arriving</span>
             <div className="text-2xl font-black text-sky-800 tabular-nums mt-1">{stillArrivingCount}</div>
             <span className="text-[11px] text-sky-600 block mt-0.5">Confirmed appointments</span>
-          </div>
-          <div className="bg-white rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 shadow-xs">
+          </Card>
+          <Card className="bg-white rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 shadow-xs">
             <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wide block">Done Today</span>
             <div className="text-2xl font-black text-emerald-800 tabular-nums mt-1">{completedList.length}</div>
             <span className="text-[11px] text-emerald-600 block mt-0.5">Consultations completed</span>
-          </div>
+          </Card>
         </div>
 
         {/* ── Spotlight: Now Serving vs Next Up ── */}
         <div className="grid md:grid-cols-12 gap-5">
           {/* NOW SERVING BOARD (7 cols) */}
-          <div className="md:col-span-7 bg-white rounded-3xl border-2 border-blue-600 p-6 shadow-sm flex flex-col justify-between relative overflow-hidden">
+          <Card className="md:col-span-7 bg-white rounded-3xl border-2 border-blue-600 p-6 shadow-sm flex flex-col justify-between relative overflow-hidden">
             <div className="absolute top-0 right-0 px-4 py-1 bg-blue-600 text-white rounded-bl-2xl text-[11px] font-bold uppercase tracking-wider">
               Active Consultation
             </div>
@@ -322,7 +320,7 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
                     {waitingCount} patient(s) waiting after this token
                   </div>
                   <div className="flex items-center gap-2">
-                    <button
+                    <Button
                       onClick={() => handleAction(activeAppt.id, 'complete')}
                       disabled={!!loadingId}
                       className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs disabled:opacity-60"
@@ -333,14 +331,15 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
                         <CheckCheck className="w-4 h-4" />
                       )}
                       Mark Consultation Complete
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="ghost"
                       onClick={() => handleAction(activeAppt.id, 'no-show')}
                       disabled={!!loadingId}
                       className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-semibold transition-all disabled:opacity-60"
                     >
                       No Show
-                    </button>
+                    </Button>
                   </div>
                 </>
               ) : nextUp && nextUp.status === 'CHECKED_IN' ? (
@@ -348,7 +347,7 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
                   <div className="text-xs text-slate-600 font-medium">
                     Ready to call: <span className="font-bold text-slate-900">{nextUp.patient?.fullName}</span> (Token #{String(nextUp.tokenNumber || 1).padStart(2, '0')})
                   </div>
-                  <button
+                  <Button
                     onClick={() => handleAction(nextUp.id, 'start-consultation')}
                     disabled={!!loadingId}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs disabled:opacity-60"
@@ -359,29 +358,30 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
                       <PlayCircle className="w-4 h-4" />
                     )}
                     Call Next Token (#{String(nextUp.tokenNumber || 1).padStart(2, '0')})
-                  </button>
+                  </Button>
                 </div>
               ) : (
                 <div className="text-xs text-slate-400">Queue is idle. Waiting for patient arrival.</div>
               )}
             </div>
-          </div>
+          </Card>
 
           {/* NEXT IN LINE BOARD (5 cols) */}
-          <div className="md:col-span-5 bg-white rounded-3xl border border-slate-200 p-6 shadow-xs flex flex-col justify-between">
+          <Card className="md:col-span-5 bg-white rounded-3xl border border-slate-200 p-6 shadow-xs flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between gap-2 mb-4">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-600">Next In Line</span>
                 {nextUp && (
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  <Badge
+                    variant="outline"
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold border-0 ${
                       nextUp.status === 'CHECKED_IN'
                         ? 'bg-amber-100 text-amber-800'
                         : 'bg-sky-100 text-sky-800'
                     }`}
                   >
                     {nextUp.status === 'CHECKED_IN' ? 'In Waiting Room' : 'Expected'}
-                  </span>
+                  </Badge>
                 )}
               </div>
 
@@ -436,7 +436,7 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
             {nextUp && (
               <div className="mt-5 pt-3 border-t border-slate-100">
                 {nextUp.status === 'CHECKED_IN' ? (
-                  <button
+                  <Button
                     onClick={() => handleAction(nextUp.id, 'start-consultation')}
                     disabled={!!loadingId}
                     className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl py-2.5 text-xs font-bold transition-all shadow-xs disabled:opacity-60"
@@ -447,9 +447,9 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
                       <PlayCircle className="w-3.5 h-3.5" />
                     )}
                     Start Consultation with Token #{String(nextUp.tokenNumber || 1).padStart(2, '0')}
-                  </button>
+                  </Button>
                 ) : (
-                  <button
+                  <Button
                     onClick={() => handleAction(nextUp.id, 'manual-check-in')}
                     disabled={!!loadingId}
                     className="w-full flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl py-2.5 text-xs font-bold transition-all shadow-xs disabled:opacity-60"
@@ -460,11 +460,11 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
                       <UserCheck className="w-3.5 h-3.5" />
                     )}
                     Check In Patient When Arrived
-                  </button>
+                  </Button>
                 )}
               </div>
             )}
-          </div>
+          </Card>
         </div>
 
         {/* ── Side-by-Side Queue Sections ── */}
@@ -480,10 +480,10 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
             </div>
 
             {orderedQueue.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center shadow-xs">
+              <Card className="bg-white rounded-2xl border border-slate-200 p-10 text-center shadow-xs">
                 <Stethoscope className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                 <p className="text-sm font-bold text-slate-700">No appointments scheduled for this date</p>
-              </div>
+              </Card>
             ) : (
               <div className="space-y-2">
                 {orderedQueue.map((appt, idx) => {
@@ -494,9 +494,10 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
                   const isDone = ['COMPLETED', 'CANCELLED', 'NO_SHOW'].includes(appt.status);
 
                   return (
-                    <div
+                    <Card
                       key={appt.id}
-                      className={`rounded-2xl border transition-all duration-150 overflow-hidden bg-white ${
+                      className={cn(
+                        "rounded-2xl border transition-all duration-150 overflow-hidden bg-white p-0 shadow-none",
                         isAct
                           ? 'border-blue-500 ring-1 ring-blue-500/20 shadow-xs'
                           : isCI
@@ -504,7 +505,7 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
                           : isDone
                           ? 'border-slate-200/60 bg-slate-50/50 opacity-70'
                           : 'border-slate-200 hover:border-slate-300 shadow-xs'
-                      }`}
+                      )}
                     >
                       <div className="flex items-stretch">
                         {/* Token Badge */}
@@ -545,12 +546,18 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
                               )}
                             </div>
 
-                            <span
-                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${ss.bg} ${ss.text} ${ss.border}`}
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border",
+                                ss.bg,
+                                ss.text,
+                                ss.border
+                              )}
                             >
                               <span className={`w-1.5 h-1.5 rounded-full ${ss.dot}`} />
                               {ss.label}
-                            </span>
+                            </Badge>
                           </div>
 
                           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
@@ -575,21 +582,21 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
                               const lid = `${appt.id}-${action}`;
                               const busy = loadingId === lid;
                               return (
-                                <button
+                                <Button
                                   key={action}
                                   onClick={() => handleAction(appt.id, action)}
                                   disabled={!!loadingId}
-                                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all duration-150 disabled:opacity-50 ${cls}`}
+                                  className={cn("flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all duration-150 disabled:opacity-50 h-auto", cls)}
                                 >
                                   {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Icon className="w-3.5 h-3.5" />}
                                   <span className="hidden sm:inline">{label}</span>
-                                </button>
+                                </Button>
                               );
                             })}
                           </div>
                         )}
                       </div>
-                    </div>
+                    </Card>
                   );
                 })}
               </div>
@@ -599,7 +606,7 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
           {/* Side Panels: Waiting Room & Arriving (4 cols) */}
           <div className="lg:col-span-4 space-y-4">
             {/* Waiting Room (Checked in) */}
-            <div className="bg-white rounded-2xl border border-amber-200 overflow-hidden shadow-xs">
+            <Card className="bg-white rounded-2xl border border-amber-200 overflow-hidden shadow-xs p-0">
               <div className="px-4 py-3 bg-amber-50/70 border-b border-amber-200 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <UserCheck className="w-4 h-4 text-amber-700" />
@@ -607,7 +614,9 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
                     Waiting Room ({checkedInList.length})
                   </span>
                 </div>
-                <span className="text-[11px] text-amber-700 font-semibold">In Clinic</span>
+                <Badge variant="outline" className="text-[11px] text-amber-700 font-semibold border-amber-300 bg-amber-100/60">
+                  In Clinic
+                </Badge>
               </div>
 
               {checkedInList.length === 0 ? (
@@ -632,7 +641,9 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
                         </div>
                       </div>
 
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="iconSm"
                         onClick={() => handleAction(a.id, 'start-consultation')}
                         disabled={!!loadingId}
                         className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-all flex-shrink-0"
@@ -643,15 +654,15 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
                         ) : (
                           <PlayCircle className="w-4 h-4" />
                         )}
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>
               )}
-            </div>
+            </Card>
 
             {/* Expected Today (Confirmed, not yet checked in) */}
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+            <Card className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs p-0">
               <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-slate-600" />
@@ -659,7 +670,9 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
                     Still Arriving ({confirmedList.length})
                   </span>
                 </div>
-                <span className="text-[11px] text-slate-500 font-semibold">Expected</span>
+                <Badge variant="outline" className="text-[11px] text-slate-500 font-semibold border-slate-200">
+                  Expected
+                </Badge>
               </div>
 
               {confirmedList.length === 0 ? (
@@ -684,7 +697,9 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
                         </div>
                       </div>
 
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="xs"
                         onClick={() => handleAction(a.id, 'manual-check-in')}
                         disabled={!!loadingId}
                         className="px-2.5 py-1 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-semibold transition-all flex-shrink-0"
@@ -694,12 +709,12 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
                         ) : (
                           'Check In'
                         )}
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>
               )}
-            </div>
+            </Card>
           </div>
         </div>
       </div>
