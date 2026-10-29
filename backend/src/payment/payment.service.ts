@@ -348,77 +348,13 @@ export class PaymentService {
       throw new BadRequestException('Invalid payment signature');
     }
 
-    // Transactional confirmation of appointment & payment
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction('SERIALIZABLE');
-
-    let confirmedAppointment: Appointment;
-
-    try {
-      const appt = await queryRunner.manager.findOne(Appointment, {
-        where: { id: dto.appointmentId },
-        lock: { mode: 'pessimistic_write' },
-        loadEagerRelations: false,
-      });
-
-      if (!appt) {
-        throw new NotFoundException('Appointment not found');
-      }
-
-      // Check for late payment after expiry
-      const isExpired = appt.pendingExpiresAt && new Date(appt.pendingExpiresAt) < new Date();
-      if (isExpired && appt.status !== AppointmentStatus.PENDING_PAYMENT) {
-        // Handle late payment recovery
-        await queryRunner.rollbackTransaction();
-        await queryRunner.release();
-        return this.handleLatePayment(payment, dto.paymentId, dto.signature);
-      }
-
-      // Assign sequential token
-      const tokenNumber = await this.assignTokenNumber(queryRunner.manager, appt.doctorId, appt.date);
-
-      appt.status = AppointmentStatus.CONFIRMED;
-      appt.paymentStatus = 'PAID';
-      appt.pendingExpiresAt = null;
-      appt.tokenNumber = tokenNumber;
-
-      confirmedAppointment = await queryRunner.manager.save(appt);
-
-      // Update payment record
-      payment.status = PaymentStatus.COMPLETED;
-      payment.paymentId = dto.paymentId;
-      payment.signature = dto.signature;
-      await queryRunner.manager.save(payment);
-
-      // Recalculate queue if appointment is today
-      const todayStr = getTodayIST();
-      if (confirmedAppointment.date === todayStr) {
-        await this.queueService.recalculateQueue(
-          confirmedAppointment.doctorId,
-          confirmedAppointment.date,
-          queryRunner.manager,
-        );
-      }
-
-      await queryRunner.commitTransaction();
-    } catch (err) {
-      await queryRunner.rollbackTransaction();
-      throw err;
-    } finally {
-      await queryRunner.release();
-    }
-
-    // Post-commit side effects: emails, notifications, reminders, sockets
-    await this.triggerPostConfirmationSideEffects(confirmedAppointment, payment, patient);
-
-    return {
-      success: true,
-      message: 'Payment verified and appointment confirmed successfully',
-      appointmentId: confirmedAppointment.id,
-      paymentId: payment.paymentId,
-      tokenNumber: confirmedAppointment.tokenNumber,
-    };
+    // Delegate to shared transactional confirmation method (re-checks expiry & booking conflicts)
+    return this.confirmAppointmentPaymentTransaction({
+      payment,
+      paymentId: dto.paymentId,
+      signature: dto.signature,
+      patient,
+    });
   }
 
   /**
@@ -516,48 +452,12 @@ export class PaymentService {
       return;
     }
 
-    const appt = await this.appointmentRepo.findOne({
-      where: { id: payment.appointmentId },
-      relations: { doctor: true, patient: { user: true } },
+    await this.confirmAppointmentPaymentTransaction({
+      payment,
+      paymentId,
+      method: entity.method || null,
+      patient: payment.patient,
     });
-
-    if (!appt) return;
-
-    // Check if appointment reservation expired
-    const isExpired = appt.pendingExpiresAt && new Date(appt.pendingExpiresAt) < new Date();
-    if (isExpired && appt.status !== AppointmentStatus.PENDING_PAYMENT) {
-      await this.handleLatePayment(payment, paymentId, null);
-      return;
-    }
-
-    // Confirm booking
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    let savedAppt: Appointment;
-    try {
-      const token = await this.assignTokenNumber(queryRunner.manager, appt.doctorId, appt.date);
-      appt.status = AppointmentStatus.CONFIRMED;
-      appt.paymentStatus = 'PAID';
-      appt.pendingExpiresAt = null;
-      appt.tokenNumber = token;
-      savedAppt = await queryRunner.manager.save(appt);
-
-      payment.status = PaymentStatus.COMPLETED;
-      payment.paymentId = paymentId;
-      payment.method = entity.method || null;
-      await queryRunner.manager.save(payment);
-
-      await queryRunner.commitTransaction();
-    } catch (err) {
-      await queryRunner.rollbackTransaction();
-      throw err;
-    } finally {
-      await queryRunner.release();
-    }
-
-    await this.triggerPostConfirmationSideEffects(savedAppt, payment, payment.patient);
   }
 
   private async processPaymentFailedWebhook(entity: any): Promise<void> {
@@ -639,106 +539,280 @@ export class PaymentService {
   }
 
   /**
-   * Phase 6: Late-Payment Recovery Strategy
+   * Phase 5/6: Shared Transactional Confirmation for verifyPayment & Webhook (P1 Issues #1 & #2 Fixed)
+   * Re-validates:
+   * 1. Appointment status & expiry (prevents normal confirmation if expired)
+   * 2. Slot conflicts (ensures no other confirmed appointment took the slot)
+   * 3. Patient same-day duplicate booking conflicts
+   * 4. Idempotency (safe if already completed)
+   * 5. Atomically assigns token and confirms appointment, or triggers late payment refund
+   */
+  async confirmAppointmentPaymentTransaction(params: {
+    payment: Payment;
+    paymentId: string;
+    signature?: string | null;
+    method?: string | null;
+    patient?: Patient | null;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    appointmentId?: string;
+    paymentId?: string;
+    tokenNumber?: number | null;
+    refundId?: string;
+  }> {
+    const { payment, paymentId, signature, method } = params;
+
+    // Idempotency: if already completed, return success safely
+    if (payment.status === PaymentStatus.COMPLETED) {
+      return {
+        success: true,
+        message: 'Payment already verified successfully',
+        appointmentId: payment.appointmentId,
+        paymentId: payment.paymentId || paymentId,
+        tokenNumber: payment.appointment?.tokenNumber ?? null,
+      };
+    }
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction('SERIALIZABLE');
+
+    try {
+      const appt = await queryRunner.manager.findOne(Appointment, {
+        where: { id: payment.appointmentId },
+        lock: { mode: 'pessimistic_write' },
+        relations: { doctor: true, patient: { user: true } },
+      });
+
+      if (!appt) {
+        throw new NotFoundException('Appointment record not found');
+      }
+
+      const lockedPayment = await queryRunner.manager.findOne(Payment, {
+        where: { id: payment.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!lockedPayment) {
+        throw new NotFoundException('Payment record not found in transaction');
+      }
+
+      if (lockedPayment.status === PaymentStatus.COMPLETED) {
+        await queryRunner.rollbackTransaction();
+        return {
+          success: true,
+          message: 'Payment already verified successfully',
+          appointmentId: appt.id,
+          paymentId: lockedPayment.paymentId || paymentId,
+          tokenNumber: appt.tokenNumber,
+        };
+      }
+
+      const now = new Date();
+      const isExpired = !!(appt.pendingExpiresAt && new Date(appt.pendingExpiresAt) <= now);
+      const isNotPending = appt.status !== AppointmentStatus.PENDING_PAYMENT;
+
+      // Concurrency & conflict validation (P1 Issue #2)
+      // 1. Check if another confirmed appointment already took this doctor's slot
+      const conflictingSlot = await queryRunner.manager
+        .createQueryBuilder(Appointment, 'a')
+        .where('a.doctorId = :doctorId', { doctorId: appt.doctorId })
+        .andWhere('a.date = :date', { date: appt.date })
+        .andWhere('a.startTime = :startTime', { startTime: appt.startTime })
+        .andWhere('a.endTime = :endTime', { endTime: appt.endTime })
+        .andWhere('a.status = :confirmedStatus', { confirmedStatus: AppointmentStatus.CONFIRMED })
+        .andWhere('a.id != :currentId', { currentId: appt.id })
+        .getOne();
+
+      // 2. Check if this patient already has a confirmed appointment with this doctor on this day
+      const conflictingPatientDayBooking = await queryRunner.manager
+        .createQueryBuilder(Appointment, 'a')
+        .where('a.doctorId = :doctorId', { doctorId: appt.doctorId })
+        .andWhere('a.date = :date', { date: appt.date })
+        .andWhere('a.patientId = :patientId', { patientId: appt.patientId })
+        .andWhere('a.status = :confirmedStatus', { confirmedStatus: AppointmentStatus.CONFIRMED })
+        .andWhere('a.id != :currentId', { currentId: appt.id })
+        .getOne();
+
+      const hasConflict = !!(conflictingSlot || conflictingPatientDayBooking);
+
+      // P1 Issue #1: If reservation expired OR status is not pending OR there is any conflict:
+      if (isExpired || isNotPending || hasConflict) {
+        this.logger.warn(
+          `Cannot confirm appointment ${appt.id} normally: isExpired=${isExpired}, status=${appt.status}, hasConflict=${hasConflict}`,
+        );
+
+        // If slot is conflicted or was cancelled, trigger automatic 100% refund
+        if (hasConflict || appt.status === AppointmentStatus.CANCELLED) {
+          await queryRunner.rollbackTransaction();
+          return this.handleLatePaymentConflict(lockedPayment, appt, paymentId, signature, {
+            reason: conflictingSlot
+              ? 'Slot was taken by another patient while reservation was pending/expired'
+              : conflictingPatientDayBooking
+              ? 'Patient already has a confirmed appointment with this doctor today'
+              : 'Reservation expired before payment completed',
+          });
+        }
+
+        // If expired with no conflicts, check if doctor/slot can be recovered safely
+        const canRecover = !hasConflict;
+        if (!canRecover) {
+          await queryRunner.rollbackTransaction();
+          return this.handleLatePaymentConflict(lockedPayment, appt, paymentId, signature, {
+            reason: 'Reservation expired and slot is unavailable. Full refund initiated.',
+          });
+        }
+      }
+
+      // Normal or recovered confirmation: Assign sequential clinic token
+      const tokenNumber = await this.assignTokenNumber(queryRunner.manager, appt.doctorId, appt.date);
+
+      appt.status = AppointmentStatus.CONFIRMED;
+      appt.paymentStatus = 'PAID';
+      appt.pendingExpiresAt = null;
+      appt.tokenNumber = tokenNumber;
+      const confirmedAppointment = await queryRunner.manager.save(appt);
+
+      lockedPayment.status = PaymentStatus.COMPLETED;
+      lockedPayment.paymentId = paymentId;
+      if (signature) lockedPayment.signature = signature;
+      if (method) lockedPayment.method = method;
+      await queryRunner.manager.save(lockedPayment);
+
+      const todayStr = getTodayIST();
+      if (confirmedAppointment.date === todayStr) {
+        await this.queueService.recalculateQueue(
+          confirmedAppointment.doctorId,
+          confirmedAppointment.date,
+          queryRunner.manager,
+        );
+      }
+
+      await queryRunner.commitTransaction();
+
+      // Trigger post-confirmation side effects (emails, notifications, reminders, sockets)
+      const patientEntity = params.patient || appt.patient;
+      if (patientEntity) {
+        await this.triggerPostConfirmationSideEffects(confirmedAppointment, lockedPayment, patientEntity);
+      }
+
+      return {
+        success: true,
+        message: 'Payment verified and appointment confirmed successfully',
+        appointmentId: confirmedAppointment.id,
+        paymentId: lockedPayment.paymentId,
+        tokenNumber: confirmedAppointment.tokenNumber,
+      };
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  /**
+   * Late payment / conflict recovery: Full automatic refund with notifications
+   */
+  private async handleLatePaymentConflict(
+    payment: Payment,
+    appt: Appointment,
+    paymentId: string,
+    signature?: string | null,
+    options?: { reason?: string },
+  ) {
+    const reason = options?.reason || 'Reservation expired and slot was taken. Full refund initiated.';
+    this.logger.warn(`Initiating automatic 100% refund for payment ${paymentId}: ${reason}`);
+
+    // Ensure payment record is recorded before refunding
+    payment.status = PaymentStatus.COMPLETED;
+    payment.paymentId = paymentId;
+    if (signature) payment.signature = signature;
+    await this.paymentRepo.save(payment);
+
+    let providerRefund: any;
+    try {
+      providerRefund = await this.razorpayService.createRefund({
+        paymentId,
+        amount: payment.amount,
+        notes: { reason, appointmentId: appt.id },
+      });
+    } catch (err: any) {
+      this.logger.error(`Automatic refund provider call failed for payment ${paymentId}: ${err.message}`, err.stack);
+      payment.errorCode = 'REFUND_FAILED';
+      payment.errorDescription = err.message;
+      await this.paymentRepo.save(payment);
+      return {
+        success: false,
+        message: 'Reservation expired. Automatic refund attempt failed and queued for manual reconciliation.',
+        error: err.message,
+      };
+    }
+
+    const refund = this.refundRepo.create({
+      paymentId: payment.id,
+      appointmentId: appt.id,
+      patientId: payment.patientId,
+      providerRefundId: providerRefund.id,
+      amount: payment.amount,
+      currency: 'INR',
+      status: RefundStatus.PROCESSED,
+      reason,
+      processedAt: new Date(),
+    });
+    await this.refundRepo.save(refund);
+
+    payment.amountRefunded = payment.amount;
+    payment.status = PaymentStatus.REFUNDED;
+    await this.paymentRepo.save(payment);
+
+    if (appt.status !== AppointmentStatus.CANCELLED) {
+      appt.status = AppointmentStatus.CANCELLED;
+      appt.paymentStatus = 'REFUNDED';
+      appt.pendingExpiresAt = null;
+      await this.appointmentRepo.save(appt);
+    }
+
+    const email = appt.patient?.user?.email;
+    if (email) {
+      await this.emailService.sendRefundInitiated(
+        email,
+        appt.patient?.fullName || 'Patient',
+        appt.doctor?.fullName || 'Doctor',
+        payment.amount,
+        providerRefund.id,
+        reason,
+      );
+    }
+
+    await this.notificationService.createNotification(
+      appt.patientId,
+      'Reservation Expired — Full Refund Initiated',
+      `Your reservation with Dr. ${appt.doctor?.fullName || 'Doctor'} on ${formatDate(appt.date)} expired and the slot was taken. A full refund of ₹${payment.amount / 100} has been automatically initiated.`,
+      NotificationType.APPOINTMENT_CANCELLED,
+    );
+
+    return {
+      success: false,
+      message: 'Reservation expired and slot was taken. A full refund has been automatically initiated.',
+      refundId: providerRefund.id,
+    };
+  }
+
+  /**
+   * Backward-compatible handleLatePayment wrapper
    */
   private async handleLatePayment(
     payment: Payment,
     paymentId: string,
     signature: string | null,
   ): Promise<any> {
-    this.logger.warn(`Late payment received for expired reservation ${payment.appointmentId}`);
-
-    const appt = await this.appointmentRepo.findOne({
-      where: { id: payment.appointmentId },
-      relations: { doctor: true, patient: { user: true } },
+    return this.confirmAppointmentPaymentTransaction({
+      payment,
+      paymentId,
+      signature,
     });
-
-    if (!appt) throw new NotFoundException('Appointment not found for late payment');
-
-    // Check if slot is still free
-    const isSlotAvailable = await this.isSlotAvailable(appt.doctorId, appt.date, appt.startTime, appt.endTime);
-
-    if (isSlotAvailable) {
-      // Slot is still free: re-confirm the appointment safely!
-      const queryRunner = this.dataSource.createQueryRunner();
-      await queryRunner.connect();
-      await queryRunner.startTransaction('SERIALIZABLE');
-
-      try {
-        const token = await this.assignTokenNumber(queryRunner.manager, appt.doctorId, appt.date);
-        appt.status = AppointmentStatus.CONFIRMED;
-        appt.paymentStatus = 'PAID';
-        appt.pendingExpiresAt = null;
-        appt.tokenNumber = token;
-        await queryRunner.manager.save(appt);
-
-        payment.status = PaymentStatus.COMPLETED;
-        payment.paymentId = paymentId;
-        if (signature) payment.signature = signature;
-        await queryRunner.manager.save(payment);
-
-        await queryRunner.commitTransaction();
-      } catch (err) {
-        await queryRunner.rollbackTransaction();
-        throw err;
-      } finally {
-        await queryRunner.release();
-      }
-
-      await this.triggerPostConfirmationSideEffects(appt, payment, appt.patient);
-
-      return {
-        success: true,
-        message: 'Late payment accepted and appointment confirmed.',
-        appointmentId: appt.id,
-      };
-    } else {
-      // Slot was already taken by someone else: initiate automatic 100% refund!
-      this.logger.warn(`Slot already taken. Initiating automatic 100% refund for payment ${paymentId}`);
-      payment.status = PaymentStatus.COMPLETED;
-      payment.paymentId = paymentId;
-      await this.paymentRepo.save(payment);
-
-      const refundResult = await this.razorpayService.createRefund({
-        paymentId,
-        amount: payment.amount,
-        notes: { reason: 'Slot expired and already booked by another patient' },
-      });
-
-      const refund = this.refundRepo.create({
-        paymentId: payment.id,
-        appointmentId: appt.id,
-        patientId: payment.patientId,
-        providerRefundId: refundResult.id,
-        amount: payment.amount,
-        currency: 'INR',
-        status: RefundStatus.PROCESSED,
-        reason: 'Late payment - slot was taken by another patient',
-        processedAt: new Date(),
-      });
-      await this.refundRepo.save(refund);
-
-      payment.amountRefunded = payment.amount;
-      payment.status = PaymentStatus.REFUNDED;
-      await this.paymentRepo.save(payment);
-
-      if (appt.patient?.user?.email) {
-        await this.emailService.sendRefundInitiated(
-          appt.patient.user.email,
-          appt.patient.fullName,
-          appt.doctor.fullName,
-          payment.amount,
-          refundResult.id,
-          'Reservation expired and the slot was taken. Full refund initiated.',
-        );
-      }
-
-      return {
-        success: false,
-        message: 'Reservation expired and slot was taken. A full refund has been automatically initiated.',
-        refundId: refundResult.id,
-      };
-    }
   }
 
   private async isSlotAvailable(doctorId: string, date: string, startTime: string, endTime: string): Promise<boolean> {
@@ -905,65 +979,187 @@ export class PaymentService {
       }
     }
 
-    // Call Provider to initiate refund
-    const providerRefund = await this.razorpayService.createRefund({
-      paymentId: payment.paymentId,
-      amount: refundAmount,
-      notes: {
-        appointmentId: appointment.id,
-        reason: dto.reason || 'Patient/Doctor requested refund',
-      },
+    const effectiveIdempotencyKey =
+      dto.idempotencyKey ||
+      `rfnd_${payment.id}_${refundAmount}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+    // Check request idempotency
+    const existingRefund = await this.refundRepo.findOne({
+      where: { idempotencyKey: effectiveIdempotencyKey },
     });
-
-    // Save Refund record
-    const refund = this.refundRepo.create({
-      paymentId: payment.id,
-      appointmentId: appointment.id,
-      patientId: appointment.patientId,
-      providerRefundId: providerRefund.id,
-      amount: refundAmount,
-      currency: 'INR',
-      status: providerRefund.status === 'processed' ? RefundStatus.PROCESSED : RefundStatus.PENDING,
-      reason: dto.reason || 'Consultation cancellation refund',
-      idempotencyKey: dto.idempotencyKey || null,
-      processedAt: providerRefund.status === 'processed' ? new Date() : null,
-    });
-
-    const savedRefund = await this.refundRepo.save(refund);
-
-    // Update payment cumulative amounts and status
-    payment.amountRefunded += refundAmount;
-    payment.status =
-      payment.amountRefunded >= payment.amount
-        ? PaymentStatus.REFUNDED
-        : PaymentStatus.PARTIALLY_REFUNDED;
-    await this.paymentRepo.save(payment);
-
-        // Update appointment paymentStatus
-    appointment.paymentStatus = payment.status;
-
-    // If full refund and appointment still active, cancel appointment and release slot
-    if (
-      payment.status === PaymentStatus.REFUNDED &&
-      appointment.status !== AppointmentStatus.CANCELLED &&
-      appointment.status !== AppointmentStatus.COMPLETED
-    ) {
-      appointment.status = AppointmentStatus.CANCELLED;
-      const todayStr = getTodayIST();
-      if (appointment.date === todayStr) {
-        await this.queueService.recalculateQueue(appointment.doctorId, appointment.date, this.dataSource.manager);
+    if (existingRefund) {
+      if (existingRefund.status === RefundStatus.PROCESSED) {
+        return {
+          message: 'Refund already processed successfully',
+          data: {
+            refundId: existingRefund.id,
+            providerRefundId: existingRefund.providerRefundId,
+            amount: existingRefund.amount,
+            currency: existingRefund.currency,
+            status: existingRefund.status,
+            remainingBalance: payment.amount - payment.amountRefunded,
+          },
+        };
       }
-      this.appointmentGateway?.emitAppointmentEvent(SOCKET_EVENTS.CANCELLED, {
-        appointmentId: appointment.id,
-        patientId: appointment.patientId,
-        doctorId: appointment.doctorId,
-        status: AppointmentStatus.CANCELLED,
-        updatedAt: new Date().toISOString(),
-      });
-      await this.reminderService?.cancelRemindersForAppointment(appointment.id);
     }
 
-    await this.appointmentRepo.save(appointment);
+    // Phase 1: Lock payment and calculate balance under pessimistic lock
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    let pendingRefund: Refund;
+
+    try {
+      const lockedPayment = await queryRunner.manager.findOne(Payment, {
+        where: { id: payment.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!lockedPayment) {
+        throw new NotFoundException('Payment record not found');
+      }
+
+      const currentRemainingBalance = lockedPayment.amount - lockedPayment.amountRefunded;
+      if (currentRemainingBalance <= 0) {
+        throw new BadRequestException('This payment has already been fully refunded');
+      }
+
+      if (refundAmount > currentRemainingBalance) {
+        throw new BadRequestException(
+          `Requested refund amount (${refundAmount} paise) exceeds available refundable balance (${currentRemainingBalance} paise)`,
+        );
+      }
+
+      // Pre-persist the Refund record in PENDING state before calling provider
+      const refundEntity = queryRunner.manager.create(Refund, {
+        paymentId: lockedPayment.id,
+        appointmentId: appointment.id,
+        patientId: appointment.patientId,
+        providerRefundId: null,
+        amount: refundAmount,
+        currency: 'INR',
+        status: RefundStatus.PENDING,
+        reason: dto.reason || 'Consultation cancellation refund',
+        idempotencyKey: effectiveIdempotencyKey,
+      });
+
+      pendingRefund = await queryRunner.manager.save(refundEntity);
+      await queryRunner.commitTransaction();
+    } catch (txErr) {
+      await queryRunner.rollbackTransaction();
+      throw txErr;
+    } finally {
+      await queryRunner.release();
+    }
+
+    // Phase 2: Call Razorpay outside DB transaction
+    let providerRefund: any;
+    try {
+      providerRefund = await this.razorpayService.createRefund({
+        paymentId: payment.paymentId,
+        amount: refundAmount,
+        notes: {
+          appointmentId: appointment.id,
+          refundId: pendingRefund.id,
+          idempotencyKey: effectiveIdempotencyKey,
+          reason: dto.reason || 'Patient/Doctor requested refund',
+        },
+      });
+    } catch (providerErr: any) {
+      await this.refundRepo.update(pendingRefund.id, {
+        status: RefundStatus.FAILED,
+        errorCode: providerErr?.code || 'PROVIDER_REFUND_FAILED',
+        errorDescription: providerErr?.message || 'Provider refund creation failed',
+      });
+      throw providerErr;
+    }
+
+    // Phase 3: Update DB with provider response in a locked transaction
+    const updateRunner = this.dataSource.createQueryRunner();
+    await updateRunner.connect();
+    await updateRunner.startTransaction();
+
+    let savedRefund: Refund;
+    let finalRemainingBalance = 0;
+
+    try {
+      const lockedPayment = await updateRunner.manager.findOne(Payment, {
+        where: { id: payment.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!lockedPayment) throw new NotFoundException('Payment not found');
+
+      const lockedAppt = await updateRunner.manager.findOne(Appointment, {
+        where: { id: appointment.id },
+        lock: { mode: 'pessimistic_write' },
+        relations: { doctor: true, patient: { user: true } },
+      });
+
+      const refToUpdate = await updateRunner.manager.findOne(Refund, {
+        where: { id: pendingRefund.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (refToUpdate) {
+        refToUpdate.providerRefundId = providerRefund.id;
+        refToUpdate.status = providerRefund.status === 'processed' ? RefundStatus.PROCESSED : RefundStatus.PENDING;
+        refToUpdate.processedAt = providerRefund.status === 'processed' ? new Date() : null;
+        savedRefund = await updateRunner.manager.save(refToUpdate);
+      } else {
+        savedRefund = pendingRefund;
+      }
+
+      lockedPayment.amountRefunded += refundAmount;
+      lockedPayment.status =
+        lockedPayment.amountRefunded >= lockedPayment.amount
+          ? PaymentStatus.REFUNDED
+          : PaymentStatus.PARTIALLY_REFUNDED;
+      await updateRunner.manager.save(lockedPayment);
+
+      finalRemainingBalance = lockedPayment.amount - lockedPayment.amountRefunded;
+
+      if (lockedAppt) {
+        lockedAppt.paymentStatus = lockedPayment.status;
+        if (
+          lockedPayment.status === PaymentStatus.REFUNDED &&
+          lockedAppt.status !== AppointmentStatus.CANCELLED &&
+          lockedAppt.status !== AppointmentStatus.COMPLETED
+        ) {
+          lockedAppt.status = AppointmentStatus.CANCELLED;
+          const todayStr = getTodayIST();
+          if (lockedAppt.date === todayStr) {
+            await this.queueService.recalculateQueue(lockedAppt.doctorId, lockedAppt.date, updateRunner.manager);
+          }
+          this.appointmentGateway?.emitAppointmentEvent(SOCKET_EVENTS.CANCELLED, {
+            appointmentId: lockedAppt.id,
+            patientId: lockedAppt.patientId,
+            doctorId: lockedAppt.doctorId,
+            status: AppointmentStatus.CANCELLED,
+            updatedAt: new Date().toISOString(),
+          });
+          await this.reminderService?.cancelRemindersForAppointment(lockedAppt.id);
+        }
+        await updateRunner.manager.save(lockedAppt);
+      }
+
+      await updateRunner.commitTransaction();
+    } catch (dbErr: any) {
+      await updateRunner.rollbackTransaction();
+      this.logger.error(
+        `CRITICAL: Database update failed after provider refund created [providerRefundId=${providerRefund.id}]: ${dbErr.message}`,
+      );
+      // Emergency direct write to preserve providerRefundId
+      await this.refundRepo.update(pendingRefund.id, {
+        providerRefundId: providerRefund.id,
+        status: RefundStatus.PROCESSED,
+        processedAt: new Date(),
+      });
+      throw dbErr;
+    } finally {
+      await updateRunner.release();
+    }
 
     // Send refund email to patient
     if (appointment.patient?.user?.email) {
@@ -985,7 +1181,7 @@ export class PaymentService {
         amount: savedRefund.amount,
         currency: savedRefund.currency,
         status: savedRefund.status,
-        remainingBalance: payment.amount - payment.amountRefunded,
+        remainingBalance: finalRemainingBalance,
       },
     };
   }
