@@ -144,11 +144,11 @@ export function DoctorSidebarLayout({
     .join('')
     .toUpperCase() || 'DR';
 
-  const NavContent = () => (
-    <div className="flex flex-col h-full justify-between">
-      <div>
-        {/* Brand Header */}
-        <div className="px-5 py-6 flex items-center gap-3 border-b border-slate-100">
+  const NavContent = ({ isMobile = false }: { isMobile?: boolean }) => (
+    <div className="flex flex-col h-full min-h-0 bg-white">
+      {/* Brand Header */}
+      <div className="px-5 py-5 flex items-center justify-between border-b border-slate-100 shrink-0">
+        <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#0066cc] via-[#0055b3] to-[#00408a] text-white flex items-center justify-center shadow-xs ring-1 ring-white/20">
             <span className="text-xl font-bold leading-none">+</span>
           </div>
@@ -158,15 +158,32 @@ export function DoctorSidebarLayout({
                 Care<span className="text-[#0066cc]">Up</span>
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 font-medium mt-1">
+            <p className="text-[11px] text-slate-400 font-medium mt-0.5">
               Clinician Console
             </p>
           </div>
         </div>
 
-        {/* Navigation Items */}
-        <nav className="p-4 space-y-1.5">
-          {navItems.map((item) => {
+        {isMobile && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => setMobileMenuOpen(false)}
+            className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 h-8 w-8"
+            aria-label="Close menu"
+          >
+            <X className="h-5 w-5" />
+          </Button>
+        )}
+      </div>
+
+      {/* Navigation Items (Scrollable) */}
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1.5 min-h-0">
+        <nav className="space-y-1">
+          {navItems
+            .filter((item) => (isMobile ? item.label !== 'Notifications' : true))
+            .map((item) => {
             const Icon = item.icon;
             return (
               <Link
@@ -198,11 +215,29 @@ export function DoctorSidebarLayout({
         </nav>
       </div>
 
-      {/* Logout button at bottom */}
-      <div className="p-4 border-t border-slate-100">
-        <Button type="button" variant="ghost" onClick={handleLogout} disabled={loggingOut} className="flex w-full items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:text-rose-600 hover:bg-rose-50 transition-colors h-auto font-medium justify-start">
-          <LogOut className="h-4 w-4 shrink-0 text-slate-500" />
-          <span>{loggingOut ? 'Logging out...' : 'Logout'}</span>
+      {/* Doctor Mini Profile & Logout button pinned at bottom */}
+      <div className="p-4 border-t border-slate-100 shrink-0 bg-slate-50/60 space-y-2.5">
+        <div className="flex items-center gap-2.5 px-1">
+          <div className="h-8 w-8 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-xs border border-slate-300 shrink-0">
+            {initials}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold text-slate-900 truncate">
+              Dr. {doctorName.replace(/^Dr\.\s*/i, '')}
+            </p>
+            <p className="text-[10px] text-slate-500 truncate">{specialization}</p>
+          </div>
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleLogout}
+          disabled={loggingOut}
+          className="flex w-full items-center justify-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50/80 border-rose-200 hover:text-rose-700 hover:bg-rose-100 transition-colors h-auto shadow-xs"
+        >
+          <LogOut className="h-4 w-4 shrink-0 text-rose-500" />
+          <span>{loggingOut ? 'Logging out...' : 'Sign out / Logout'}</span>
         </Button>
       </div>
     </div>
@@ -225,16 +260,11 @@ export function DoctorSidebarLayout({
 
       {/* Mobile Sidebar Drawer */}
       <aside
-        className={`fixed inset-y-0 left-0 w-72 bg-white z-50 shadow-2xl transform transition-transform duration-300 ease-in-out lg:hidden ${
+        className={`fixed inset-y-0 left-0 w-72 max-w-[85vw] h-full h-[100dvh] bg-white z-50 shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out lg:hidden ${
           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex justify-end p-3">
-          <Button type="button" variant="ghost" size="icon" onClick={() => setMobileMenuOpen(false)} className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 h-8 w-8">
-            <X className="h-5 w-5" />
-          </Button>
-        </div>
-        <NavContent />
+        <NavContent isMobile />
       </aside>
 
       {/* Main Content Area */}
@@ -252,8 +282,8 @@ export function DoctorSidebarLayout({
             </div>
           </div>
 
-          {/* Right Header: Notification & Doctor Profile */}
-          <div className="flex items-center gap-4 sm:gap-6">
+          {/* Right Header: Notification & Doctor Profile & Logout */}
+          <div className="flex items-center gap-2.5 sm:gap-4">
             {/* Notification Bell */}
             <div className="relative">
               <Link
@@ -274,9 +304,9 @@ export function DoctorSidebarLayout({
             {/* Doctor Profile Info */}
             <Link
               href="/doctor/profile"
-              className="flex items-center gap-3 pl-2 hover:opacity-90 transition-opacity"
+              className="flex items-center gap-2 sm:gap-3 pl-1 sm:pl-2 hover:opacity-90 transition-opacity"
             >
-              <div className="h-9 w-9 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-xs border border-slate-300 shadow-xs">
+              <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-xs border border-slate-300 shadow-xs">
                 {initials}
               </div>
               <div className="text-left hidden sm:block">
@@ -288,6 +318,20 @@ export function DoctorSidebarLayout({
                 </div>
               </div>
             </Link>
+
+            {/* Logout button in top header */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={handleLogout}
+              disabled={loggingOut}
+              title="Sign out / Logout"
+              aria-label="Logout"
+              className="text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl h-8 w-8 sm:h-9 sm:w-9 transition-colors"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
           </div>
         </header>
 
