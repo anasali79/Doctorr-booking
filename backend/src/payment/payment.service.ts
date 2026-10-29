@@ -582,7 +582,7 @@ export class PaymentService {
       const appt = await queryRunner.manager.findOne(Appointment, {
         where: { id: payment.appointmentId },
         lock: { mode: 'pessimistic_write' },
-        relations: { doctor: true, patient: { user: true } },
+        loadEagerRelations: false,
       });
 
       if (!appt) {
@@ -692,7 +692,13 @@ export class PaymentService {
       await queryRunner.commitTransaction();
 
       // Trigger post-confirmation side effects (emails, notifications, reminders, sockets)
-      const patientEntity = params.patient || appt.patient;
+      let patientEntity: Patient | null = params.patient || payment.patient || null;
+      if (!patientEntity) {
+        patientEntity = await this.patientRepo.findOne({
+          where: { id: appt.patientId },
+          relations: { user: true },
+        });
+      }
       if (patientEntity) {
         await this.triggerPostConfirmationSideEffects(confirmedAppointment, lockedPayment, patientEntity);
       }
@@ -774,12 +780,17 @@ export class PaymentService {
       await this.appointmentRepo.save(appt);
     }
 
-    const email = appt.patient?.user?.email;
+    const fullAppt = await this.appointmentRepo.findOne({
+      where: { id: appt.id },
+      relations: { doctor: true, patient: { user: true } },
+    });
+
+    const email = fullAppt?.patient?.user?.email;
     if (email) {
       await this.emailService.sendRefundInitiated(
         email,
-        appt.patient?.fullName || 'Patient',
-        appt.doctor?.fullName || 'Doctor',
+        fullAppt?.patient?.fullName || 'Patient',
+        fullAppt?.doctor?.fullName || 'Doctor',
         payment.amount,
         providerRefund.id,
         reason,
@@ -789,7 +800,7 @@ export class PaymentService {
     await this.notificationService.createNotification(
       appt.patientId,
       'Reservation Expired — Full Refund Initiated',
-      `Your reservation with Dr. ${appt.doctor?.fullName || 'Doctor'} on ${formatDate(appt.date)} expired and the slot was taken. A full refund of ₹${payment.amount / 100} has been automatically initiated.`,
+      `Your reservation with Dr. ${fullAppt?.doctor?.fullName || 'Doctor'} on ${formatDate(appt.date)} expired and the slot was taken. A full refund of ₹${payment.amount / 100} has been automatically initiated.`,
       NotificationType.APPOINTMENT_CANCELLED,
     );
 
@@ -1094,7 +1105,7 @@ export class PaymentService {
       const lockedAppt = await updateRunner.manager.findOne(Appointment, {
         where: { id: appointment.id },
         lock: { mode: 'pessimistic_write' },
-        relations: { doctor: true, patient: { user: true } },
+        loadEagerRelations: false,
       });
 
       const refToUpdate = await updateRunner.manager.findOne(Refund, {
