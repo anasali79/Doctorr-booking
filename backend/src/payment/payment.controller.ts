@@ -13,6 +13,7 @@ import {
 import { Request } from 'express';
 import { PaymentService } from './payment.service';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { RetryOrderDto } from './dto/retry-order.dto';
 import { VerifyPaymentDto } from './dto/verify-payment.dto';
 import { CreateRefundDto } from './dto/create-refund.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -37,6 +38,16 @@ export class PaymentController {
     @Body() dto: CreateOrderDto,
   ) {
     return this.paymentService.createOrder(user.id, dto);
+  }
+
+  @Post('retry-order')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PATIENT)
+  async retryOrder(
+    @CurrentUser() user: { id: string },
+    @Body() dto: RetryOrderDto,
+  ) {
+    return this.paymentService.retryOrder(user.id, dto.appointmentId);
   }
 
   @Post('verify')

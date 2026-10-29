@@ -47,6 +47,7 @@ export interface Patient {
 }
 
 export type AppointmentStatus =
+  | 'PENDING_PAYMENT'
   | 'CONFIRMED'
   | 'CHECKED_IN'
   | 'IN_CONSULTATION'
@@ -64,6 +65,7 @@ export interface Appointment {
   endTime: string; // HH:mm
   status: AppointmentStatus;
   paymentStatus?: string;
+  pendingExpiresAt?: string | null;
   tokenNumber?: number | null;
   queuePosition?: number | null;
   estimatedWaitTime?: number | null;

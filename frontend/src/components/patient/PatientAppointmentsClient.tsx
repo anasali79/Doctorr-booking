@@ -16,7 +16,9 @@ import {
   RotateCcw,
   CreditCard,
   CheckCircle2,
+  Clock,
 } from 'lucide-react';
+import { launchRazorpayCheckout } from '@/lib/razorpay';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import { PatientLiveQueueModal } from './PatientLiveQueueModal';
 import { DoctorAvatar } from '@/components/common/DoctorAvatar';
@@ -40,7 +42,14 @@ export function PatientAppointmentsClient({
 }: PatientAppointmentsClientProps) {
   const router = useRouter();
   const [appointments, setAppointments] = useState(initialAppointments);
-  const [activeTab, setActiveTab] = useState<'UPCOMING' | 'PAST' | 'CANCELLED'>('UPCOMING');
+  const [activeTab, setActiveTab] = useState<'UPCOMING' | 'PAST' | 'CANCELLED' | 'PENDING'>('UPCOMING');
+  const [retryingPaymentId, setRetryingPaymentId] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(Date.now());
+
+  React.useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Cancel dialog state
   const [cancellingId, setCancellingId] = useState<string | null>(null);
@@ -76,6 +85,13 @@ export function PatientAppointmentsClient({
     return false;
   };
 
+  const pendingList = appointments.filter(
+    (a) =>
+      a.status === 'PENDING_PAYMENT' &&
+      a.pendingExpiresAt &&
+      new Date(a.pendingExpiresAt).getTime() > nowMs,
+  );
+
   const upcomingList = appointments.filter(
     (a) =>
       ['CONFIRMED', 'CHECKED_IN', 'IN_CONSULTATION'].includes(a.status) &&
@@ -89,15 +105,86 @@ export function PatientAppointmentsClient({
   );
 
   const cancelledList = appointments.filter(
-    (a) => a.status === 'CANCELLED' || a.status === 'RESCHEDULED',
+    (a) =>
+      a.status === 'CANCELLED' ||
+      a.status === 'RESCHEDULED' ||
+      (a.status === 'PENDING_PAYMENT' && (!a.pendingExpiresAt || new Date(a.pendingExpiresAt).getTime() <= nowMs)),
   );
 
   const currentList =
-    activeTab === 'UPCOMING'
+    activeTab === 'PENDING'
+      ? pendingList
+      : activeTab === 'UPCOMING'
       ? upcomingList
       : activeTab === 'PAST'
       ? pastList
       : cancelledList;
+
+  // Retry payment for pending reservation
+  const handleRetryPayment = async (appt: Appointment) => {
+    try {
+      setRetryingPaymentId(appt.id);
+      const res = await clientAxios.post<{
+        orderId: string;
+        amount: number;
+        currency: string;
+        keyId: string;
+        appointmentId: string;
+        expiresAt: string;
+      }>('/api/payment/retry-order', {
+        appointmentId: appt.id,
+      });
+
+      const orderData = res.data;
+
+      await launchRazorpayCheckout({
+        orderData,
+        doctorName: appt.doctor?.fullName || 'Doctor',
+        onSuccess: () => {
+          toast.success('Payment Received! Your appointment is confirmed.');
+          setAppointments((prev) =>
+            prev.map((a) =>
+              a.id === appt.id
+                ? { ...a, status: 'CONFIRMED', paymentStatus: 'PAID', pendingExpiresAt: null }
+                : a,
+            ),
+          );
+          router.refresh();
+        },
+        onFailure: (err: any) => {
+          toast.error('Payment Incomplete', {
+            description: extractErrorMessage(err) || 'You can retry before the 15-minute reservation expires.',
+          });
+        },
+      });
+    } catch (err) {
+      toast.error('Could not initiate payment', {
+        description: extractErrorMessage(err),
+      });
+    } finally {
+      setRetryingPaymentId(null);
+    }
+  };
+
+  const handleCancelPending = async (appointmentId: string) => {
+    try {
+      setCancelLoading(true);
+      await clientAxios.patch('/api/appointment/' + appointmentId + '/cancel', {
+        reason: 'Cancelled pending reservation',
+      });
+      toast.success('Reservation Cancelled', {
+        description: 'The reserved slot has been released back immediately.',
+      });
+      setAppointments((prev) => prev.filter((a) => a.id !== appointmentId));
+      router.refresh();
+    } catch (err) {
+      toast.error('Failed to cancel reservation', {
+        description: extractErrorMessage(err),
+      });
+    } finally {
+      setCancelLoading(false);
+    }
+  };
 
   // Handle Cancel via Axios
   const apptToCancel = appointments.find((a) => a.id === cancellingId);
@@ -224,8 +311,103 @@ export function PatientAppointmentsClient({
 
   return (
     <div className="space-y-6">
+      {/* Active Pending Reservations Alert Banner */}
+      {pendingList.length > 0 && (
+        <Card className="rounded-3xl border border-amber-300 bg-amber-50/80 p-5 shadow-xs space-y-4 backdrop-blur-md">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-full bg-amber-200/80 flex items-center justify-center shrink-0">
+                <Clock className="w-4 h-4 text-amber-800 animate-spin" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-amber-950">
+                  Pending Payment — Slot Held for 15 Minutes ({pendingList.length})
+                </h3>
+                <p className="text-xs text-amber-700">
+                  Complete your payment before time expires to secure your consultation slot.
+                </p>
+              </div>
+            </div>
+            <span className="text-[11px] font-bold text-amber-900 bg-amber-200/80 px-3 py-1 rounded-full uppercase tracking-wider self-start sm:self-auto">
+              Held for 15 min
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+            {pendingList.map((pAppt) => {
+              const remainingMs = Math.max(0, new Date(pAppt.pendingExpiresAt!).getTime() - nowMs);
+              const mins = Math.floor(remainingMs / 60000);
+              const secs = Math.floor((remainingMs % 60000) / 1000);
+              const timerText = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
+              return (
+                <div key={pAppt.id} className="bg-white rounded-2xl border border-amber-200/90 p-4 shadow-2xs space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <DoctorAvatar name={pAppt.doctor?.fullName || 'Doctor'} size="sm" className="rounded-xl border border-black/10" />
+                      <div>
+                        <h4 className="font-bold text-zinc-950 text-sm">
+                          Dr. {pAppt.doctor?.fullName || 'Doctor'}
+                        </h4>
+                        <p className="text-xs text-zinc-500 capitalize">
+                          {pAppt.doctor?.specialization}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                      <Clock className="w-3.5 h-3.5 text-amber-700 animate-spin" />
+                      {timerText} left
+                    </span>
+                  </div>
+
+                  <div className="text-xs text-zinc-600 flex items-center gap-2 bg-amber-50/50 p-2.5 rounded-xl border border-amber-100">
+                    <CalendarDays className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span className="font-medium">{formatDate(pAppt.date)} at {formatTime(pAppt.startTime)} - {formatTime(pAppt.endTime)}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button
+                      type="button"
+                      onClick={() => handleRetryPayment(pAppt)}
+                      disabled={retryingPaymentId === pAppt.id}
+                      className="flex-1 bg-[#0066cc] hover:bg-[#0052a3] text-white font-bold text-xs h-9 rounded-xl shadow-xs"
+                    >
+                      {retryingPaymentId === pAppt.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                      ) : (
+                        <CreditCard className="w-3.5 h-3.5 mr-1.5" />
+                      )}
+                      Complete Payment Now
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => handleCancelPending(pAppt.id)}
+                      disabled={cancelLoading}
+                      className="text-rose-600 border-rose-200 hover:bg-rose-50 text-xs h-9 px-3 rounded-xl"
+                    >
+                      Cancel Slot
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
       {/* Filter Tabs in Frosted Glass */}
-      <div className="flex items-center gap-2 border-b border-black/[0.06] pb-4">
+      <div className="flex items-center gap-2 border-b border-black/[0.06] pb-4 overflow-x-auto">
+        {pendingList.length > 0 && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setActiveTab('PENDING')}
+            className={`h-auto font-bold ${activeTab === 'PENDING' ? 'bg-amber-500 text-white shadow-xs' : 'text-amber-800 bg-amber-100/70 hover:bg-amber-200/70'}`}
+          >
+            Pending Payment ({pendingList.length})
+          </Button>
+        )}
         <Button
           type="button"
           variant="ghost"
@@ -320,6 +502,58 @@ export function PatientAppointmentsClient({
                     </span>
                   </div>
                 </div>
+
+                {/* Pending Payment Card Action */}
+                {appt.status === 'PENDING_PAYMENT' && (
+                  <div className="pt-2 border-t border-amber-200/80 space-y-2">
+                    {appt.pendingExpiresAt && new Date(appt.pendingExpiresAt).getTime() > nowMs ? (
+                      <>
+                        <div className="flex items-center justify-between text-xs text-amber-800 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200">
+                          <span className="font-semibold flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-amber-600 animate-spin" />
+                            Reservation expires in:
+                          </span>
+                          <span className="font-mono font-bold">
+                            {(() => {
+                              const rem = Math.max(0, new Date(appt.pendingExpiresAt).getTime() - nowMs);
+                              const m = Math.floor(rem / 60000);
+                              const s = Math.floor((rem % 60000) / 1000);
+                              return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+                            })()}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            onClick={() => handleRetryPayment(appt)}
+                            disabled={retryingPaymentId === appt.id}
+                            className="flex-1 bg-[#0066cc] hover:bg-[#0052a3] text-white font-bold text-xs h-9 rounded-xl shadow-xs"
+                          >
+                            {retryingPaymentId === appt.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                            ) : (
+                              <CreditCard className="w-3.5 h-3.5 mr-1" />
+                            )}
+                            Pay Now
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => handleCancelPending(appt.id)}
+                            disabled={cancelLoading}
+                            className="text-rose-600 border-rose-200 hover:bg-rose-50 text-xs h-9 px-3 rounded-xl"
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="p-2 text-center text-xs font-semibold text-zinc-500 bg-zinc-100 rounded-xl">
+                        Reservation Expired (Slot Released)
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Live Queue Tracker button */}
                 {!isExpired && (appt.status === 'CONFIRMED' || appt.status === 'CHECKED_IN' || appt.status === 'IN_CONSULTATION') && (

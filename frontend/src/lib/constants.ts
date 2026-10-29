@@ -30,6 +30,13 @@ export const STATUS_CONFIG: Record<
   AppointmentStatus,
   { label: string; bg: string; text: string; border: string; dot: string }
 > = {
+  PENDING_PAYMENT: {
+    label: 'Pending Payment',
+    bg: 'bg-amber-50 dark:bg-amber-950/40',
+    text: 'text-amber-800 dark:text-amber-300',
+    border: 'border-amber-300 dark:border-amber-700',
+    dot: 'bg-amber-500',
+  },
   CONFIRMED: {
     label: 'Confirmed',
     bg: 'bg-blue-50 dark:bg-blue-950/40',

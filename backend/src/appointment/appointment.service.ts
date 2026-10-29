@@ -49,8 +49,18 @@ function assertValidDateFormat(date: string): void {
   if (!/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(date)) {
     throw new BadRequestException('Invalid date format. Expected YYYY-MM-DD');
   }
-  if (isNaN(Date.parse(`${date}T00:00:00`))) {
-    throw new BadRequestException('Invalid date');
+  const [yStr, mStr, dStr] = date.split('-');
+  const y = Number(yStr);
+  const m = Number(mStr);
+  const d = Number(dStr);
+  const parsed = new Date(Date.UTC(y, m - 1, d));
+  if (
+    isNaN(parsed.getTime()) ||
+    parsed.getUTCFullYear() !== y ||
+    parsed.getUTCMonth() !== m - 1 ||
+    parsed.getUTCDate() !== d
+  ) {
+    throw new BadRequestException('Invalid calendar date');
   }
 }
 
@@ -446,6 +456,20 @@ export class AppointmentService {
       order: { date: 'DESC', startTime: 'DESC' },
     });
 
+    const now = new Date();
+    for (const appt of appointments) {
+      if (
+        appt.status === AppointmentStatus.PENDING_PAYMENT &&
+        appt.pendingExpiresAt &&
+        new Date(appt.pendingExpiresAt) <= now
+      ) {
+        appt.status = AppointmentStatus.CANCELLED;
+        appt.paymentStatus = 'FAILED';
+        appt.pendingExpiresAt = null;
+        await this.appointmentRepo.save(appt);
+      }
+    }
+
     return {
       message: appointments.length === 0 ? 'No appointments found' : 'Appointments retrieved successfully',
       data: appointments.map((appt) => this.toPatientAppointmentResponse(appt)),
@@ -604,7 +628,9 @@ export class AppointmentService {
       throw new BadRequestException('Cannot cancel an already rescheduled appointment');
     }
 
-    this.validateCancelCutoff(appointment.date, appointment.startTime);
+    if (appointment.status !== AppointmentStatus.PENDING_PAYMENT) {
+      this.validateCancelCutoff(appointment.date, appointment.startTime);
+    }
 
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -617,11 +643,40 @@ export class AppointmentService {
         loadEagerRelations: false,
       });
 
-      if (!app || app.status === AppointmentStatus.CANCELLED) {
+      if (!app) {
+        throw new NotFoundException(`Appointment with ID ${appointmentId} not found`);
+      }
+
+      if (app.status === AppointmentStatus.CANCELLED) {
         throw new BadRequestException('Appointment is already cancelled');
       }
 
+      if (app.status === AppointmentStatus.RESCHEDULED) {
+        throw new BadRequestException('Cannot cancel an already rescheduled appointment');
+      }
+
+      if (app.status === AppointmentStatus.COMPLETED) {
+        throw new BadRequestException('Cannot cancel an already completed appointment');
+      }
+
+      const cancellableStatuses = [
+        AppointmentStatus.CONFIRMED,
+        AppointmentStatus.PENDING_PAYMENT,
+        AppointmentStatus.CHECKED_IN,
+      ];
+      if (!cancellableStatuses.includes(app.status)) {
+        throw new BadRequestException(`Cannot cancel appointment with current status '${app.status}'`);
+      }
+
+      if (app.status !== AppointmentStatus.PENDING_PAYMENT) {
+        this.validateCancelCutoff(app.date, app.startTime);
+      }
+
       app.status = AppointmentStatus.CANCELLED;
+      if (app.paymentStatus === 'PENDING') {
+        app.paymentStatus = 'FAILED';
+      }
+      app.pendingExpiresAt = null;
       await queryRunner.manager.save(app);
 
       await this.queueService.recalculateQueue(app.doctorId, app.date, queryRunner.manager);
@@ -1113,8 +1168,29 @@ export class AppointmentService {
         loadEagerRelations: false,
       });
 
-      if (!app || app.status === AppointmentStatus.CANCELLED) {
+      if (!app) {
+        throw new NotFoundException(`Appointment with ID ${appointmentId} not found`);
+      }
+
+      if (app.status === AppointmentStatus.CANCELLED) {
         throw new BadRequestException('Appointment is already cancelled');
+      }
+
+      if (app.status === AppointmentStatus.RESCHEDULED) {
+        throw new BadRequestException('Cannot cancel an already rescheduled appointment');
+      }
+
+      if (app.status === AppointmentStatus.COMPLETED) {
+        throw new BadRequestException('Cannot cancel an already completed appointment');
+      }
+
+      const cancellableStatuses = [
+        AppointmentStatus.CONFIRMED,
+        AppointmentStatus.PENDING_PAYMENT,
+        AppointmentStatus.CHECKED_IN,
+      ];
+      if (!cancellableStatuses.includes(app.status)) {
+        throw new BadRequestException(`Cannot cancel appointment with current status '${app.status}'`);
       }
 
       app.status = AppointmentStatus.CANCELLED;
@@ -1486,6 +1562,7 @@ export class AppointmentService {
       endTime: appointment.endTime,
       status: appointment.status,
       paymentStatus: appointment.paymentStatus ?? 'UNPAID',
+      pendingExpiresAt: appointment.pendingExpiresAt ?? null,
       tokenNumber: appointment.tokenNumber ?? null,
       doctor: appointment.doctor
         ? {
