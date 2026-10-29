@@ -4,11 +4,12 @@ import { NotificationController } from './notification.controller';
 import { NotificationService } from './notification.service';
 import { Notification } from './entities/notification.entity';
 import { Patient } from '../patient/entities/patient.entity';
+import { Doctor } from '../doctor/entities/doctor.entity';
 import { EmailModule } from '../email/email.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Notification, Patient]),
+    TypeOrmModule.forFeature([Notification, Patient, Doctor]),
     EmailModule,
   ],
   controllers: [NotificationController],
@@ -16,4 +17,3 @@ import { EmailModule } from '../email/email.module';
   exports: [NotificationService],
 })
 export class NotificationModule {}
-

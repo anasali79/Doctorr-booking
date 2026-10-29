@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -14,8 +14,6 @@ import {
   Bell,
   Menu,
   X,
-  Stethoscope,
-  ChevronDown,
 } from 'lucide-react';
 import { Doctor, SessionUser } from '@/types';
 import { clientAxios } from '@/lib/api/axios';
@@ -36,6 +34,39 @@ export function DoctorSidebarLayout({
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchUnread = async () => {
+      try {
+        const res = await clientAxios.get<{ data: { unreadCount: number } }>(
+          '/api/notifications/unread-count',
+        );
+        if (mounted && res.data?.data?.unreadCount !== undefined) {
+          setUnreadCount(res.data.data.unreadCount);
+        }
+      } catch {
+        // silent fail
+      }
+    };
+
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 15000);
+
+    const handleUpdate = () => fetchUnread();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('notification_updated', handleUpdate);
+    }
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('notification_updated', handleUpdate);
+      }
+    };
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -86,6 +117,13 @@ export function DoctorSidebarLayout({
       active: pathname.startsWith('/doctor/availability'),
     },
     {
+      label: 'Notifications',
+      href: '/doctor/notifications',
+      icon: Bell,
+      active: pathname.startsWith('/doctor/notifications'),
+      badge: unreadCount > 0 ? (unreadCount > 9 ? '9+' : String(unreadCount)) : undefined,
+    },
+    {
       label: 'Profile',
       href: '/doctor/profile',
       icon: User,
@@ -134,18 +172,25 @@ export function DoctorSidebarLayout({
                 key={item.href}
                 href={item.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
                   item.active
                     ? 'bg-blue-50 text-[#0066cc] font-semibold shadow-xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
                 }`}
               >
-                <Icon
-                  className={`h-4 w-4 shrink-0 ${
-                    item.active ? 'text-[#0066cc]' : 'text-slate-500'
-                  }`}
-                />
-                <span>{item.label}</span>
+                <div className="flex items-center gap-3 min-w-0">
+                  <Icon
+                    className={`h-4 w-4 shrink-0 ${
+                      item.active ? 'text-[#0066cc]' : 'text-slate-500'
+                    }`}
+                  />
+                  <span className="truncate">{item.label}</span>
+                </div>
+                {item.badge && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#0066cc] text-white shadow-xs">
+                    {item.badge}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -223,14 +268,19 @@ export function DoctorSidebarLayout({
           <div className="flex items-center gap-4 sm:gap-6">
             {/* Notification Bell */}
             <div className="relative">
-              <button
-                type="button"
-                className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors relative"
+              <Link
+                href="/doctor/notifications"
+                className="p-2 rounded-xl text-slate-600 hover:text-[#0066cc] hover:bg-slate-100 transition-colors relative block"
                 aria-label="Notifications"
+                title="Notifications"
               >
                 <Bell className="h-5 w-5" />
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" />
-              </button>
+                {unreadCount > 0 && (
+                  <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#0066cc] text-[10px] font-bold text-white shadow-xs">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </Link>
             </div>
 
             {/* Doctor Profile Info */}

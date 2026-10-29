@@ -910,8 +910,30 @@ export class PaymentService {
         : PaymentStatus.PARTIALLY_REFUNDED;
     await this.paymentRepo.save(payment);
 
-    // Update appointment paymentStatus
+        // Update appointment paymentStatus
     appointment.paymentStatus = payment.status;
+
+    // If full refund and appointment still active, cancel appointment and release slot
+    if (
+      payment.status === PaymentStatus.REFUNDED &&
+      appointment.status !== AppointmentStatus.CANCELLED &&
+      appointment.status !== AppointmentStatus.COMPLETED
+    ) {
+      appointment.status = AppointmentStatus.CANCELLED;
+      const todayStr = getTodayIST();
+      if (appointment.date === todayStr) {
+        await this.queueService.recalculateQueue(appointment.doctorId, appointment.date, this.dataSource.manager);
+      }
+      this.appointmentGateway?.emitAppointmentEvent(SOCKET_EVENTS.CANCELLED, {
+        appointmentId: appointment.id,
+        patientId: appointment.patientId,
+        doctorId: appointment.doctorId,
+        status: AppointmentStatus.CANCELLED,
+        updatedAt: new Date().toISOString(),
+      });
+      await this.reminderService?.cancelRemindersForAppointment(appointment.id);
+    }
+
     await this.appointmentRepo.save(appointment);
 
     // Send refund email to patient

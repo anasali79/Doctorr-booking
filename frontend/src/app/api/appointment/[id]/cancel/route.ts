@@ -13,6 +13,12 @@ export async function PATCH(
     }
 
     const { id } = await params;
+    let body: any = undefined;
+    try {
+      body = await req.json();
+    } catch {
+      // Body is optional
+    }
 
     // If role is DOCTOR, use doctor endpoint, else patient endpoint
     const endpoint =
@@ -23,6 +29,7 @@ export async function PATCH(
     const res = await apiFetch(endpoint, {
       method: 'PATCH',
       token,
+      body,
     });
 
     return NextResponse.json(res);
@@ -30,6 +37,9 @@ export async function PATCH(
     if (error instanceof ApiError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    return NextResponse.json({ error: error?.message || 'Failed to cancel appointment' }, { status: 500 });
+    return NextResponse.json(
+      { error: error?.message || 'Failed to cancel appointment' },
+      { status: 500 },
+    );
   }
 }

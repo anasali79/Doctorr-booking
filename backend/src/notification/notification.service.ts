@@ -8,7 +8,9 @@ import { Repository } from 'typeorm';
 
 import { Notification } from './entities/notification.entity';
 import { Patient } from '../patient/entities/patient.entity';
+import { Doctor } from '../doctor/entities/doctor.entity';
 import { NotificationType } from './enums/notification-type.enum';
+import { Role } from '../common/enums/role.enum';
 
 // Format date to readable string
 function formatDate(date: Date): string {
@@ -39,6 +41,9 @@ export class NotificationService {
 
     @InjectRepository(Patient)
     private readonly patientRepo: Repository<Patient>,
+
+    @InjectRepository(Doctor)
+    private readonly doctorRepo: Repository<Doctor>,
   ) { }
 
   /**
@@ -59,14 +64,35 @@ export class NotificationService {
   }
 
   /**
-   * Internal helper to create notification
-   * @param patientId
+   * Helper method to get doctor by userId
+   */
+  private async getDoctorByUserId(userId: string): Promise<Doctor> {
+    const doctor = await this.doctorRepo.findOne({
+      where: { userId },
+    });
+
+    if (!doctor) {
+      throw new NotFoundException(
+        'Doctor profile not found. Please create your profile first.',
+      );
+    }
+
+    return doctor;
+  }
+
+  /**
+   * Internal helper to create patient notification
    */
   async createNotification(
-    patientId: string, title: string, message: string, type: NotificationType, note: string | null,
+    patientId: string,
+    title: string,
+    message: string,
+    type: NotificationType,
+    note: string | null = null,
   ): Promise<Notification> {
     const notification = this.notificationRepo.create({
       patientId,
+      doctorId: null,
       title,
       message,
       type,
@@ -78,19 +104,51 @@ export class NotificationService {
   }
 
   /**
-   * Get all notifications for logged-in patient (with pagination)
+   * Internal helper to create doctor notification
+   */
+  async createDoctorNotification(
+    doctorId: string,
+    title: string,
+    message: string,
+    type: NotificationType,
+    note: string | null = null,
+  ): Promise<Notification> {
+    const notification = this.notificationRepo.create({
+      doctorId,
+      patientId: null,
+      title,
+      message,
+      type,
+      note,
+      isRead: false,
+    });
+
+    return await this.notificationRepo.save(notification);
+  }
+
+  /**
+   * Get all notifications for logged-in user (doctor or patient) with pagination
    */
   async getNotifications(
     userId: string,
+    userRole: string = Role.PATIENT,
     page: number = 1,
     limit: number = 20,
   ) {
-    const patient = await this.getPatientByUserId(userId);
+    let whereCondition: any;
+
+    if (userRole === Role.DOCTOR) {
+      const doctor = await this.getDoctorByUserId(userId);
+      whereCondition = { doctorId: doctor.id };
+    } else {
+      const patient = await this.getPatientByUserId(userId);
+      whereCondition = { patientId: patient.id };
+    }
 
     const skip = (page - 1) * limit;
 
     const [notifications, total] = await this.notificationRepo.findAndCount({
-      where: { patientId: patient.id },
+      where: whereCondition,
       order: { createdAt: 'DESC' },
       skip,
       take: limit,
@@ -115,14 +173,19 @@ export class NotificationService {
   /**
    * Mark a single notification as read
    */
-  async markAsRead(userId: string, notificationId: string) {
-    const patient = await this.getPatientByUserId(userId);
+  async markAsRead(userId: string, userRole: string, notificationId: string) {
+    let whereCondition: any = { id: notificationId };
+
+    if (userRole === Role.DOCTOR) {
+      const doctor = await this.getDoctorByUserId(userId);
+      whereCondition.doctorId = doctor.id;
+    } else {
+      const patient = await this.getPatientByUserId(userId);
+      whereCondition.patientId = patient.id;
+    }
 
     const notification = await this.notificationRepo.findOne({
-      where: {
-        id: notificationId,
-        patientId: patient.id,
-      },
+      where: whereCondition,
     });
 
     if (!notification) {
@@ -132,7 +195,11 @@ export class NotificationService {
     }
 
     if (notification.isRead) {
-      throw new BadRequestException('Notification is already marked as read');
+      return {
+        success: true,
+        message: 'Notification is already marked as read',
+        data: formatNotification(notification),
+      };
     }
 
     notification.isRead = true;
@@ -148,11 +215,19 @@ export class NotificationService {
   /**
    * Mark all unread notifications as read
    */
-  async markAllAsRead(userId: string) {
-    const patient = await this.getPatientByUserId(userId);
+  async markAllAsRead(userId: string, userRole: string = Role.PATIENT) {
+    let whereCondition: any;
+
+    if (userRole === Role.DOCTOR) {
+      const doctor = await this.getDoctorByUserId(userId);
+      whereCondition = { doctorId: doctor.id, isRead: false };
+    } else {
+      const patient = await this.getPatientByUserId(userId);
+      whereCondition = { patientId: patient.id, isRead: false };
+    }
 
     const result = await this.notificationRepo.update(
-      { patientId: patient.id, isRead: false },
+      whereCondition,
       { isRead: true },
     );
 
@@ -171,14 +246,19 @@ export class NotificationService {
   /**
    * Get unread notification count
    */
-  async getUnreadCount(userId: string) {
-    const patient = await this.getPatientByUserId(userId);
+  async getUnreadCount(userId: string, userRole: string = Role.PATIENT) {
+    let whereCondition: any;
+
+    if (userRole === Role.DOCTOR) {
+      const doctor = await this.getDoctorByUserId(userId);
+      whereCondition = { doctorId: doctor.id, isRead: false };
+    } else {
+      const patient = await this.getPatientByUserId(userId);
+      whereCondition = { patientId: patient.id, isRead: false };
+    }
 
     const unreadCount = await this.notificationRepo.count({
-      where: {
-        patientId: patient.id,
-        isRead: false,
-      },
+      where: whereCondition,
     });
 
     return {

@@ -7,6 +7,7 @@ import {
   CreateDateColumn,
 } from 'typeorm';
 import { Patient } from '../../patient/entities/patient.entity';
+import { Doctor } from '../../doctor/entities/doctor.entity';
 import { NotificationType } from '../enums/notification-type.enum';
 
 @Entity('notifications')
@@ -14,12 +15,19 @@ export class Notification {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'uuid' })
-  patientId: string;
+  @Column({ type: 'uuid', nullable: true })
+  patientId: string | null;
 
-  @ManyToOne(() => Patient, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Patient, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'patientId' })
-  patient: Patient;
+  patient?: Patient | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  doctorId: string | null;
+
+  @ManyToOne(() => Doctor, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'doctorId' })
+  doctor?: Doctor | null;
 
   @Column({ type: 'varchar', length: 255 })
   title: string;

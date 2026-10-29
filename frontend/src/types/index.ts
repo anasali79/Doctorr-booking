@@ -63,6 +63,7 @@ export interface Appointment {
   startTime: string; // HH:mm
   endTime: string; // HH:mm
   status: AppointmentStatus;
+  paymentStatus?: string;
   tokenNumber?: number | null;
   queuePosition?: number | null;
   estimatedWaitTime?: number | null;

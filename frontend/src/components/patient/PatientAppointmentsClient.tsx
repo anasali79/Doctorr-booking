@@ -13,6 +13,9 @@ import {
   Loader2,
   AlertTriangle,
   Activity,
+  RotateCcw,
+  CreditCard,
+  CheckCircle2,
 } from 'lucide-react';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import { PatientLiveQueueModal } from './PatientLiveQueueModal';
@@ -42,6 +45,8 @@ export function PatientAppointmentsClient({
   // Cancel dialog state
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelReasonPreset, setCancelReasonPreset] = useState('Change of plans / Schedule conflict');
+  const [cancelReasonCustom, setCancelReasonCustom] = useState('');
 
   // Reschedule dialog state
   const [reschedulingAppt, setReschedulingAppt] = useState<Appointment | null>(null);
@@ -95,21 +100,47 @@ export function PatientAppointmentsClient({
       : cancelledList;
 
   // Handle Cancel via Axios
+  const apptToCancel = appointments.find((a) => a.id === cancellingId);
+  const isPaidAppointment = apptToCancel?.paymentStatus === 'PAID';
+  const fee = apptToCancel?.doctor?.consultationFee || 500;
+
   const handleCancel = async () => {
     if (!cancellingId) return;
 
+    const finalReason =
+      cancelReasonPreset === 'Other'
+        ? cancelReasonCustom.trim() || 'Patient requested cancellation'
+        : cancelReasonCustom.trim()
+        ? (cancelReasonPreset + ': ' + cancelReasonCustom.trim())
+        : cancelReasonPreset;
+
     try {
       setCancelLoading(true);
-      await clientAxios.patch(`/api/appointment/${cancellingId}/cancel`);
-
-      toast.success('Appointment Cancelled', {
-        description: 'The consultation slot has been released back to the clinic.',
+      const res = await clientAxios.patch('/api/appointment/' + cancellingId + '/cancel', {
+        reason: finalReason,
       });
 
+      const refundData = res.data?.data?.refund;
+      if (refundData || isPaidAppointment) {
+        toast.success('Appointment Cancelled & Refund Initiated!', {
+          description: 'Full refund of ₹' + fee + ' has been requested. It will be credited to your account via Razorpay within 5–7 business days.',
+        });
+      } else {
+        toast.success('Appointment Cancelled', {
+          description: 'The consultation slot has been released back to the clinic.',
+        });
+      }
+
       setAppointments((prev) =>
-        prev.map((a) => (a.id === cancellingId ? { ...a, status: 'CANCELLED' } : a)),
+        prev.map((a) =>
+          a.id === cancellingId
+            ? { ...a, status: 'CANCELLED', paymentStatus: isPaidAppointment ? 'REFUNDED' : a.paymentStatus }
+            : a,
+        ),
       );
       setCancellingId(null);
+      setCancelReasonCustom('');
+      setCancelReasonPreset('Change of plans / Schedule conflict');
       router.refresh();
     } catch (err: unknown) {
       toast.error('Cancel Failed', { description: extractErrorMessage(err) });
@@ -323,37 +354,129 @@ export function PatientAppointmentsClient({
       )}
 
       {/* Cancel Confirmation Modal */}
-      <Dialog open={!!cancellingId} onOpenChange={(open) => !open && setCancellingId(null)}>
-        <DialogContent className="w-full max-w-sm rounded-3xl border border-black/[0.08] bg-white p-6 space-y-4 backdrop-blur-2xl shadow-2xl text-zinc-900">
+      <Dialog
+        open={!!cancellingId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCancellingId(null);
+            setCancelReasonCustom('');
+          }
+        }}
+      >
+        <DialogContent className="w-full max-w-md rounded-3xl border border-black/[0.08] bg-white p-6 space-y-4 backdrop-blur-2xl shadow-2xl text-zinc-900 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-center gap-3 text-rose-600">
-              <AlertTriangle className="w-6 h-6" />
-              <DialogTitle className="font-bold text-base text-zinc-950">
-                Cancel Appointment?
-              </DialogTitle>
+              <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <DialogTitle className="font-bold text-base text-zinc-950">
+                  Cancel Appointment
+                </DialogTitle>
+                <DialogDescription className="text-xs text-zinc-500 mt-0.5">
+                  {apptToCancel ? ('Dr. ' + (apptToCancel.doctor?.fullName || 'Doctor') + ' • ' + formatDate(apptToCancel.date) + ' at ' + formatTime(apptToCancel.startTime)) : ''}
+                </DialogDescription>
+              </div>
             </div>
-            <DialogDescription className="text-xs text-zinc-600 leading-relaxed pt-1">
-              Are you sure you want to release this appointment? The doctor’s dashboard will be updated and the slot freed for others.
-            </DialogDescription>
           </DialogHeader>
-          <div className="flex items-center gap-2 pt-2">
+
+          {/* Refund Notice Card */}
+          {isPaidAppointment ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                  <RotateCcw className="w-4 h-4 text-emerald-600" />
+                  100% Refund Eligible
+                </span>
+                <span className="text-xs font-black text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full">
+                  ₹{fee}
+                </span>
+              </div>
+              <p className="text-[11px] text-emerald-800 leading-relaxed">
+                Since you are cancelling in advance, your consultation fee of ₹{fee} will be automatically refunded back to your original payment method in 5–7 banking days via Razorpay.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+              No prepayment was charged for this appointment. Slot will be released back to the clinic schedule immediately.
+            </div>
+          )}
+
+          {/* Cancellation Reason Selection */}
+          <div className="space-y-2 pt-1">
+            <label className="text-xs font-bold text-slate-800 block">
+              Reason for Cancellation <span className="text-rose-500">*</span>
+            </label>
+            <div className="grid grid-cols-1 gap-1.5">
+              {[
+                'Change of plans / Schedule conflict',
+                'Feeling better / Recovered',
+                'Doctor unavailable / Delayed',
+                'Booked incorrect slot or doctor',
+                'Other',
+              ].map((preset) => (
+                <label
+                  key={preset}
+                  className={'flex items-center gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition-all ' +
+                    (cancelReasonPreset === preset
+                      ? 'border-[#0066cc] bg-blue-50/50 text-[#0066cc] font-semibold'
+                      : 'border-slate-200 hover:bg-slate-50 text-slate-700')}
+                >
+                  <input
+                    type="radio"
+                    name="cancelReason"
+                    value={preset}
+                    checked={cancelReasonPreset === preset}
+                    onChange={() => setCancelReasonPreset(preset)}
+                    className="accent-[#0066cc]"
+                  />
+                  <span>{preset}</span>
+                </label>
+              ))}
+            </div>
+
+            {/* Custom Notes */}
+            <div className="pt-1">
+              <label className="text-[11px] font-medium text-slate-600 block mb-1">
+                Additional Comments (Optional)
+              </label>
+              <Input
+                placeholder="Tell clinic staff more details..."
+                value={cancelReasonCustom}
+                onChange={(e) => setCancelReasonCustom(e.target.value)}
+                className="text-xs rounded-xl"
+              />
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2 pt-3 border-t border-slate-100">
             <Button
               type="button"
-              variant="ghost"
-              onClick={() => setCancellingId(null)}
+              variant="outline"
+              onClick={() => {
+                setCancellingId(null);
+                setCancelReasonCustom('');
+              }}
               disabled={cancelLoading}
-              className="btn-secondary flex-1 py-2.5 text-xs font-semibold h-auto"
+              className="flex-1 py-2 text-xs font-semibold rounded-xl"
             >
               Keep Booking
             </Button>
             <Button
               type="button"
-              variant="ghost"
+              variant="destructive"
               onClick={handleCancel}
               disabled={cancelLoading}
-              className="btn-danger flex-1 py-2.5 text-xs font-semibold h-auto"
+              className="flex-1 py-2 text-xs font-semibold rounded-xl bg-rose-600 hover:bg-rose-700 text-white"
             >
-              {cancelLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Yes, Cancel'}
+              {cancelLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : isPaidAppointment ? (
+                'Confirm Cancel & Refund'
+              ) : (
+                'Yes, Cancel Slot'
+              )}
             </Button>
           </div>
         </DialogContent>

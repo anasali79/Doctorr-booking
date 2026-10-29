@@ -83,8 +83,9 @@ export class AppointmentController {
       }),
     )
     id: string,
+    @Body() body?: { reason?: string },
   ) {
-    return this.appointmentService.cancelAppointment(user.id, id);
+    return this.appointmentService.cancelAppointment(user.id, id, body?.reason);
   }
 
   // ─── 4. Reschedule Appointment (Patient only) ─────────────────────────────────

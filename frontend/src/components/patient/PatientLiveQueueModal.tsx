@@ -43,6 +43,7 @@ interface PatientLiveQueueData {
     isMyTurn: boolean;
   };
   timeline: {
+    id?: string;
     tokenNumber: number;
     startTime: string;
     endTime?: string;
@@ -299,14 +300,14 @@ export function PatientLiveQueueModal({
                   <p className="text-xs text-zinc-400 text-center py-4">No other tokens in queue today.</p>
                 ) : (
                   <div className="space-y-2">
-                    {displayTimeline.map((item) => {
+                    {displayTimeline.map((item, index) => {
                       const isCurrent = item.status === 'IN_CONSULTATION';
                       const isCompleted = item.status === 'COMPLETED';
                       const isYou = item.isYou;
 
                       return (
                         <div
-                          key={item.tokenNumber}
+                          key={item.id ?? `${item.tokenNumber}-${item.startTime || ''}-${index}`}
                           className={`rounded-2xl border p-3 flex items-center justify-between gap-3 transition-all ${
                             isYou
                               ? 'border-2 border-[#0066cc] bg-blue-50/70 shadow-xs'

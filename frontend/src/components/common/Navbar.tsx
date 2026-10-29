@@ -123,6 +123,22 @@ export function Navbar({ user, unreadCount = 0 }: NavbarProps) {
                       <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0066cc] rounded-full" />
                     )}
                   </Link>
+                  {!isDoctor && (
+                    <Link
+                      href="/patient/payments"
+                      className={cn(
+                        'relative px-4 py-2 text-xs font-semibold transition-all duration-200',
+                        pathname.startsWith('/patient/payments')
+                          ? 'text-[#0066cc]'
+                          : 'text-slate-600 hover:text-slate-900',
+                      )}
+                    >
+                      <span>Payments</span>
+                      {pathname.startsWith('/patient/payments') && (
+                        <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0066cc] rounded-full" />
+                      )}
+                    </Link>
+                  )}
                 </>
               ) : (
                 <>
@@ -158,7 +174,7 @@ export function Navbar({ user, unreadCount = 0 }: NavbarProps) {
               <>
                 {/* Notification Bell */}
                 <Link
-                  href="/patient/notifications"
+                  href={isDoctor ? '/doctor/notifications' : '/patient/notifications'}
                   className="relative rounded-full p-2 text-slate-600 hover:bg-slate-100 hover:text-[#0066cc] transition-colors border border-slate-200"
                   title="Notifications"
                 >
@@ -200,6 +216,16 @@ export function Navbar({ user, unreadCount = 0 }: NavbarProps) {
                         <User className="h-3.5 w-3.5 text-slate-400" />
                         <span>Profile</span>
                       </Link>
+                      {!isDoctor && (
+                        <Link
+                          href="/patient/payments"
+                          onClick={() => setUserMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5 text-slate-400" />
+                          <span>Payments & Receipts</span>
+                        </Link>
+                      )}
                       <button
                         type="button"
                         onClick={handleLogout}

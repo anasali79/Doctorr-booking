@@ -535,6 +535,7 @@ export class AppointmentService {
         : a.endTime;
 
       return {
+        id: a.id,
         tokenNumber: tokenNum,
         startTime: staggeredStartTime,
         endTime: staggeredEndTime,
@@ -585,7 +586,7 @@ export class AppointmentService {
     };
   }
 
-  async cancelAppointment(userId: string, appointmentId: string) {
+  async cancelAppointment(userId: string, appointmentId: string, reason?: string) {
     const patient = await this.getPatientByUserId(userId);
     const appointment = await this.appointmentRepo.findOne({
       where: { id: appointmentId },
@@ -672,24 +673,43 @@ export class AppointmentService {
       cancelledNotif.note,
     );
 
-    this.sendCancellationEmail(updatedAppointment);
+        this.sendCancellationEmail(updatedAppointment);
 
     await this.reminderService?.cancelRemindersForAppointment(updatedAppointment.id);
 
-    if (updatedAppointment.paymentStatus === 'PAID' && this.paymentService) {
+    // Doctor notification
+    try {
+      await this.notificationService.createDoctorNotification(
+        updatedAppointment.doctorId,
+        'Appointment Cancelled',
+        'Patient ' + (updatedAppointment.patient?.fullName || 'A patient') + ' cancelled the appointment for ' + updatedAppointment.startTime + ' on ' + updatedAppointment.date + '.',
+        NotificationType.APPOINTMENT_CANCELLED,
+        reason || 'Patient requested cancellation',
+      );
+    } catch (err: any) {
+      this.logger.warn('Failed to notify doctor on cancellation: ' + err.message);
+    }
+
+    let refundResult: any = null;
+    if (this.paymentService) {
       try {
-        await this.paymentService.createRefund(userId, 'PATIENT', {
+        refundResult = await this.paymentService.createRefund(userId, 'PATIENT', {
           appointmentId: updatedAppointment.id,
-          reason: 'Patient cancelled appointment',
+          reason: reason || 'Patient cancelled appointment',
         });
       } catch (err: any) {
-        this.logger.error(`Automatic refund failed during patient cancellation: ${err.message}`);
+        this.logger.warn('Refund attempt during patient cancellation: ' + err.message);
       }
     }
 
     return {
-      message: 'Appointment cancelled successfully',
-      data: this.toPatientAppointmentResponse(updatedAppointment),
+      message: refundResult
+        ? 'Appointment cancelled and refund initiated successfully'
+        : 'Appointment cancelled successfully',
+      data: {
+        ...this.toPatientAppointmentResponse(updatedAppointment),
+        refund: refundResult?.data || null,
+      },
     };
   }
 
