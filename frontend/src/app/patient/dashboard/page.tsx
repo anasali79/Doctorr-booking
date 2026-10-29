@@ -86,6 +86,14 @@ export default async function PatientDashboardPage() {
     return false;
   };
 
+  // Pending reservations (held for 15 minutes)
+  const pendingReservations = allAppointments.filter(
+    (a: any) =>
+      a.status === 'PENDING_PAYMENT' &&
+      a.pendingExpiresAt &&
+      new Date(a.pendingExpiresAt).getTime() > Date.now(),
+  );
+
   // Upcoming / Active Appointments (must not be expired!)
   const upcoming = allAppointments
     .filter(
@@ -121,6 +129,40 @@ export default async function PatientDashboardPage() {
 
   return (
     <div className="page-container space-y-8 py-8 sm:py-10">
+      {/* ═══════════════ ACTIVE PENDING RESERVATION ALERT ═══════════════ */}
+      {pendingReservations.length > 0 && (
+        <div className="rounded-3xl border border-amber-300 bg-amber-50/90 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="w-10 h-10 rounded-2xl bg-amber-200/80 flex items-center justify-center shrink-0 mt-0.5">
+              <Clock className="w-5 h-5 text-amber-800 animate-spin" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-amber-900 bg-amber-200 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                  Action Required
+                </span>
+                <span className="text-xs font-semibold text-amber-800">
+                  {pendingReservations.length} slot{pendingReservations.length > 1 ? 's' : ''} reserved
+                </span>
+              </div>
+              <h3 className="text-sm sm:text-base font-extrabold text-amber-950">
+                You have an unconfirmed consultation slot held for 15 minutes!
+              </h3>
+              <p className="text-xs text-amber-800 max-w-xl">
+                Your slot with Dr. {pendingReservations[0].doctor?.fullName || 'Doctor'} on {formatDate(pendingReservations[0].date)} at {formatTime(pendingReservations[0].startTime)} is currently held. Complete payment before it expires to confirm your appointment.
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/patient/appointments"
+            className="shrink-0 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs transition-colors"
+          >
+            <span>Complete Payment Now</span>
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+      )}
+
       {/* ═══════════════ PATIENT WELCOME & IDENTITY HEADER ═══════════════ */}
       <div className="rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>

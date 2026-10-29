@@ -194,25 +194,54 @@ export class PaymentService {
         .getOne();
 
       if (conflictingBooking) {
-        throw new ConflictException('This slot is already booked or currently reserved by another patient');
+        if (
+          conflictingBooking.status === AppointmentStatus.PENDING_PAYMENT &&
+          conflictingBooking.patientId === patient.id &&
+          conflictingBooking.pendingExpiresAt &&
+          new Date(conflictingBooking.pendingExpiresAt) > new Date()
+        ) {
+          // Re-using active pending reservation by the same patient
+          reservedAppointment = conflictingBooking;
+          const existingPendingPayment = await queryRunner.manager.findOne(Payment, {
+            where: {
+              appointmentId: conflictingBooking.id,
+              status: PaymentStatus.PENDING,
+            },
+            order: { createdAt: 'DESC' },
+          });
+
+          if (existingPendingPayment) {
+            await queryRunner.commitTransaction();
+            return {
+              orderId: existingPendingPayment.orderId,
+              amount: existingPendingPayment.amount,
+              currency: existingPendingPayment.currency,
+              keyId: this.razorpayService.getPublicKey(),
+              appointmentId: reservedAppointment.id,
+              expiresAt: reservedAppointment.pendingExpiresAt,
+            };
+          }
+        } else {
+          throw new ConflictException('This slot is already booked or currently reserved by another patient');
+        }
+      } else {
+        // 3. Create reservation appointment with expiry
+        const expiresAt = new Date(Date.now() + RESERVATION_EXPIRY_MINUTES * 60 * 1000);
+
+        const appointment = this.appointmentRepo.create({
+          doctorId: dto.doctorId,
+          patientId: patient.id,
+          date: dto.date,
+          startTime: dto.startTime,
+          endTime: dto.endTime,
+          status: AppointmentStatus.PENDING_PAYMENT,
+          paymentStatus: 'PENDING',
+          pendingExpiresAt: expiresAt,
+          tokenNumber: null,
+        });
+
+        reservedAppointment = await queryRunner.manager.save(appointment);
       }
-
-      // 3. Create or reuse reservation appointment with expiry
-      const expiresAt = new Date(Date.now() + RESERVATION_EXPIRY_MINUTES * 60 * 1000);
-
-      const appointment = this.appointmentRepo.create({
-        doctorId: dto.doctorId,
-        patientId: patient.id,
-        date: dto.date,
-        startTime: dto.startTime,
-        endTime: dto.endTime,
-        status: AppointmentStatus.PENDING_PAYMENT,
-        paymentStatus: 'PENDING',
-        pendingExpiresAt: expiresAt,
-        tokenNumber: null,
-      });
-
-      reservedAppointment = await queryRunner.manager.save(appointment);
       await queryRunner.commitTransaction();
     } catch (err: any) {
       await queryRunner.rollbackTransaction();
@@ -962,6 +991,106 @@ export class PaymentService {
   }
 
   /**
+   * Retry payment order for an unexpired pending reservation
+   */
+  async retryOrder(userId: string, appointmentId: string) {
+    const patient = await this.getPatientByUserId(userId);
+
+    const appointment = await this.appointmentRepo.findOne({
+      where: { id: appointmentId },
+      relations: { doctor: true },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException('Appointment not found');
+    }
+
+    if (appointment.patientId !== patient.id) {
+      throw new ForbiddenException('Access denied: You do not own this appointment');
+    }
+
+    if (appointment.status === AppointmentStatus.CONFIRMED) {
+      throw new BadRequestException('Appointment is already confirmed');
+    }
+
+    if (appointment.status !== AppointmentStatus.PENDING_PAYMENT) {
+      throw new BadRequestException('Appointment is not in pending payment status');
+    }
+
+    const now = new Date();
+    if (!appointment.pendingExpiresAt || new Date(appointment.pendingExpiresAt) <= now) {
+      await this.appointmentRepo.update(appointment.id, {
+        status: AppointmentStatus.CANCELLED,
+        paymentStatus: 'FAILED',
+        pendingExpiresAt: null,
+      });
+      throw new BadRequestException('Reservation has expired (15-minute window passed). Please select a new slot.');
+    }
+
+    // Look for existing pending payment record
+    const existingPayment = await this.paymentRepo.findOne({
+      where: {
+        appointmentId: appointment.id,
+        status: PaymentStatus.PENDING,
+      },
+      order: { createdAt: 'DESC' },
+    });
+
+    if (existingPayment) {
+      return {
+        orderId: existingPayment.orderId,
+        amount: existingPayment.amount,
+        currency: existingPayment.currency,
+        keyId: this.razorpayService.getPublicKey(),
+        appointmentId: appointment.id,
+        expiresAt: appointment.pendingExpiresAt,
+      };
+    }
+
+    // If no existing pending payment, create Razorpay order and payment record
+    const doctor = appointment.doctor || (await this.doctorRepo.findOne({ where: { id: appointment.doctorId } }));
+    if (!doctor) {
+      throw new NotFoundException('Doctor not found');
+    }
+
+    const consultationFeeRupees = Number(doctor.consultationFee);
+    const amountInPaise = Math.round(consultationFeeRupees * 100);
+
+    const providerOrder = await this.razorpayService.createOrder({
+      amount: amountInPaise,
+      currency: 'INR',
+      receipt: `rcpt_${appointment.id.replace(/-/g, '').substring(0, 16)}`,
+      notes: {
+        appointmentId: appointment.id,
+        doctorId: appointment.doctorId,
+        patientId: patient.id,
+      },
+    });
+
+    const payment = this.paymentRepo.create({
+      appointmentId: appointment.id,
+      patientId: patient.id,
+      doctorId: appointment.doctorId,
+      provider: 'RAZORPAY',
+      orderId: providerOrder.id,
+      amount: amountInPaise,
+      currency: 'INR',
+      status: PaymentStatus.PENDING,
+    });
+
+    await this.paymentRepo.save(payment);
+
+    return {
+      orderId: providerOrder.id,
+      amount: amountInPaise,
+      currency: 'INR',
+      keyId: this.razorpayService.getPublicKey(),
+      appointmentId: appointment.id,
+      expiresAt: appointment.pendingExpiresAt,
+    };
+  }
+
+  /**
    * Patient Payment History
    */
   async getPatientPaymentHistory(userId: string) {
@@ -995,6 +1124,7 @@ export class PaymentService {
               startTime: p.appointment.startTime,
               endTime: p.appointment.endTime,
               status: p.appointment.status,
+              pendingExpiresAt: p.appointment.pendingExpiresAt,
               doctor: {
                 id: p.appointment.doctor?.id,
                 fullName: p.appointment.doctor?.fullName,

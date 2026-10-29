@@ -25,6 +25,18 @@ import { SchedulingType } from '../common/enums/scheduling-type.enum';
 import { AppointmentStatus } from '../common/enums/appointment-status.enum';
 import { getTodayIST, getMaxFutureDateIST } from '../common/utils/appointment.utils';
 
+function isApptActivelyBlocking(app: any): boolean {
+  if (!app) return false;
+  if (app.status === AppointmentStatus.CANCELLED || app.status === AppointmentStatus.RESCHEDULED) {
+    return false;
+  }
+  if (app.status === AppointmentStatus.PENDING_PAYMENT) {
+    return app.pendingExpiresAt ? new Date(app.pendingExpiresAt) > new Date() : false;
+  }
+  return true;
+}
+
+
 function toMinutes(time: string): number {
   const [h, m] = time.split(':').map(Number);
   return h * 60 + m;
@@ -297,8 +309,7 @@ export class AvailabilityService {
             (app) =>
               app.startTime === override.startTime &&
               app.endTime === override.endTime &&
-              app.status !== AppointmentStatus.CANCELLED &&
-              app.status !== AppointmentStatus.RESCHEDULED,
+              isApptActivelyBlocking(app),
           ).length;
           const maxPatients = override.maxPatients || 0;
           const availableCount = Math.max(0, maxPatients - bookedCount);
@@ -419,8 +430,7 @@ export class AvailabilityService {
                   (app) =>
                     app.startTime === s.startTime &&
                     app.endTime === s.endTime &&
-                    app.status !== AppointmentStatus.CANCELLED &&
-                    app.status !== AppointmentStatus.RESCHEDULED,
+                    isApptActivelyBlocking(app),
                 ).length;
                 const maxPatients = s.maxPatients || 0;
                 const availableCount = Math.max(0, maxPatients - bookedCount);
@@ -936,8 +946,7 @@ export class AvailabilityService {
               (app) =>
                 app.startTime === s.startTime &&
                 app.endTime === s.endTime &&
-                app.status !== AppointmentStatus.CANCELLED &&
-                app.status !== AppointmentStatus.RESCHEDULED,
+                isApptActivelyBlocking(app),
             ).length;
             const maxPatients = s.maxPatients || 0;
             const availableCount = Math.max(0, maxPatients - bookedCount);
@@ -1008,8 +1017,7 @@ export class AvailabilityService {
               (app) =>
                 app.startTime === s.startTime &&
                 app.endTime === s.endTime &&
-                app.status !== AppointmentStatus.CANCELLED &&
-                app.status !== AppointmentStatus.RESCHEDULED,
+                isApptActivelyBlocking(app),
             ).length;
             const maxPatients = s.maxPatients || 0;
             const availableCount = Math.max(0, maxPatients - bookedCount);
@@ -1097,7 +1105,7 @@ export class AvailabilityService {
       });
 
       const bookedApp = overlapping.find(
-        (a) => a.status !== AppointmentStatus.CANCELLED && a.status !== AppointmentStatus.RESCHEDULED,
+        (a) => isApptActivelyBlocking(a),
       );
       if (bookedApp) return { ...slot, status: SlotStatus.BOOKED };
 
@@ -1403,8 +1411,7 @@ export class AvailabilityService {
           (app) =>
             app.startTime === slot.startTime &&
             app.endTime === slot.endTime &&
-            app.status !== AppointmentStatus.CANCELLED &&
-            app.status !== AppointmentStatus.RESCHEDULED,
+            isApptActivelyBlocking(app),
         ).length;
 
         const maxPatients = slot.maxPatients || 0;
@@ -1430,7 +1437,7 @@ export class AvailabilityService {
       });
 
       const bookedApp = overlappingAppointments.find(
-        (a) => a.status !== AppointmentStatus.CANCELLED && a.status !== AppointmentStatus.RESCHEDULED,
+        (a) => isApptActivelyBlocking(a),
       );
       if (bookedApp) {
         return { ...slot, status: SlotStatus.BOOKED };

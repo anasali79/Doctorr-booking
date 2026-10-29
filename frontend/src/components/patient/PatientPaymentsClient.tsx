@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import { formatDate, formatTime, formatCurrency } from '@/lib/utils';
 import { toast } from 'sonner';
+import { launchRazorpayCheckout } from '@/lib/razorpay';
 import {
   CreditCard,
   CheckCircle2,
@@ -43,6 +44,7 @@ interface PaymentItem {
     startTime: string;
     endTime: string;
     status: string;
+    pendingExpiresAt?: string | null;
     doctor?: {
       id: string;
       fullName: string;
@@ -66,6 +68,13 @@ export function PatientPaymentsClient() {
   const [refundTarget, setRefundTarget] = useState<PaymentItem | null>(null);
   const [refundReason, setRefundReason] = useState('');
   const [refunding, setRefunding] = useState(false);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const fetchPayments = async () => {
     try {
@@ -115,6 +124,45 @@ export function PatientPaymentsClient() {
       });
     } finally {
       setRefunding(false);
+    }
+  };
+
+  const handleRetryPayment = async (p: PaymentItem) => {
+    if (!p.appointment?.id) return;
+    try {
+      setRetryingId(p.id);
+      const res = await clientAxios.post<{
+        orderId: string;
+        amount: number;
+        currency: string;
+        keyId: string;
+        appointmentId: string;
+        expiresAt: string;
+      }>('/api/payment/retry-order', {
+        appointmentId: p.appointment.id,
+      });
+
+      const orderData = res.data;
+
+      await launchRazorpayCheckout({
+        orderData,
+        doctorName: p.appointment?.doctor?.fullName || 'Doctor',
+        onSuccess: () => {
+          toast.success('Payment Received! Your appointment is confirmed.');
+          fetchPayments();
+        },
+        onFailure: (err) => {
+          toast.error('Payment Incomplete', {
+            description: extractErrorMessage(err) || 'You can retry before the 15-minute reservation expires.',
+          });
+        },
+      });
+    } catch (err) {
+      toast.error('Failed to retry payment', {
+        description: extractErrorMessage(err),
+      });
+    } finally {
+      setRetryingId(null);
     }
   };
 
@@ -227,6 +275,41 @@ export function PatientPaymentsClient() {
                         <RotateCcw className="w-3 h-3 mr-1" />
                         Cancel & Refund
                       </Button>
+                    )}
+
+                    {p.status === 'PENDING' && p.appointment && (
+                      <div className="mt-2 flex flex-col items-end gap-1.5">
+                        {p.appointment.pendingExpiresAt && new Date(p.appointment.pendingExpiresAt).getTime() > nowMs ? (
+                          <>
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
+                              <Clock className="w-3 h-3 text-amber-700 animate-spin" />
+                              {(() => {
+                                const rem = Math.max(0, new Date(p.appointment.pendingExpiresAt!).getTime() - nowMs);
+                                const m = Math.floor(rem / 60000);
+                                const s = Math.floor((rem % 60000) / 1000);
+                                return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')} left`;
+                              })()}
+                            </span>
+                            <Button
+                              type="button"
+                              onClick={() => handleRetryPayment(p)}
+                              disabled={retryingId === p.id}
+                              className="text-xs font-bold bg-[#0066cc] hover:bg-[#0052a3] text-white h-8 px-3 rounded-lg shadow-xs"
+                            >
+                              {retryingId === p.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                              ) : (
+                                <CreditCard className="w-3 h-3 mr-1" />
+                              )}
+                              Complete Payment
+                            </Button>
+                          </>
+                        ) : (
+                          <Badge className="bg-zinc-100 text-zinc-500 border-zinc-200 text-xs">
+                            Expired (Slot Released)
+                          </Badge>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
