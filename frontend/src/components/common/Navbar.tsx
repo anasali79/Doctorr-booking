@@ -16,6 +16,7 @@ import {
 import { SessionUser } from '@/types';
 import { toast } from 'sonner';
 import { BrandMark } from '@/components/ui/BrandMark';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 
@@ -188,17 +189,13 @@ export function Navbar({ user, unreadCount = 0 }: NavbarProps) {
 
                 {/* User Profile Dropdown Pill */}
                 <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setUserMenuOpen(!userMenuOpen)}
-                    className="flex items-center gap-2 rounded-full border border-slate-200 bg-white py-1 pl-1 pr-3 text-xs font-semibold text-slate-900 transition-all hover:bg-slate-50 hover:border-slate-300 shadow-xs"
-                  >
+                  <Button type="button" variant="ghost" onClick={() => setUserMenuOpen(!userMenuOpen)} className="flex items-center gap-2 rounded-full border border-slate-200 bg-white py-1 pl-1 pr-3 text-xs font-semibold text-slate-900 transition-all hover:bg-slate-50 hover:border-slate-300 shadow-xs h-auto">
                     <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#18191f] text-xs font-bold text-white">
                       {(user?.email?.[0] || 'R').toUpperCase()}
                     </div>
                     <span>{user?.email?.split('@')[0] || 'Raj'}</span>
                     <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
-                  </button>
+                  </Button>
 
                   {userMenuOpen && (
                     <div className="absolute right-0 top-full mt-2 w-48 rounded-2xl border border-slate-200 bg-white py-1 shadow-lg ring-1 ring-black/5 z-50">
@@ -226,15 +223,10 @@ export function Navbar({ user, unreadCount = 0 }: NavbarProps) {
                           <span>Payments & Receipts</span>
                         </Link>
                       )}
-                      <button
-                        type="button"
-                        onClick={handleLogout}
-                        disabled={loggingOut}
-                        className="flex w-full items-center gap-2 px-4 py-2 text-xs text-rose-600 hover:bg-rose-50 transition-colors text-left"
-                      >
+                      <Button type="button" variant="ghost" onClick={handleLogout} disabled={loggingOut} className="flex w-full items-center gap-2 px-4 py-2 text-xs text-rose-600 hover:bg-rose-50 transition-colors text-left h-auto font-normal rounded-none justify-start">
                         <LogOut className="h-3.5 w-3.5 text-rose-500" />
                         <span>{loggingOut ? 'Signing out...' : 'Sign out'}</span>
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -259,14 +251,9 @@ export function Navbar({ user, unreadCount = 0 }: NavbarProps) {
 
           {/* ── Mobile Menu Toggle Button ── */}
           <div className="flex items-center gap-2 md:hidden">
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="rounded-full p-2 text-slate-700 hover:bg-slate-100 transition-colors"
-              aria-label="Toggle menu"
-            >
+            <Button type="button" variant="ghost" size="icon" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="rounded-full p-2 text-slate-700 hover:bg-slate-100 transition-colors h-9 w-9" aria-label="Toggle menu">
               {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

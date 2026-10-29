@@ -17,6 +17,8 @@ import {
 import { toast } from 'sonner';
 import { signupSchema, SignupInput } from '@/lib/schemas';
 import { BrandMark } from '@/components/ui/BrandMark';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 
@@ -98,32 +100,34 @@ export default function SignupPage() {
 
           {/* Role Selector Tabs */}
           <div className="mb-5 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1.5 border border-slate-200">
-            <button
+            <Button
               type="button"
+              variant="ghost"
               onClick={() => handleRoleSelect('PATIENT')}
               className={cn(
-                'flex items-center justify-center gap-2 rounded-lg py-2 px-3 text-xs font-semibold transition-all',
+                'flex items-center justify-center gap-2 rounded-lg py-2 px-3 text-xs font-semibold transition-all h-auto',
                 selectedRole === 'PATIENT'
-                  ? 'bg-[#0066cc] text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900',
+                  ? 'bg-[#0066cc] text-white shadow-xs hover:bg-[#0055b3] hover:text-white'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60',
               )}
             >
               <User className="h-4 w-4" />
               Patient
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="ghost"
               onClick={() => handleRoleSelect('DOCTOR')}
               className={cn(
-                'flex items-center justify-center gap-2 rounded-lg py-2 px-3 text-xs font-semibold transition-all',
+                'flex items-center justify-center gap-2 rounded-lg py-2 px-3 text-xs font-semibold transition-all h-auto',
                 selectedRole === 'DOCTOR'
-                  ? 'bg-[#0066cc] text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900',
+                  ? 'bg-[#0066cc] text-white shadow-xs hover:bg-[#0055b3] hover:text-white'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60',
               )}
             >
               <Stethoscope className="h-4 w-4" />
               Doctor
-            </button>
+            </Button>
           </div>
 
           {/* Error Banner */}
@@ -137,7 +141,7 @@ export default function SignupPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1.5">Full name</label>
-              <input
+              <Input
                 {...register('name')}
                 type="text"
                 autoComplete="name"
@@ -151,7 +155,7 @@ export default function SignupPage() {
 
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1.5">Email address</label>
-              <input
+              <Input
                 {...register('email')}
                 type="email"
                 autoComplete="email"
@@ -166,28 +170,30 @@ export default function SignupPage() {
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1.5">Password</label>
               <div className="relative">
-                <input
+                <Input
                   {...register('password')}
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="new-password"
                   placeholder="Min 8 characters"
                   className={`field-input pr-10 ${errors.password ? 'border-rose-400' : ''}`}
                 />
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-transparent"
                   aria-label="Toggle password visibility"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
+                </Button>
               </div>
               {errors.password && (
                 <p className="mt-1 text-xs text-rose-600">{errors.password.message}</p>
               )}
             </div>
 
-            <button
+            <Button
               type="submit"
               disabled={loading}
               className="btn-primary w-full py-2.5 text-xs font-semibold mt-2 rounded-xl"
@@ -203,7 +209,7 @@ export default function SignupPage() {
                   <ArrowRight className="h-4 w-4" />
                 </>
               )}
-            </button>
+            </Button>
           </form>
 
           <p className="mt-6 text-center text-xs text-slate-500">

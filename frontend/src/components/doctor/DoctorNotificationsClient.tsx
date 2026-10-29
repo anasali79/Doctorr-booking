@@ -113,28 +113,16 @@ export function DoctorNotificationsClient({
       {/* Top Filter and Action Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setFilter('ALL')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+          <Button type="button" variant="ghost" onClick={() => setFilter('ALL')} className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
               filter === 'ALL'
                 ? 'bg-[#0066cc] text-white shadow-xs'
                 : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-            }`}
-          >
-            All Alerts ({notifications.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter('UNREAD')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            } h-auto`}>All Alerts ({notifications.length})</Button>
+          <Button type="button" variant="ghost" onClick={() => setFilter('UNREAD')} className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
               filter === 'UNREAD'
                 ? 'bg-[#0066cc] text-white shadow-xs'
                 : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-            }`}
-          >
-            Unread ({unreadCount})
-          </button>
+            } h-auto`}>Unread ({unreadCount})</Button>
         </div>
 
         {unreadCount > 0 && (
@@ -219,19 +207,14 @@ export function DoctorNotificationsClient({
 
                   {isUnread && (
                     <div className="mt-3 flex items-center justify-end">
-                      <button
-                        type="button"
-                        onClick={() => handleMarkSingleRead(item.id)}
-                        disabled={markingId === item.id}
-                        className="text-[11px] font-semibold text-[#0066cc] hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                      >
+                      <Button type="button" variant="link" size="xs" onClick={() => handleMarkSingleRead(item.id)} disabled={markingId === item.id} className="text-[11px] font-semibold text-[#0066cc] hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50 p-0 h-auto">
                         {markingId === item.id ? (
                           <Loader2 className="w-3 h-3 animate-spin" />
                         ) : (
                           <CheckCheck className="w-3 h-3" />
                         )}
                         Mark as read
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </div>

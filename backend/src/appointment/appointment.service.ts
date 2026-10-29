@@ -714,6 +714,18 @@ export class AppointmentService {
   }
 
   async rescheduleAppointment(userId: string, appointmentId: string, dto: RescheduleAppointmentDto) {
+    const targetDate = dto.date || dto.newDate;
+    const targetStartTime = dto.startTime || dto.newStartTime;
+    const targetEndTime = dto.endTime || dto.newEndTime;
+
+    if (!targetDate || !targetStartTime || !targetEndTime) {
+      throw new BadRequestException('date, startTime, and endTime are required');
+    }
+
+    dto.date = targetDate;
+    dto.startTime = targetStartTime;
+    dto.endTime = targetEndTime;
+
     const patient = await this.getPatientByUserId(userId);
 
     const appointment = await this.appointmentRepo.findOne({
@@ -931,6 +943,7 @@ export class AppointmentService {
         startTime: dto.startTime,
         endTime: dto.endTime,
         status: AppointmentStatus.CONFIRMED,
+        paymentStatus: appointment.paymentStatus || 'PAID',
         tokenNumber,
       });
 
@@ -979,7 +992,8 @@ export class AppointmentService {
 
     if (fullNewAppointment) {
       this.sendRescheduleEmail(fullNewAppointment, previousDate, previousStartTime);
-      await this.reminderService?.rescheduleReminders(fullNewAppointment);
+      await this.reminderService?.cancelRemindersForAppointment(appointment.id);
+      await this.reminderService?.scheduleAppointmentReminders(fullNewAppointment);
     }
 
     // P0-3: Emit reschedule event to doctor room AFTER commit

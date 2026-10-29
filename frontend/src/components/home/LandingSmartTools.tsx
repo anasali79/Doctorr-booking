@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { Button } from '@/components/ui/button';
 import {
   Sparkles,
   ArrowRight,
@@ -78,20 +79,12 @@ export function LandingSmartTools() {
 
             {/* Navigation Arrows */}
             <div className="flex items-center gap-3 pt-2">
-              <button
-                onClick={prevSlide}
-                className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-2xs transition-all hover:border-slate-400 hover:bg-slate-50 active:scale-95"
-                aria-label="Previous tool"
-              >
+              <Button type="button" variant="ghost" size="icon" onClick={prevSlide} className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-2xs transition-all hover:border-slate-400 hover:bg-slate-50 active:scale-95" aria-label="Previous tool">
                 <ChevronLeft className="h-5 w-5" />
-              </button>
-              <button
-                onClick={nextSlide}
-                className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-slate-900 text-white shadow-2xs transition-all hover:bg-slate-800 active:scale-95"
-                aria-label="Next tool"
-              >
+              </Button>
+              <Button type="button" variant="ghost" size="icon" onClick={nextSlide} className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-slate-900 text-white shadow-2xs transition-all hover:bg-slate-800 active:scale-95" aria-label="Next tool">
                 <ChevronRight className="h-5 w-5" />
-              </button>
+              </Button>
               <span className="text-xs font-semibold text-slate-600 ml-2">
                 {currentIndex + 1} of {tools.length}
               </span>
@@ -157,13 +150,10 @@ export function LandingSmartTools() {
                       <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg">
                         {t.metric}
                       </span>
-                      <button
-                        onClick={() => setCurrentIndex(idx)}
-                        className="text-xs font-semibold text-[#0066cc] inline-flex items-center gap-1 hover:underline"
-                      >
+                      <Button type="button" variant="link" size="xs" onClick={() => setCurrentIndex(idx)} className="text-xs font-semibold text-[#0066cc] inline-flex items-center gap-1 hover:underline p-0 h-auto">
                         <span>Details</span>
                         <ArrowRight className="h-3 w-3" />
-                      </button>
+                      </Button>
                     </div>
                   </motion.div>
                 );

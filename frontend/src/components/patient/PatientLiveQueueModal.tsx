@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { clientAxios } from '@/lib/api/axios';
 import { formatTime, formatDate } from '@/lib/utils';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 import {
   X,
   RefreshCw,
@@ -155,20 +156,12 @@ export function PatientLiveQueueModal({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => fetchQueue(false)}
-              disabled={refreshing}
-              className="p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-all"
-              title="Refresh Queue"
-            >
+            <Button type="button" variant="ghost" size="icon" onClick={() => fetchQueue(false)} disabled={refreshing} className="p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-all h-8 w-8" title="Refresh Queue">
               <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#0066cc]' : ''}`} />
-            </button>
-            <button
-              onClick={onClose}
-              className="p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-all"
-            >
+            </Button>
+            <Button type="button" variant="ghost" size="icon" onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-all h-8 w-8">
               <X className="w-5 h-5" />
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -185,12 +178,7 @@ export function PatientLiveQueueModal({
               <AlertCircle className="w-8 h-8 text-rose-500 mx-auto" />
               <p className="text-sm font-bold text-zinc-950">Unable to load live queue</p>
               <p className="text-xs text-rose-600">{error}</p>
-              <button
-                onClick={() => fetchQueue(false)}
-                className="btn-primary mt-3 text-xs"
-              >
-                Try Again
-              </button>
+              <Button type="button" onClick={() => fetchQueue(false)} className="btn-primary mt-3 text-xs">Try Again</Button>
             </div>
           ) : (
             <>
@@ -387,12 +375,7 @@ export function PatientLiveQueueModal({
         {/* Footer */}
         <div className="px-6 py-3.5 bg-zinc-50 border-t border-black/[0.06] flex items-center justify-between text-xs text-zinc-500">
           <span>Auto-updates in real time</span>
-          <button
-            onClick={onClose}
-            className="btn-secondary !py-1.5 !px-4 text-xs"
-          >
-            Close Board
-          </button>
+          <Button type="button" variant="secondary" onClick={onClose} className="btn-secondary !py-1.5 !px-4 text-xs h-auto">Close Board</Button>
         </div>
       </div>
     </div>

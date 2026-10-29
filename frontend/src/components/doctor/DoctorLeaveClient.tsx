@@ -16,6 +16,7 @@ import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Table,
   TableHeader,
@@ -125,7 +126,7 @@ export function DoctorLeaveClient({ initialLeaves }: DoctorLeaveClientProps) {
 
           <div>
             <label className="field-label">Reason / Clinical Note (Optional)</label>
-            <textarea
+            <Textarea
               rows={3}
               value={reason}
               onChange={(e) => setReason(e.target.value)}

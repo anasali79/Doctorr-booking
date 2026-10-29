@@ -17,6 +17,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Table,
   TableHeader,
@@ -222,31 +223,33 @@ export function DoctorAvailabilityClient({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="field-label">Slot Duration</label>
-              <select
-                value={slotDuration}
-                onChange={(e) => setSlotDuration(Number(e.target.value))}
-                className="field-input text-xs font-semibold"
-              >
-                <option value={15}>15 Minutes</option>
-                <option value={20}>20 Minutes</option>
-                <option value={30}>30 Minutes</option>
-                <option value={45}>45 Minutes</option>
-                <option value={60}>60 Minutes</option>
-              </select>
+              <Select value={String(slotDuration)} onValueChange={(val) => setSlotDuration(Number(val))}>
+                <SelectTrigger className="field-input text-xs font-semibold">
+                  <SelectValue placeholder="Slot Duration" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="15">15 Minutes</SelectItem>
+                  <SelectItem value="20">20 Minutes</SelectItem>
+                  <SelectItem value="30">30 Minutes</SelectItem>
+                  <SelectItem value="45">45 Minutes</SelectItem>
+                  <SelectItem value="60">60 Minutes</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
               <label className="field-label">Buffer Time</label>
-              <select
-                value={bufferTime}
-                onChange={(e) => setBufferTime(Number(e.target.value))}
-                className="field-input text-xs font-semibold"
-              >
-                <option value={0}>0 Min (Back to back)</option>
-                <option value={5}>5 Minutes</option>
-                <option value={10}>10 Minutes</option>
-                <option value={15}>15 Minutes</option>
-              </select>
+              <Select value={String(bufferTime)} onValueChange={(val) => setBufferTime(Number(val))}>
+                <SelectTrigger className="field-input text-xs font-semibold">
+                  <SelectValue placeholder="Buffer Time" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">0 Min (Back to back)</SelectItem>
+                  <SelectItem value="5">5 Minutes</SelectItem>
+                  <SelectItem value="10">10 Minutes</SelectItem>
+                  <SelectItem value="15">15 Minutes</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

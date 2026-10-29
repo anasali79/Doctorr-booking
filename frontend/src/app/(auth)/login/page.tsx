@@ -9,6 +9,8 @@ import { Loader2, Eye, EyeOff, ArrowRight, AlertCircle, Stethoscope, User, Spark
 import { toast } from 'sonner';
 import { loginSchema, LoginInput } from '@/lib/schemas';
 import { BrandMark } from '@/components/ui/BrandMark';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 
 function LoginForm() {
@@ -106,22 +108,24 @@ function LoginForm() {
             <span className="text-[10px] text-slate-400">1-click fill</span>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={() => handleDemoFill('PATIENT')}
-              className="flex items-center justify-center gap-1.5 rounded-full border border-slate-200 bg-white py-1.5 px-3 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 transition-all shadow-2xs"
+              className="flex items-center justify-center gap-1.5 rounded-full border border-slate-200 bg-white py-1.5 px-3 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 transition-all shadow-2xs h-auto"
             >
               <User className="h-3.5 w-3.5 text-slate-500" />
               Patient Demo
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="outline"
               onClick={() => handleDemoFill('DOCTOR')}
-              className="flex items-center justify-center gap-1.5 rounded-full border border-slate-200 bg-white py-1.5 px-3 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 transition-all shadow-2xs"
+              className="flex items-center justify-center gap-1.5 rounded-full border border-slate-200 bg-white py-1.5 px-3 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 transition-all shadow-2xs h-auto"
             >
               <Stethoscope className="h-3.5 w-3.5 text-slate-500" />
               Doctor Demo
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -136,7 +140,7 @@ function LoginForm() {
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1.5">Email address</label>
-            <input
+            <Input
               {...register('email')}
               type="email"
               autoComplete="email"
@@ -153,28 +157,30 @@ function LoginForm() {
               <label className="block text-xs font-medium text-slate-700">Password</label>
             </div>
             <div className="relative">
-              <input
+              <Input
                 {...register('password')}
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
                 placeholder="••••••••"
                 className={`field-input pr-10 ${errors.password ? 'border-rose-400' : ''}`}
               />
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-transparent"
                 aria-label="Toggle password visibility"
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
+              </Button>
             </div>
             {errors.password && (
               <p className="mt-1 text-xs text-rose-600">{errors.password.message}</p>
             )}
           </div>
 
-          <button
+          <Button
             type="submit"
             disabled={loading}
             className="btn-primary w-full py-2.5 text-xs font-semibold mt-2 rounded-xl"
@@ -190,7 +196,7 @@ function LoginForm() {
                 <ArrowRight className="h-4 w-4" />
               </>
             )}
-          </button>
+          </Button>
         </form>
 
         <p className="mt-6 text-center text-xs text-slate-500">

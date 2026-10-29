@@ -5,6 +5,8 @@ import { Search } from 'lucide-react';
 import { Doctor } from '@/types';
 import { DoctorCard } from '@/components/common/DoctorCard';
 import { FeaturedDoctorCard } from '@/components/common/FeaturedDoctorCard';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 interface HomeDoctorDirectoryProps {
   initialDoctors: Doctor[];
@@ -90,13 +92,7 @@ export function HomeDoctorDirectory({ initialDoctors }: HomeDoctorDirectoryProps
       {/* ── Search Input Pill ── */}
       <div className="relative max-w-xl w-full">
         <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Name, specialty or language"
-          className="w-full rounded-full border border-slate-200 bg-white py-2.5 pl-11 pr-4 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#0066cc] focus:outline-none focus:ring-2 focus:ring-[#0066cc]/10 transition-all shadow-2xs"
-        />
+        <Input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Name, specialty or language" className="w-full rounded-full border border-slate-200 bg-white py-2.5 pl-11 pr-4 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#0066cc] focus:outline-none focus:ring-2 focus:ring-[#0066cc]/10 transition-all shadow-2xs h-auto" />
       </div>
 
       {/* ── Specialty Filter Pills ── */}
@@ -104,18 +100,11 @@ export function HomeDoctorDirectory({ initialDoctors }: HomeDoctorDirectoryProps
         {filterTabs.map((tab) => {
           const isActive = activeFilter === tab.key;
           return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveFilter(tab.key)}
-              className={
+            <Button key={tab.key} type="button" variant="ghost" onClick={() => setActiveFilter(tab.key)} className={
                 isActive
                   ? 'rounded-full bg-[#18191f] px-4 py-1.5 text-xs font-semibold text-white transition-all shadow-xs'
                   : 'rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-medium text-slate-700 transition-all hover:border-slate-300 hover:bg-slate-50'
-              }
-            >
-              {tab.label}
-            </button>
+               + " h-auto cursor-pointer"}>{tab.label}</Button>
           );
         })}
       </div>

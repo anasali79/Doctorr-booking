@@ -11,6 +11,8 @@ import { Patient } from '@/types';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface PatientProfileFormProps {
   initialData?: Patient | null;
@@ -28,6 +30,8 @@ export function PatientProfileForm({
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<any>({
     resolver: zodResolver(patientProfileSchema) as any,
@@ -125,14 +129,19 @@ export function PatientProfileForm({
 
         <div>
           <label className="field-label">Gender *</label>
-          <select
-            {...register('gender')}
-            className={`field-input ${errors.gender ? 'border-rose-400 focus:ring-rose-200' : ''}`}
+          <Select
+            value={watch('gender') || 'MALE'}
+            onValueChange={(val) => setValue('gender', val, { shouldValidate: true })}
           >
-            <option value="MALE">Male</option>
-            <option value="FEMALE">Female</option>
-            <option value="OTHER">Other</option>
-          </select>
+            <SelectTrigger className={`field-input ${errors.gender ? 'border-rose-400 focus:ring-rose-200' : ''}`}>
+              <SelectValue placeholder="Select gender" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="MALE">Male</SelectItem>
+              <SelectItem value="FEMALE">Female</SelectItem>
+              <SelectItem value="OTHER">Other</SelectItem>
+            </SelectContent>
+          </Select>
           {errors.gender?.message && (
             <p className="text-xs text-rose-600 mt-1">{String(errors.gender.message)}</p>
           )}
@@ -145,7 +154,7 @@ export function PatientProfileForm({
           <div className="absolute top-3 left-3 text-slate-400 pointer-events-none">
             <MapPin className="w-4 h-4" />
           </div>
-          <textarea
+          <Textarea
             {...register('address')}
             rows={2}
             placeholder="Residential address or locality"
@@ -160,7 +169,7 @@ export function PatientProfileForm({
           <div className="absolute top-3 left-3 text-slate-400 pointer-events-none">
             <Heart className="w-4 h-4" />
           </div>
-          <textarea
+          <Textarea
             {...register('basicHealthInfo')}
             rows={3}
             placeholder="Blood group (e.g. B+), medication allergies (e.g. Sulfa, Penicillin), existing conditions (e.g. Hypertension)"

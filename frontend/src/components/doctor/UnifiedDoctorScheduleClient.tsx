@@ -25,6 +25,10 @@ import {
   Info,
 } from 'lucide-react';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface UnifiedDoctorScheduleClientProps {
   initialAvailability: any;
@@ -379,15 +383,11 @@ export function UnifiedDoctorScheduleClient({
 
       {/* Tabs Navigation Header */}
       <div className="flex items-center gap-1.5 overflow-x-auto rounded-2xl border border-slate-200/90 bg-white p-1.5 shadow-2xs scrollbar-none">
-        <button
-          type="button"
-          onClick={() => setActiveTab('recurring')}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all whitespace-nowrap ${
+        <Button type="button" variant="ghost" onClick={() => setActiveTab('recurring')} className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all whitespace-nowrap ${
             activeTab === 'recurring'
               ? 'bg-blue-700 text-white shadow-xs'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-          }`}
-        >
+          } h-auto`}>
           <Clock className="h-3.5 w-3.5" />
           <span>Weekly Recurring Shifts</span>
           <span className={`rounded-full px-2 py-0.5 text-[10px] ${
@@ -395,17 +395,13 @@ export function UnifiedDoctorScheduleClient({
           }`}>
             {availabilities.length}
           </span>
-        </button>
+        </Button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('leaves')}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all whitespace-nowrap ${
+        <Button type="button" variant="ghost" onClick={() => setActiveTab('leaves')} className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all whitespace-nowrap ${
             activeTab === 'leaves'
               ? 'bg-blue-700 text-white shadow-xs'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-          }`}
-        >
+          } h-auto`}>
           <CalendarX2 className="h-3.5 w-3.5" />
           <span>Planned Leaves & Time Off</span>
           <span className={`rounded-full px-2 py-0.5 text-[10px] ${
@@ -413,33 +409,25 @@ export function UnifiedDoctorScheduleClient({
           }`}>
             {leaves.length}
           </span>
-        </button>
+        </Button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('overrides')}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all whitespace-nowrap ${
+        <Button type="button" variant="ghost" onClick={() => setActiveTab('overrides')} className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all whitespace-nowrap ${
             activeTab === 'overrides'
               ? 'bg-blue-700 text-white shadow-xs'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-          }`}
-        >
+          } h-auto`}>
           <Plus className="h-3.5 w-3.5" />
           <span>Special Date Override</span>
-        </button>
+        </Button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('unavailable')}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all whitespace-nowrap ${
+        <Button type="button" variant="ghost" onClick={() => setActiveTab('unavailable')} className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all whitespace-nowrap ${
             activeTab === 'unavailable'
               ? 'bg-blue-700 text-white shadow-xs'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-          }`}
-        >
+          } h-auto`}>
           <AlertTriangle className="h-3.5 w-3.5" />
           <span>Block Specific Hours</span>
-        </button>
+        </Button>
       </div>
 
       {/* ─── TAB 1: RECURRING AVAILABILITY ─── */}
@@ -466,21 +454,9 @@ export function UnifiedDoctorScheduleClient({
                     Active Days of Week
                   </label>
                   <div className="flex items-center gap-1.5 text-[11px]">
-                    <button
-                      type="button"
-                      onClick={() => selectPresetDays('weekdays')}
-                      className="text-blue-700 font-bold hover:underline"
-                    >
-                      Mon-Fri
-                    </button>
+                    <Button type="button" variant="link" size="xs" onClick={() => selectPresetDays('weekdays')} className="text-blue-700 font-bold hover:underline p-0 h-auto">Mon-Fri</Button>
                     <span className="text-slate-300">•</span>
-                    <button
-                      type="button"
-                      onClick={() => selectPresetDays('all')}
-                      className="text-blue-700 font-bold hover:underline"
-                    >
-                      All 7
-                    </button>
+                    <Button type="button" variant="link" size="xs" onClick={() => selectPresetDays('all')} className="text-blue-700 font-bold hover:underline p-0 h-auto">All 7</Button>
                   </div>
                 </div>
 
@@ -488,18 +464,11 @@ export function UnifiedDoctorScheduleClient({
                   {DAYS_OF_WEEK.map((day) => {
                     const isSelected = selectedDays.includes(day);
                     return (
-                      <button
-                        key={day}
-                        type="button"
-                        onClick={() => toggleDay(day)}
-                        className={`py-2.5 rounded-xl border text-center text-xs font-bold transition-all ${
+                      <Button key={day} type="button" variant="ghost" onClick={() => toggleDay(day)} className={`py-2.5 rounded-xl border text-center text-xs font-bold transition-all ${
                           isSelected
                             ? 'border-blue-700 bg-blue-700 text-white shadow-2xs'
                             : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300'
-                        }`}
-                      >
-                        {DAY_LABELS[day]}
-                      </button>
+                        } h-auto`}>{DAY_LABELS[day]}</Button>
                     );
                   })}
                 </div>
@@ -511,25 +480,13 @@ export function UnifiedDoctorScheduleClient({
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Shift Start (24h)
                   </label>
-                  <input
-                    type="time"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600"
-                    required
-                  />
+                  <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600 h-auto" required />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Shift End (24h)
                   </label>
-                  <input
-                    type="time"
-                    value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600"
-                    required
-                  />
+                  <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600 h-auto" required />
                 </div>
               </div>
 
@@ -539,34 +496,36 @@ export function UnifiedDoctorScheduleClient({
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Slot Duration (mins)
                   </label>
-                  <select
-                    value={slotDuration}
-                    onChange={(e) => setSlotDuration(Number(e.target.value))}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600"
-                  >
-                    <option value={10}>10 minutes</option>
-                    <option value={15}>15 minutes</option>
-                    <option value={20}>20 minutes</option>
-                    <option value={30}>30 minutes</option>
-                    <option value={45}>45 minutes</option>
-                    <option value={60}>60 minutes</option>
-                  </select>
+                  <Select value={String(slotDuration)} onValueChange={(val) => setSlotDuration(Number(val))}>
+                    <SelectTrigger className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600 h-auto">
+                      <SelectValue placeholder="Slot Duration" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10 minutes</SelectItem>
+                      <SelectItem value="15">15 minutes</SelectItem>
+                      <SelectItem value="20">20 minutes</SelectItem>
+                      <SelectItem value="30">30 minutes</SelectItem>
+                      <SelectItem value="45">45 minutes</SelectItem>
+                      <SelectItem value="60">60 minutes</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Buffer Time (mins)
                   </label>
-                  <select
-                    value={bufferTime}
-                    onChange={(e) => setBufferTime(Number(e.target.value))}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600"
-                  >
-                    <option value={0}>0 mins (No buffer)</option>
-                    <option value={5}>5 minutes</option>
-                    <option value={10}>10 minutes</option>
-                    <option value={15}>15 minutes</option>
-                  </select>
+                  <Select value={String(bufferTime)} onValueChange={(val) => setBufferTime(Number(val))}>
+                    <SelectTrigger className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600 h-auto">
+                      <SelectValue placeholder="Buffer Time" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">0 mins (No buffer)</SelectItem>
+                      <SelectItem value="5">5 minutes</SelectItem>
+                      <SelectItem value="10">10 minutes</SelectItem>
+                      <SelectItem value="15">15 minutes</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -576,31 +535,23 @@ export function UnifiedDoctorScheduleClient({
                   Consultation Capacity Model
                 </label>
                 <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSchedulingType('STREAM')}
-                    className={`p-3 rounded-2xl border text-left transition-all ${
+                  <Button type="button" variant="ghost" onClick={() => setSchedulingType('STREAM')} className={`p-3 rounded-2xl border text-left transition-all ${
                       schedulingType === 'STREAM'
                         ? 'border-blue-700 bg-blue-50/70 text-slate-900 ring-1 ring-blue-700'
                         : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-white'
-                    }`}
-                  >
+                    } h-auto flex-col items-start`}>
                     <span className="block text-xs font-bold text-slate-900">STREAM</span>
                     <span className="block text-[10px] text-slate-500 mt-0.5">1 patient per slot</span>
-                  </button>
+                  </Button>
 
-                  <button
-                    type="button"
-                    onClick={() => setSchedulingType('WAVE')}
-                    className={`p-3 rounded-2xl border text-left transition-all ${
+                  <Button type="button" variant="ghost" onClick={() => setSchedulingType('WAVE')} className={`p-3 rounded-2xl border text-left transition-all ${
                       schedulingType === 'WAVE'
                         ? 'border-blue-700 bg-blue-50/70 text-slate-900 ring-1 ring-blue-700'
                         : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-white'
-                    }`}
-                  >
+                    } h-auto flex-col items-start`}>
                     <span className="block text-xs font-bold text-slate-900">WAVE</span>
                     <span className="block text-[10px] text-slate-500 mt-0.5">Batch / Walk-in wave</span>
-                  </button>
+                  </Button>
                 </div>
 
                 {schedulingType === 'WAVE' && (
@@ -608,14 +559,7 @@ export function UnifiedDoctorScheduleClient({
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
                       Max Patients per Wave
                     </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={20}
-                      value={maxPatients}
-                      onChange={(e) => setMaxPatients(Number(e.target.value))}
-                      className="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800"
-                    />
+                    <Input type="number" min={1} max={20} value={maxPatients} onChange={(e) => setMaxPatients(Number(e.target.value))} className="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800 h-auto" />
                   </div>
                 )}
               </div>
@@ -627,12 +571,7 @@ export function UnifiedDoctorScheduleClient({
                     <span className="text-xs font-bold text-slate-900 block">Allow Advance Booking</span>
                     <span className="text-[11px] text-slate-500">Allow patients to book upcoming calendar dates</span>
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={allowFutureBooking}
-                    onChange={(e) => setAllowFutureBooking(e.target.checked)}
-                    className="h-4 w-4 rounded text-blue-700 focus:ring-blue-500"
-                  />
+                  <Input type="checkbox" checked={allowFutureBooking} onChange={(e) => setAllowFutureBooking(e.target.checked)} className="h-4 w-4 rounded text-blue-700 focus:ring-blue-500 shadow-none border-slate-300 p-0 inline-block" />
                 </div>
 
                 {allowFutureBooking && (
@@ -640,14 +579,7 @@ export function UnifiedDoctorScheduleClient({
                     <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                       Max Advance Booking Days ({maxFutureBookingDays} days)
                     </label>
-                    <input
-                      type="range"
-                      min={1}
-                      max={30}
-                      value={maxFutureBookingDays}
-                      onChange={(e) => setMaxFutureBookingDays(Number(e.target.value))}
-                      className="w-full accent-blue-700"
-                    />
+                    <Input type="range" min={1} max={30} value={maxFutureBookingDays} onChange={(e) => setMaxFutureBookingDays(Number(e.target.value))} className="w-full accent-blue-700 p-0 border-0 shadow-none h-auto" />
                   </div>
                 )}
               </div>
@@ -665,11 +597,7 @@ export function UnifiedDoctorScheduleClient({
                 </span>
               </div>
 
-              <button
-                type="submit"
-                disabled={savingRecurring}
-                className="btn-primary w-full py-3 text-xs"
-              >
+              <Button type="submit" disabled={savingRecurring} className="btn-primary w-full py-3 text-xs h-auto">
                 {savingRecurring ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -681,7 +609,7 @@ export function UnifiedDoctorScheduleClient({
                     <span>Apply Weekly Schedule</span>
                   </>
                 )}
-              </button>
+              </Button>
             </form>
           </div>
 
@@ -742,19 +670,14 @@ export function UnifiedDoctorScheduleClient({
                     </div>
 
                     <div className="mt-4 flex items-center justify-end border-t border-slate-100 pt-2.5">
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteSlot(slot.id)}
-                        disabled={deletingId === slot.id}
-                        className="text-xs text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1 p-1 rounded-lg hover:bg-rose-50 transition-colors"
-                      >
+                      <Button type="button" variant="ghost" size="xs" onClick={() => handleDeleteSlot(slot.id)} disabled={deletingId === slot.id} className="text-xs text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1 p-1 rounded-lg hover:bg-rose-50 transition-colors h-auto">
                         {deletingId === slot.id ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         ) : (
                           <Trash2 className="h-3.5 w-3.5" />
                         )}
                         <span>Remove Shift</span>
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 ))}
@@ -793,34 +716,17 @@ export function UnifiedDoctorScheduleClient({
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Leave Date
                 </label>
-                <input
-                  type="date"
-                  min={getTodayIST()}
-                  value={leaveDate}
-                  onChange={(e) => setLeaveDate(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600"
-                  required
-                />
+                <Input type="date" min={getTodayIST()} value={leaveDate} onChange={(e) => setLeaveDate(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600 h-auto" required />
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Reason / Internal Note (Optional)
                 </label>
-                <textarea
-                  rows={3}
-                  value={leaveReason}
-                  onChange={(e) => setLeaveReason(e.target.value)}
-                  placeholder="e.g. Medical Conference, Annual Leave, CME Seminar"
-                  className="w-full rounded-xl border border-slate-200 p-3 text-xs text-slate-800 focus:outline-none focus:border-blue-600 resize-none"
-                />
+                <Textarea rows={3} value={leaveReason} onChange={(e) => setLeaveReason(e.target.value)} placeholder="e.g. Medical Conference, Annual Leave, CME Seminar" className="w-full rounded-xl border border-slate-200 p-3 text-xs text-slate-800 focus:outline-none focus:border-blue-600 resize-none" />
               </div>
 
-              <button
-                type="submit"
-                disabled={savingLeave}
-                className="btn-primary w-full py-3 text-xs"
-              >
+              <Button type="submit" disabled={savingLeave} className="btn-primary w-full py-3 text-xs h-auto">
                 {savingLeave ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -832,7 +738,7 @@ export function UnifiedDoctorScheduleClient({
                     <span>Confirm & Apply Leave</span>
                   </>
                 )}
-              </button>
+              </Button>
             </form>
           </div>
 
@@ -877,19 +783,14 @@ export function UnifiedDoctorScheduleClient({
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteLeave(leave.id)}
-                      disabled={deletingLeaveId === leave.id}
-                      className="px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition-colors flex items-center gap-1.5"
-                    >
+                    <Button type="button" variant="ghost" size="xs" onClick={() => handleDeleteLeave(leave.id)} disabled={deletingLeaveId === leave.id} className="px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition-colors flex items-center gap-1.5 h-auto">
                       {deletingLeaveId === leave.id ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
                         <Trash2 className="h-3.5 w-3.5" />
                       )}
                       <span>Cancel Leave</span>
-                    </button>
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -915,73 +816,52 @@ export function UnifiedDoctorScheduleClient({
           <form onSubmit={handleCreateOverride} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Target Date</label>
-              <input
-                type="date"
-                min={getTodayIST()}
-                value={overrideDate}
-                onChange={(e) => setOverrideDate(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800"
-                required
-              />
+              <Input type="date" min={getTodayIST()} value={overrideDate} onChange={(e) => setOverrideDate(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 h-auto" required />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Start Hour</label>
-                <input
-                  type="time"
-                  value={overrideStartTime}
-                  onChange={(e) => setOverrideStartTime(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800"
-                  required
-                />
+                <Input type="time" value={overrideStartTime} onChange={(e) => setOverrideStartTime(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 h-auto" required />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">End Hour</label>
-                <input
-                  type="time"
-                  value={overrideEndTime}
-                  onChange={(e) => setOverrideEndTime(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800"
-                  required
-                />
+                <Input type="time" value={overrideEndTime} onChange={(e) => setOverrideEndTime(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 h-auto" required />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Slot Duration</label>
-                <select
-                  value={overrideDuration}
-                  onChange={(e) => setOverrideDuration(Number(e.target.value))}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800"
-                >
-                  <option value={15}>15 mins</option>
-                  <option value={20}>20 mins</option>
-                  <option value={30}>30 mins</option>
-                  <option value={45}>45 mins</option>
-                  <option value={60}>60 mins</option>
-                </select>
+                <Select value={String(overrideDuration)} onValueChange={(val) => setOverrideDuration(Number(val))}>
+                    <SelectTrigger className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 h-auto">
+                      <SelectValue placeholder="Slot Duration" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="15">15 mins</SelectItem>
+                      <SelectItem value="20">20 mins</SelectItem>
+                      <SelectItem value="30">30 mins</SelectItem>
+                      <SelectItem value="45">45 mins</SelectItem>
+                      <SelectItem value="60">60 mins</SelectItem>
+                    </SelectContent>
+                  </Select>
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Buffer Time</label>
-                <select
-                  value={overrideBuffer}
-                  onChange={(e) => setOverrideBuffer(Number(e.target.value))}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800"
-                >
-                  <option value={0}>0 mins</option>
-                  <option value={5}>5 mins</option>
-                  <option value={10}>10 mins</option>
-                </select>
+                <Select value={String(overrideBuffer)} onValueChange={(val) => setOverrideBuffer(Number(val))}>
+                    <SelectTrigger className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 h-auto">
+                      <SelectValue placeholder="Buffer Time" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">0 mins</SelectItem>
+                      <SelectItem value="5">5 mins</SelectItem>
+                      <SelectItem value="10">10 mins</SelectItem>
+                    </SelectContent>
+                  </Select>
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={savingOverride}
-              className="btn-primary w-full py-3 text-xs"
-            >
+            <Button type="submit" disabled={savingOverride} className="btn-primary w-full py-3 text-xs h-auto">
               {savingOverride ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -993,7 +873,7 @@ export function UnifiedDoctorScheduleClient({
                   <span>Publish Special Date Slots</span>
                 </>
               )}
-            </button>
+            </Button>
           </form>
         </div>
       )}
@@ -1015,24 +895,11 @@ export function UnifiedDoctorScheduleClient({
           <form onSubmit={handleSetUnavailable} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Date</label>
-              <input
-                type="date"
-                min={getTodayIST()}
-                value={unavailDate}
-                onChange={(e) => setUnavailDate(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800"
-                required
-              />
+              <Input type="date" min={getTodayIST()} value={unavailDate} onChange={(e) => setUnavailDate(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 h-auto" required />
             </div>
 
             <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="fullDay"
-                checked={isFullDayUnavail}
-                onChange={(e) => setIsFullDayUnavail(e.target.checked)}
-                className="h-4 w-4 rounded text-rose-600 focus:ring-rose-500"
-              />
+              <Input type="checkbox" id="fullDay" checked={isFullDayUnavail} onChange={(e) => setIsFullDayUnavail(e.target.checked)} className="h-4 w-4 rounded text-rose-600 focus:ring-rose-500 shadow-none border-slate-300 p-0 inline-block" />
               <label htmlFor="fullDay" className="text-xs font-bold text-slate-800">
                 Block Entire Day
               </label>
@@ -1042,30 +909,16 @@ export function UnifiedDoctorScheduleClient({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Block From</label>
-                  <input
-                    type="time"
-                    value={unavailStartTime}
-                    onChange={(e) => setUnavailStartTime(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800"
-                  />
+                  <Input type="time" value={unavailStartTime} onChange={(e) => setUnavailStartTime(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 h-auto" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Block Until</label>
-                  <input
-                    type="time"
-                    value={unavailEndTime}
-                    onChange={(e) => setUnavailEndTime(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800"
-                  />
+                  <Input type="time" value={unavailEndTime} onChange={(e) => setUnavailEndTime(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 h-auto" />
                 </div>
               </div>
             )}
 
-            <button
-              type="submit"
-              disabled={savingUnavail}
-              className="w-full py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-2"
-            >
+            <Button type="submit" disabled={savingUnavail} className="w-full py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-2 h-auto">
               {savingUnavail ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -1077,7 +930,7 @@ export function UnifiedDoctorScheduleClient({
                   <span>Block Time Window</span>
                 </>
               )}
-            </button>
+            </Button>
           </form>
         </div>
       )}

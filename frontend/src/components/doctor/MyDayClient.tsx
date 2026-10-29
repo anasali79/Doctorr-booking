@@ -7,6 +7,11 @@ import { Appointment, Doctor } from '@/types';
 import { formatTime, formatDate } from '@/lib/utils';
 import { toast } from 'sonner';
 import { clientAxios } from '@/lib/api/axios';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   Calendar,
   CalendarDays,
@@ -491,15 +496,11 @@ export function MyDayClient({
         <div className="flex items-center gap-3 relative">
           {/* Date Selector Dropdown Button */}
           <div className="relative">
-            <button
-              type="button"
-              onClick={() => setDatePickerOpen(!datePickerOpen)}
-              className="inline-flex items-center gap-2.5 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-xs"
-            >
+            <Button type="button" variant="ghost" onClick={() => setDatePickerOpen(!datePickerOpen)} className="inline-flex items-center gap-2.5 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-xs h-auto">
               <Calendar className="h-4 w-4 text-slate-500" />
               <span>{formattedDateButton}</span>
               <ChevronDown className="h-4 w-4 text-slate-400" />
-            </button>
+            </Button>
 
             {/* Date Picker Popover */}
             {datePickerOpen && (
@@ -507,32 +508,12 @@ export function MyDayClient({
                 <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
                   <span className="text-xs font-bold text-slate-700">Select Date</span>
                   <div className="flex items-center gap-1">
-                    <button
-                      onClick={handlePrevDay}
-                      className="p-1 hover:bg-slate-100 rounded text-slate-500"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDateChange(todayIST)}
-                      className="px-2 py-0.5 text-[11px] font-semibold text-[#0066cc] hover:bg-blue-50 rounded"
-                    >
-                      Today
-                    </button>
-                    <button
-                      onClick={handleNextDay}
-                      className="p-1 hover:bg-slate-100 rounded text-slate-500"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
+                    <Button type="button" variant="ghost" size="icon" onClick={handlePrevDay} className="p-1 hover:bg-slate-100 rounded text-slate-500 h-7 w-7"><ChevronLeft className="h-4 w-4" /></Button>
+                    <Button type="button" variant="ghost" onClick={() => handleDateChange(todayIST)} className="px-2 py-0.5 text-[11px] font-semibold text-[#0066cc] hover:bg-blue-50 rounded h-auto">Today</Button>
+                    <Button type="button" variant="ghost" size="icon" onClick={handleNextDay} className="p-1 hover:bg-slate-100 rounded text-slate-500 h-7 w-7"><ChevronRight className="h-4 w-4" /></Button>
                   </div>
                 </div>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => e.target.value && handleDateChange(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 p-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20"
-                />
+                <Input type="date" value={selectedDate} onChange={(e) => e.target.value && handleDateChange(e.target.value)} className="w-full rounded-xl border border-slate-200 p-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20 h-auto" />
               </div>
             )}
           </div>
@@ -627,13 +608,7 @@ export function MyDayClient({
             {/* Search Input */}
             <div className="relative mb-4">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by name, phone or token..."
-                className="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 py-2.5 text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20 focus:border-[#0066cc] transition-all"
-              />
+              <Input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search by name, phone or token..." className="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 py-2.5 text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20 focus:border-[#0066cc] transition-all h-auto" />
             </div>
 
             {/* Filter Pills */}
@@ -647,40 +622,30 @@ export function MyDayClient({
                   { id: 'no_show', label: 'No-show' },
                 ] as const
               ).map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveFilter(tab.id)}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                <Button key={tab.id} type="button" variant="ghost" onClick={() => setActiveFilter(tab.id)} className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                     activeFilter === tab.id
                       ? 'bg-[#0066cc] text-white shadow-xs'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80 hover:text-slate-900'
-                  }`}
-                >
-                  {tab.label}
-                </button>
+                  } h-auto`}>{tab.label}</Button>
               ))}
             </div>
 
             {/* Queue Table */}
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-100 text-slate-400 font-semibold uppercase tracking-wider">
-                    <th className="py-3 px-3 w-12">#</th>
-                    <th className="py-3 px-3">Patient</th>
-                    <th className="py-3 px-3">Time</th>
-                    <th className="py-3 px-3">Type</th>
-                    <th className="py-3 px-3">Status</th>
-                    <th className="py-3 px-3 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
+              <Table className="w-full text-left text-xs">
+                <TableHeader>
+                  <TableRow className="border-b border-slate-100 text-slate-400 font-semibold uppercase tracking-wider">
+                    <TableHead className="py-3 px-3 w-12 h-auto text-slate-400">#</TableHead>
+                    <TableHead className="py-3 px-3 h-auto text-slate-400">Patient</TableHead>
+                    <TableHead className="py-3 px-3 h-auto text-slate-400">Time</TableHead>
+                    <TableHead className="py-3 px-3 h-auto text-slate-400">Type</TableHead>
+                    <TableHead className="py-3 px-3 h-auto text-slate-400">Status</TableHead>
+                    <TableHead className="py-3 px-3 text-right h-auto text-slate-400">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="divide-y divide-slate-100">
                   {filteredAppointments.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-10 text-center text-slate-400">
-                        No appointments found matching this criteria.
-                      </td>
-                    </tr>
+                    <TableRow><TableCell colSpan={6} className="py-10 text-center text-slate-400">No appointments found matching this criteria.</TableCell></TableRow>
                   ) : (
                     filteredAppointments.map((appt, idx) => {
                       const tokenStr = String(appt.tokenNumber || idx + 1).padStart(2, '0');
@@ -734,8 +699,7 @@ export function MyDayClient({
                       }
 
                       return (
-                        <tr
-                          key={appt.id}
+                        <TableRow key={appt.id}
                           onClick={() => setSelectedApptId(appt.id)}
                           className={`cursor-pointer transition-colors ${
                             isSelected
@@ -744,12 +708,12 @@ export function MyDayClient({
                           }`}
                         >
                           {/* Token Number */}
-                          <td className="py-3 px-3 font-mono text-xs font-semibold text-slate-500">
+                          <TableCell className="py-3 px-3 font-mono text-xs font-semibold text-slate-500">
                             {tokenStr}
-                          </td>
+                          </TableCell>
 
                           {/* Patient Avatar + Name + Phone */}
-                          <td className="py-3 px-3">
+                          <TableCell className="py-3 px-3">
                             <div className="flex items-center gap-3">
                               <div className="h-8 w-8 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-xs shrink-0">
                                 {initials}
@@ -763,15 +727,15 @@ export function MyDayClient({
                                 </div>
                               </div>
                             </div>
-                          </td>
+                          </TableCell>
 
                           {/* Time */}
-                          <td className="py-3 px-3 font-medium text-slate-700 whitespace-nowrap">
+                          <TableCell className="py-3 px-3 font-medium text-slate-700 whitespace-nowrap">
                             {formatTime(appt.startTime)}
-                          </td>
+                          </TableCell>
 
                           {/* Type */}
-                          <td className="py-3 px-3">
+                          <TableCell className="py-3 px-3">
                             <span
                               className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${
                                 isNew
@@ -781,61 +745,37 @@ export function MyDayClient({
                             >
                               {isNew ? 'New' : 'Follow-up'}
                             </span>
-                          </td>
+                          </TableCell>
 
                           {/* Status */}
-                          <td className="py-3 px-3 whitespace-nowrap">{statusBadge}</td>
+                          <TableCell className="py-3 px-3 whitespace-nowrap">{statusBadge}</TableCell>
 
                           {/* Action Button */}
-                          <td className="py-3 px-3 text-right whitespace-nowrap">
+                          <TableCell className="py-3 px-3 text-right whitespace-nowrap">
                             {appt.status === 'CHECKED_IN' ? (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleAction(appt.id, 'start-consultation');
-                                }}
-                                disabled={actionLoadingId === `${appt.id}-start-consultation`}
-                                className="inline-flex items-center gap-1 rounded-lg bg-[#0066cc] px-3.5 py-1 text-xs font-semibold text-white hover:bg-[#0055b3] transition-all shadow-xs"
-                              >
+                              <Button type="button" size="xs" onClick={(e) => { e.stopPropagation(); handleAction(appt.id, 'start-consultation'); }} disabled={actionLoadingId === `${appt.id}-start-consultation`} className="inline-flex items-center gap-1 rounded-lg bg-[#0066cc] px-3.5 py-1 text-xs font-semibold text-white hover:bg-[#0055b3] transition-all shadow-xs h-auto">
                                 {actionLoadingId === `${appt.id}-start-consultation` ? (
                                   <Loader2 className="h-3 w-3 animate-spin" />
                                 ) : (
                                   'Start'
                                 )}
-                              </button>
+                              </Button>
                             ) : appt.status === 'IN_CONSULTATION' ? (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedApptId(appt.id);
-                                }}
-                                className="inline-flex items-center gap-1 rounded-lg border border-[#0066cc] bg-white px-3.5 py-1 text-xs font-semibold text-[#0066cc] hover:bg-blue-50 transition-all shadow-xs"
-                              >
+                              <Button type="button" variant="outline" size="xs" onClick={(e) => { e.stopPropagation(); setSelectedApptId(appt.id); }} className="inline-flex items-center gap-1 rounded-lg border border-[#0066cc] bg-white px-3.5 py-1 text-xs font-semibold text-[#0066cc] hover:bg-blue-50 transition-all shadow-xs h-auto">
                                 View
-                              </button>
+                              </Button>
                             ) : appt.status === 'CONFIRMED' ? (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleAction(appt.id, 'manual-check-in');
-                                }}
-                                className="text-slate-400 hover:text-[#0066cc] text-xs font-medium"
-                              >
-                                —
-                              </button>
+                              <Button type="button" variant="ghost" size="xs" onClick={(e) => { e.stopPropagation(); handleAction(appt.id, 'manual-check-in'); }} className="text-slate-400 hover:text-[#0066cc] text-xs font-medium h-auto p-0">—</Button>
                             ) : (
                               <span className="text-slate-300">—</span>
                             )}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       );
                     })
                   )}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
 
             {/* Footer: View All Appointments Link */}
@@ -864,14 +804,10 @@ export function MyDayClient({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setWalkInModalOpen(true)}
-              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#0066cc] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0055b3] transition-all shadow-xs shrink-0"
-            >
+            <Button type="button" onClick={() => setWalkInModalOpen(true)} className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#0066cc] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0055b3] transition-all shadow-xs shrink-0 h-auto">
               <Plus className="h-4 w-4" />
               <span>Add Patient</span>
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -1022,50 +958,38 @@ export function MyDayClient({
 
               {/* Tabs */}
               <div className="flex items-center gap-6 border-b border-slate-200 text-xs font-semibold">
-                <button
-                  type="button"
-                  onClick={() => setActiveDetailTab('history')}
-                  className={`pb-2.5 transition-colors relative ${
+                <Button type="button" variant="ghost" onClick={() => setActiveDetailTab('history')} className={`pb-2.5 transition-colors relative ${
                     activeDetailTab === 'history'
                       ? 'text-[#0066cc]'
                       : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
+                  } h-auto p-0 font-semibold rounded-none hover:bg-transparent`}>
                   Medical History
                   {activeDetailTab === 'history' && (
                     <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0066cc] rounded-full" />
                   )}
-                </button>
+                </Button>
 
-                <button
-                  type="button"
-                  onClick={() => setActiveDetailTab('previous')}
-                  className={`pb-2.5 transition-colors relative ${
+                <Button type="button" variant="ghost" onClick={() => setActiveDetailTab('previous')} className={`pb-2.5 transition-colors relative ${
                     activeDetailTab === 'previous'
                       ? 'text-[#0066cc]'
                       : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
+                  } h-auto p-0 font-semibold rounded-none hover:bg-transparent`}>
                   Previous Visits
                   {activeDetailTab === 'previous' && (
                     <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0066cc] rounded-full" />
                   )}
-                </button>
+                </Button>
 
-                <button
-                  type="button"
-                  onClick={() => setActiveDetailTab('notes')}
-                  className={`pb-2.5 transition-colors relative ${
+                <Button type="button" variant="ghost" onClick={() => setActiveDetailTab('notes')} className={`pb-2.5 transition-colors relative ${
                     activeDetailTab === 'notes'
                       ? 'text-[#0066cc]'
                       : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
+                  } h-auto p-0 font-semibold rounded-none hover:bg-transparent`}>
                   Notes
                   {activeDetailTab === 'notes' && (
                     <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0066cc] rounded-full" />
                   )}
-                </button>
+                </Button>
               </div>
 
               {/* Tab Content */}
@@ -1120,20 +1044,8 @@ export function MyDayClient({
                       </div>
                     )}
                     <div className="space-y-2">
-                      <textarea
-                        value={noteInput}
-                        onChange={(e) => setNoteInput(e.target.value)}
-                        placeholder="Add quick clinical notes..."
-                        rows={2}
-                        className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleSaveNote}
-                        className="px-3 py-1 rounded-lg bg-[#0066cc] text-white font-semibold text-xs hover:bg-[#0055b3]"
-                      >
-                        Save Note
-                      </button>
+                      <Textarea value={noteInput} onChange={(e) => setNoteInput(e.target.value)} placeholder="Add quick clinical notes..." rows={2} className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20 min-h-[60px]" />
+                      <Button type="button" size="xs" onClick={handleSaveNote} className="px-3 py-1 rounded-lg bg-[#0066cc] text-white font-semibold text-xs hover:bg-[#0055b3] h-auto">Save Note</Button>
                     </div>
                   </div>
                 )}
@@ -1142,27 +1054,17 @@ export function MyDayClient({
               {/* Consultation Quick Status Action */}
               <div className="pt-2 flex flex-col gap-2">
                 {currentAppt.status === 'CHECKED_IN' && (
-                  <button
-                    type="button"
-                    onClick={() => handleAction(currentAppt.id, 'start-consultation')}
-                    disabled={actionLoadingId === `${currentAppt.id}-start-consultation`}
-                    className="w-full py-2.5 rounded-xl bg-[#0066cc] hover:bg-[#0055b3] text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-xs transition-colors"
-                  >
+                  <Button type="button" onClick={() => handleAction(currentAppt.id, 'start-consultation')} disabled={actionLoadingId === `${currentAppt.id}-start-consultation`} className="w-full py-2.5 rounded-xl bg-[#0066cc] hover:bg-[#0055b3] text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-xs transition-colors h-auto">
                     <Play className="h-3.5 w-3.5" />
                     <span>Start Consultation</span>
-                  </button>
+                  </Button>
                 )}
 
                 {currentAppt.status === 'IN_CONSULTATION' && (
-                  <button
-                    type="button"
-                    onClick={() => handleAction(currentAppt.id, 'complete')}
-                    disabled={actionLoadingId === `${currentAppt.id}-complete`}
-                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-xs transition-colors"
-                  >
+                  <Button type="button" onClick={() => handleAction(currentAppt.id, 'complete')} disabled={actionLoadingId === `${currentAppt.id}-complete`} className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-xs transition-colors h-auto">
                     <Check className="h-3.5 w-3.5" />
                     <span>Complete Consultation</span>
-                  </button>
+                  </Button>
                 )}
 
                 {/* View Full Patient Profile Button */}
@@ -1193,13 +1095,9 @@ export function MyDayClient({
                   <p className="text-xs text-slate-400">Queue for {formattedDateButton}</p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setWalkInModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              >
+              <Button type="button" variant="ghost" size="icon" onClick={() => setWalkInModalOpen(false)} className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 h-7 w-7">
                 <X className="h-5 w-5" />
-              </button>
+              </Button>
             </div>
 
             <form onSubmit={handleAddWalkIn} className="space-y-4">
@@ -1207,32 +1105,14 @@ export function MyDayClient({
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Full Name *
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={walkInForm.fullName}
-                  onChange={(e) =>
-                    setWalkInForm({ ...walkInForm, fullName: e.target.value })
-                  }
-                  placeholder="e.g. Rahul Sharma"
-                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20 focus:border-[#0066cc]"
-                />
+                <Input type="text" required value={walkInForm.fullName} onChange={(e) => setWalkInForm({ ...walkInForm, fullName: e.target.value })} placeholder="e.g. Rahul Sharma" className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20 focus:border-[#0066cc] h-auto" />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Phone Number *
                 </label>
-                <input
-                  type="tel"
-                  required
-                  value={walkInForm.phone}
-                  onChange={(e) =>
-                    setWalkInForm({ ...walkInForm, phone: e.target.value })
-                  }
-                  placeholder="+91 98765 43210"
-                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20 focus:border-[#0066cc]"
-                />
+                <Input type="tel" required value={walkInForm.phone} onChange={(e) => setWalkInForm({ ...walkInForm, phone: e.target.value })} placeholder="+91 98765 43210" className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20 focus:border-[#0066cc] h-auto" />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1240,30 +1120,22 @@ export function MyDayClient({
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Age
                   </label>
-                  <input
-                    type="number"
-                    value={walkInForm.age}
-                    onChange={(e) =>
-                      setWalkInForm({ ...walkInForm, age: e.target.value })
-                    }
-                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20"
-                  />
+                  <Input type="number" value={walkInForm.age} onChange={(e) => setWalkInForm({ ...walkInForm, age: e.target.value })} className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20 h-auto" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Gender
                   </label>
-                  <select
-                    value={walkInForm.gender}
-                    onChange={(e) =>
-                      setWalkInForm({ ...walkInForm, gender: e.target.value })
-                    }
-                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20"
-                  >
-                    <option value="MALE">Male</option>
-                    <option value="FEMALE">Female</option>
-                    <option value="OTHER">Other</option>
-                  </select>
+                  <Select value={walkInForm.gender} onValueChange={(val) => setWalkInForm({ ...walkInForm, gender: val })}>
+                    <SelectTrigger className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20 h-auto">
+                      <SelectValue placeholder="Gender" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MALE">Male</SelectItem>
+                      <SelectItem value="FEMALE">Female</SelectItem>
+                      <SelectItem value="OTHER">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -1271,31 +1143,12 @@ export function MyDayClient({
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Reason for Visit
                 </label>
-                <input
-                  type="text"
-                  value={walkInForm.reason}
-                  onChange={(e) =>
-                    setWalkInForm({ ...walkInForm, reason: e.target.value })
-                  }
-                  placeholder="e.g. Fever, Cough, Regular Checkup"
-                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20"
-                />
+                <Input type="text" value={walkInForm.reason} onChange={(e) => setWalkInForm({ ...walkInForm, reason: e.target.value })} placeholder="e.g. Fever, Cough, Regular Checkup" className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20 h-auto" />
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setWalkInModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-[#0066cc] hover:bg-[#0055b3] text-xs font-semibold text-white shadow-xs"
-                >
-                  Add to Live Queue
-                </button>
+                <Button type="button" variant="outline" onClick={() => setWalkInModalOpen(false)} className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 h-auto">Cancel</Button>
+                <Button type="submit" className="px-4 py-2 rounded-xl bg-[#0066cc] hover:bg-[#0055b3] text-xs font-semibold text-white shadow-xs h-auto">Add to Live Queue</Button>
               </div>
             </form>
           </div>

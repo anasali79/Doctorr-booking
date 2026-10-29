@@ -6,6 +6,7 @@ import { NotificationItem } from '@/types';
 import { formatDate } from '@/lib/utils';
 import { toast } from 'sonner';
 import { Bell, CheckCheck, Inbox, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 
 interface PatientNotificationsClientProps {
@@ -55,19 +56,14 @@ export function PatientNotificationsClient({
         </span>
 
         {unreadCount > 0 && (
-          <button
-            type="button"
-            onClick={handleMarkAllRead}
-            disabled={markingAll}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-colors cursor-pointer disabled:opacity-60"
-          >
+          <Button type="button" variant="outline" size="sm" onClick={handleMarkAllRead} disabled={markingAll} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-colors cursor-pointer disabled:opacity-60 h-auto">
             {markingAll ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
             ) : (
               <CheckCheck className="w-3.5 h-3.5 text-blue-600" />
             )}
             <span>Mark all as read</span>
-          </button>
+          </Button>
         )}
       </div>
 

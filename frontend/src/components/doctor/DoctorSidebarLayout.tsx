@@ -18,6 +18,7 @@ import {
 import { Doctor, SessionUser } from '@/types';
 import { clientAxios } from '@/lib/api/axios';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 
 interface DoctorSidebarLayoutProps {
   user: SessionUser;
@@ -199,15 +200,10 @@ export function DoctorSidebarLayout({
 
       {/* Logout button at bottom */}
       <div className="p-4 border-t border-slate-100">
-        <button
-          type="button"
-          onClick={handleLogout}
-          disabled={loggingOut}
-          className="flex w-full items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-        >
+        <Button type="button" variant="ghost" onClick={handleLogout} disabled={loggingOut} className="flex w-full items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:text-rose-600 hover:bg-rose-50 transition-colors h-auto font-medium justify-start">
           <LogOut className="h-4 w-4 shrink-0 text-slate-500" />
           <span>{loggingOut ? 'Logging out...' : 'Logout'}</span>
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -234,12 +230,9 @@ export function DoctorSidebarLayout({
         }`}
       >
         <div className="flex justify-end p-3">
-          <button
-            onClick={() => setMobileMenuOpen(false)}
-            className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100"
-          >
+          <Button type="button" variant="ghost" size="icon" onClick={() => setMobileMenuOpen(false)} className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 h-8 w-8">
             <X className="h-5 w-5" />
-          </button>
+          </Button>
         </div>
         <NavContent />
       </aside>
@@ -249,14 +242,9 @@ export function DoctorSidebarLayout({
         {/* Top Header Bar */}
         <header className="sticky top-0 z-20 h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-6 lg:px-8 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(true)}
-              className="lg:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100"
-              aria-label="Open navigation menu"
-            >
+            <Button type="button" variant="ghost" size="icon" onClick={() => setMobileMenuOpen(true)} className="lg:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100 h-9 w-9" aria-label="Open navigation menu">
               <Menu className="h-5 w-5" />
-            </button>
+            </Button>
             <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 font-medium">
               <span className="text-slate-400">Portal</span>
               <span>/</span>

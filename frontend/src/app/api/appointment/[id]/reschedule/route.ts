@@ -19,18 +19,29 @@ export async function PATCH(
 
     const res = await apiFetch(`/api/appointment/${id}/reschedule`, {
       method: 'PATCH',
-      body: JSON.stringify(validated),
+      body: JSON.stringify({
+        date: validated.date,
+        startTime: validated.startTime,
+        endTime: validated.endTime,
+      }),
       token,
     });
 
     return NextResponse.json(res);
   } catch (error: any) {
-    if (error instanceof ApiError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    if (error.name === 'ZodError') {
+    if (error instanceof ApiError || error?.status) {
       return NextResponse.json(
-        { error: error.errors[0]?.message || 'Invalid reschedule data' },
+        { error: error.message || 'Reschedule failed' },
+        { status: error.status || 500 },
+      );
+    }
+    if (error.name === 'ZodError' || error.issues || error.errors) {
+      const msg =
+        error.issues?.[0]?.message ||
+        error.errors?.[0]?.message ||
+        'Invalid reschedule data';
+      return NextResponse.json(
+        { error: msg },
         { status: 400 },
       );
     }

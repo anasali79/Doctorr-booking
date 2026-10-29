@@ -21,6 +21,8 @@ import { Doctor } from '@/types';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface DoctorProfileFormProps {
   initialData?: Doctor | null;
@@ -38,6 +40,8 @@ export function DoctorProfileForm({
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<any>({
     resolver: zodResolver(doctorProfileSchema) as any,
@@ -103,16 +107,21 @@ export function DoctorProfileForm({
 
         <div>
           <label className="field-label">Specialization Department *</label>
-          <select
-            {...register('specialization')}
-            className={`field-input capitalize ${errors.specialization ? 'border-rose-400 focus:ring-rose-200' : ''}`}
+          <Select
+            value={watch('specialization') || SPECIALIZATIONS[0]}
+            onValueChange={(val: any) => setValue('specialization', val, { shouldValidate: true })}
           >
-            {SPECIALIZATIONS.map((spec) => (
-              <option key={spec} value={spec}>
-                {SPECIALIZATION_LABELS[spec]}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className={`field-input capitalize ${errors.specialization ? 'border-rose-400 focus:ring-rose-200' : ''}`}>
+              <SelectValue placeholder="Select Specialization" />
+            </SelectTrigger>
+            <SelectContent>
+              {SPECIALIZATIONS.map((spec) => (
+                <SelectItem key={spec} value={spec}>
+                  {SPECIALIZATION_LABELS[spec]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {errors.specialization?.message && (
             <p className="text-xs text-rose-600 mt-1">{String(errors.specialization.message)}</p>
           )}
@@ -201,7 +210,7 @@ export function DoctorProfileForm({
           <div className="absolute top-3 left-3 text-slate-400 pointer-events-none">
             <FileText className="w-4 h-4" />
           </div>
-          <textarea
+          <Textarea
             {...register('profileDetails')}
             rows={4}
             placeholder="Describe your background, areas of clinical focus, clinic location, and patient care hours..."
@@ -211,11 +220,11 @@ export function DoctorProfileForm({
       </div>
 
       <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200/80">
-        <input
+        <Input
           {...register('allowFutureBooking')}
           type="checkbox"
           id="allowFutureBooking"
-          className="w-4 h-4 rounded text-blue-700 focus:ring-blue-500"
+          className="w-4 h-4 rounded text-blue-700 focus:ring-blue-500 shadow-none border-slate-300 h-4 p-0 inline-block"
         />
         <label
           htmlFor="allowFutureBooking"

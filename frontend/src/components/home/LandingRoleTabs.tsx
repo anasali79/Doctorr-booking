@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Button } from '@/components/ui/button';
 import {
   User,
   Stethoscope,
@@ -110,18 +111,14 @@ export function LandingRoleTabs() {
               const Icon = r.icon;
               const isSelected = activeTab === r.id;
               return (
-                <button
-                  key={r.id}
-                  onClick={() => setActiveTab(r.id)}
-                  className={`relative flex items-center gap-2 rounded-full px-5 py-2.5 text-xs sm:text-sm font-bold transition-all duration-200 ${
+                <Button key={r.id} type="button" variant="ghost" onClick={() => setActiveTab(r.id)} className={`relative flex items-center gap-2 rounded-full px-5 py-2.5 text-xs sm:text-sm font-bold transition-all duration-200 ${
                     isSelected
                       ? 'bg-white text-slate-900 shadow-sm'
                       : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
+                  } h-auto`}>
                   <Icon className={`h-4 w-4 ${isSelected ? 'text-[#0066cc]' : 'text-slate-400'}`} />
                   <span>{r.name}</span>
-                </button>
+                </Button>
               );
             })}
           </div>
