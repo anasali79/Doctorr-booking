@@ -26,6 +26,8 @@ import { EmailService } from '../email/email.service';
 import { formatTime, formatDate, getTodayIST, getMaxFutureDateIST } from '../common/utils/appointment.utils';
 import { AppointmentGateway, SOCKET_EVENTS } from '../sockets/appointment.gateway';
 import { QueueService } from './queue.service';
+import { ReminderService } from '../reminder/reminder.service';
+import { PaymentService } from '../payment/payment.service';
 
 const ARRIVAL_BUFFER_MINUTES = 5;
 const RESCHEDULE_CUTOFF_MINUTES = 30;
@@ -107,6 +109,14 @@ export class AppointmentService {
 
     @Optional()
     private readonly appointmentGateway?: AppointmentGateway,
+
+    @Optional()
+    @Inject(forwardRef(() => ReminderService))
+    private readonly reminderService?: ReminderService,
+
+    @Optional()
+    @Inject(forwardRef(() => PaymentService))
+    private readonly paymentService?: PaymentService,
   ) {
     if (!this.appointmentGateway) {
       this.logger.warn(
@@ -406,6 +416,7 @@ export class AppointmentService {
     }
 
     this.sendBookingEmail(fullAppointment);
+    await this.reminderService?.scheduleAppointmentReminders(fullAppointment);
 
     // P0-3: Emit booking event to doctor room AFTER commit
     this.appointmentGateway?.emitAppointmentEvent(SOCKET_EVENTS.BOOKED, {
@@ -662,6 +673,19 @@ export class AppointmentService {
     );
 
     this.sendCancellationEmail(updatedAppointment);
+
+    await this.reminderService?.cancelRemindersForAppointment(updatedAppointment.id);
+
+    if (updatedAppointment.paymentStatus === 'PAID' && this.paymentService) {
+      try {
+        await this.paymentService.createRefund(userId, 'PATIENT', {
+          appointmentId: updatedAppointment.id,
+          reason: 'Patient cancelled appointment',
+        });
+      } catch (err: any) {
+        this.logger.error(`Automatic refund failed during patient cancellation: ${err.message}`);
+      }
+    }
 
     return {
       message: 'Appointment cancelled successfully',
@@ -935,6 +959,7 @@ export class AppointmentService {
 
     if (fullNewAppointment) {
       this.sendRescheduleEmail(fullNewAppointment, previousDate, previousStartTime);
+      await this.reminderService?.rescheduleReminders(fullNewAppointment);
     }
 
     // P0-3: Emit reschedule event to doctor room AFTER commit
@@ -1106,6 +1131,19 @@ export class AppointmentService {
     );
 
     this.sendCancellationEmail(updatedAppointment);
+
+    await this.reminderService?.cancelRemindersForAppointment(updatedAppointment.id);
+
+    if (updatedAppointment.paymentStatus === 'PAID' && this.paymentService) {
+      try {
+        await this.paymentService.createRefund(userId, 'DOCTOR', {
+          appointmentId: updatedAppointment.id,
+          reason: 'Doctor cancelled appointment',
+        });
+      } catch (err: any) {
+        this.logger.error(`Automatic refund failed during doctor cancellation: ${err.message}`);
+      }
+    }
 
     return {
       message: 'Appointment cancelled successfully',
@@ -1413,6 +1451,7 @@ export class AppointmentService {
       startTime: appointment.startTime,
       endTime: appointment.endTime,
       status: appointment.status,
+      paymentStatus: appointment.paymentStatus ?? 'UNPAID',
       tokenNumber: appointment.tokenNumber ?? null,
       doctor: appointment.doctor
         ? {
@@ -1439,6 +1478,7 @@ export class AppointmentService {
       startTime: appointment.startTime,
       endTime: appointment.endTime,
       status: appointment.status,
+      paymentStatus: appointment.paymentStatus ?? 'UNPAID',
       tokenNumber: appointment.tokenNumber ?? null,
       schedulingType: appointment.tokenNumber !== null ? 'WAVE' : 'STREAM',
       patient: appointment.patient

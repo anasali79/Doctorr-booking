@@ -8,7 +8,6 @@ function buildTokenMsg(tokenNumber: number | null): string {
   return `<p style="margin: 5px 0; color: #333333;"><strong>Token Number:</strong> ${tokenNumber}</p>`;
 }
 
-
 function htmlToPlainText(html: string): string {
   return html
     .replace(/<br\s*\/?>/gi, '\n')
@@ -35,7 +34,6 @@ function buildHeader(title: string, titleColor: string): string {
   `;
 }
 
-// Reusable footer with disclaimer and unsubscribe link
 function buildFooter(): string {
   return `
     <hr style="border: none; border-top: 1px solid #eeeeee; margin: 24px 0 16px 0;" />
@@ -56,7 +54,6 @@ function buildFooter(): string {
   `;
 }
 
-// Reusable CTA button
 function buildCtaButton(label: string, url: string, color: string): string {
   return `
     <div style="text-align: center; margin: 20px 0;">
@@ -93,11 +90,7 @@ export class EmailService {
     }
   }
 
-  /**
-   * Send an email using Brevo HTTP API
-   */
   async sendEmail(to: string, subject: string, htmlContent: string): Promise<boolean> {
-    // Generate plain text fallback
     const textContent = htmlToPlainText(htmlContent);
 
     if (!this.apiKey || this.apiKey === 'your_brevo_api_key_here') {
@@ -120,7 +113,7 @@ export class EmailService {
           to: [{ email: to }],
           subject,
           htmlContent,
-          textContent, // plain text fallback
+          textContent,
         }),
       });
 
@@ -152,9 +145,6 @@ export class EmailService {
     }
   }
 
-  /**
-   * Send Booking Confirmation Email
-   */
   async sendBookingConfirmation(
     to: string,
     patientName: string,
@@ -174,9 +164,6 @@ export class EmailService {
       ? `<p style="margin: 5px 0; color: #333333;"><strong>Contact:</strong> ${contactnumber}</p>`
       : '';
 
-    // Generate QR code URL using a public QR code generator API.
-    // Base64 data URLs (e.g. data:image/png;base64) are blocked by most email clients like Gmail.
-    // We use a public API because localhost URLs cannot be loaded by email client proxy servers.
     let qrImageTag = '';
     try {
       const qrPayload = JSON.stringify({ appointmentId });
@@ -226,9 +213,6 @@ export class EmailService {
     return this.sendEmail(to, `Appointment Booked: ${doctorName}`, htmlContent);
   }
 
-  /**
-   * Send Cancellation Email
-   */
   async sendCancellationNotification(
     to: string,
     patientName: string,
@@ -261,9 +245,6 @@ export class EmailService {
     return this.sendEmail(to, `Appointment Cancelled: ${doctorName}`, htmlContent);
   }
 
-  /**
-   * Send Reschedule Email
-   */
   async sendRescheduleNotification(
     to: string,
     patientName: string,
@@ -291,7 +272,6 @@ export class EmailService {
               Your appointment has been successfully rescheduled. Here are your updated details:
             </p>
 
-            <!-- Clean layout compatible with email clients -->
             <div style="background-color: #e8f5e9; padding: 15px; border-radius: 4px; border-left: 4px solid #4caf50; margin-bottom: 12px;">
               <p style="margin: 0 0 5px 0; color: #2e7d32; font-weight: bold; font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase;">New Schedule</p>
               <p style="margin: 5px 0; color: #333333;"><strong>Doctor:</strong> ${doctorName} (${specialization})</p>
@@ -325,9 +305,6 @@ export class EmailService {
     );
   }
 
-  /**
-   * Send Appointment Reminder Email
-   */
   async sendAppointmentReminder(
     to: string,
     patientName: string,
@@ -335,6 +312,7 @@ export class EmailService {
     date: string,
     startTime: string,
     tokenNumber: number | null,
+    leadTimeLabel: string = 'today',
   ): Promise<boolean> {
     const formattedDate = formatDate(date);
     const formattedTime = formatTime(startTime);
@@ -342,12 +320,12 @@ export class EmailService {
 
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
-        ${buildHeader('Appointment Reminder ', '#d32f2f')}
+        ${buildHeader('Appointment Reminder ⏰', '#d32f2f')}
         <div style="padding: 20px;">
           <div style="background-color: #f9f9f9; padding: 20px; border-radius: 6px; margin-bottom: 4px;">
             <p style="color: #333333; font-size: 16px; margin-top: 0;">Hello <strong>${patientName}</strong>,</p>
             <p style="color: #555555; line-height: 1.5; font-size: 15px;">
-              Friendly reminder — your appointment with <strong>${doctorName}</strong> is <strong>today</strong>!
+              Friendly reminder — your appointment with <strong>${doctorName}</strong> is coming up <strong>${leadTimeLabel}</strong>!
             </p>
             <div style="background-color: #ffffff; padding: 15px; border-radius: 4px; border-left: 4px solid #d32f2f; margin: 15px 0;">
               <p style="margin: 5px 0; color: #333333;"><strong>Date:</strong> ${formattedDate}</p>
@@ -364,12 +342,151 @@ export class EmailService {
       </div>
     `;
 
-    return this.sendEmail(to, `Reminder: Appointment today with ${doctorName}`, htmlContent);
+    return this.sendEmail(to, `Reminder: Appointment ${leadTimeLabel} with ${doctorName}`, htmlContent);
   }
 
-  /**
-   * Send Welcome Email after signup
-   */
+  async sendPaymentSuccess(
+    to: string,
+    patientName: string,
+    doctorName: string,
+    amountInPaise: number,
+    orderId: string,
+    paymentId: string,
+    date: string,
+    startTime: string,
+  ): Promise<boolean> {
+    const amountFormatted = `₹${(amountInPaise / 100).toFixed(2)}`;
+    const formattedDate = formatDate(date);
+    const formattedTime = formatTime(startTime);
+
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+        ${buildHeader('Payment Received! 💳', '#2e7d32')}
+        <div style="padding: 20px;">
+          <div style="background-color: #f9f9f9; padding: 20px; border-radius: 6px; margin-bottom: 4px;">
+            <p style="color: #333333; font-size: 16px; margin-top: 0;">Hello <strong>${patientName}</strong>,</p>
+            <p style="color: #555555; line-height: 1.5; font-size: 15px;">
+              We have successfully received your payment of <strong>${amountFormatted}</strong> for your consultation with <strong>${doctorName}</strong>.
+            </p>
+            <div style="background-color: #ffffff; padding: 15px; border-radius: 4px; border-left: 4px solid #2e7d32; margin: 15px 0;">
+              <p style="margin: 5px 0; color: #333333;"><strong>Amount Paid:</strong> ${amountFormatted}</p>
+              <p style="margin: 5px 0; color: #333333;"><strong>Payment ID:</strong> ${paymentId}</p>
+              <p style="margin: 5px 0; color: #333333;"><strong>Order ID:</strong> ${orderId}</p>
+              <p style="margin: 5px 0; color: #333333;"><strong>Appointment Date:</strong> ${formattedDate} at ${formattedTime}</p>
+            </div>
+            <p style="color: #555555; line-height: 1.5; font-size: 13px;">
+              A formal receipt is available in your Patient Portal under Payment History.
+            </p>
+          </div>
+          ${buildCtaButton('View Payment History', `${this.appBaseUrl}/patient/dashboard`, '#2e7d32')}
+        </div>
+        ${buildFooter()}
+      </div>
+    `;
+
+    return this.sendEmail(to, `Payment Successful: Consultation with ${doctorName}`, htmlContent);
+  }
+
+  async sendRefundInitiated(
+    to: string,
+    patientName: string,
+    doctorName: string,
+    amountInPaise: number,
+    refundId: string,
+    reason?: string,
+  ): Promise<boolean> {
+    const amountFormatted = `₹${(amountInPaise / 100).toFixed(2)}`;
+
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+        ${buildHeader('Refund Initiated ↩️', '#0066cc')}
+        <div style="padding: 20px;">
+          <div style="background-color: #f9f9f9; padding: 20px; border-radius: 6px; margin-bottom: 4px;">
+            <p style="color: #333333; font-size: 16px; margin-top: 0;">Hello <strong>${patientName}</strong>,</p>
+            <p style="color: #555555; line-height: 1.5; font-size: 15px;">
+              A refund of <strong>${amountFormatted}</strong> for your consultation with <strong>${doctorName}</strong> has been initiated.
+            </p>
+            <div style="background-color: #ffffff; padding: 15px; border-radius: 4px; border-left: 4px solid #0066cc; margin: 15px 0;">
+              <p style="margin: 5px 0; color: #333333;"><strong>Refund Amount:</strong> ${amountFormatted}</p>
+              <p style="margin: 5px 0; color: #333333;"><strong>Refund Reference:</strong> ${refundId}</p>
+              ${reason ? `<p style="margin: 5px 0; color: #333333;"><strong>Reason:</strong> ${reason}</p>` : ''}
+              <p style="margin: 5px 0; color: #757575; font-size: 13px;">Refunds typically appear in your original payment method in 5-7 business days.</p>
+            </div>
+          </div>
+          ${buildCtaButton('View Refund Status', `${this.appBaseUrl}/patient/dashboard`, '#0066cc')}
+        </div>
+        ${buildFooter()}
+      </div>
+    `;
+
+    return this.sendEmail(to, `Refund Initiated for Consultation with ${doctorName}`, htmlContent);
+  }
+
+  async sendRefundCompleted(
+    to: string,
+    patientName: string,
+    doctorName: string,
+    amountInPaise: number,
+    refundId: string,
+  ): Promise<boolean> {
+    const amountFormatted = `₹${(amountInPaise / 100).toFixed(2)}`;
+
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+        ${buildHeader('Refund Completed ✅', '#2e7d32')}
+        <div style="padding: 20px;">
+          <div style="background-color: #f9f9f9; padding: 20px; border-radius: 6px; margin-bottom: 4px;">
+            <p style="color: #333333; font-size: 16px; margin-top: 0;">Hello <strong>${patientName}</strong>,</p>
+            <p style="color: #555555; line-height: 1.5; font-size: 15px;">
+              Your refund of <strong>${amountFormatted}</strong> for your appointment with <strong>${doctorName}</strong> has been successfully processed by your bank.
+            </p>
+            <div style="background-color: #ffffff; padding: 15px; border-radius: 4px; border-left: 4px solid #2e7d32; margin: 15px 0;">
+              <p style="margin: 5px 0; color: #333333;"><strong>Amount Credited:</strong> ${amountFormatted}</p>
+              <p style="margin: 5px 0; color: #333333;"><strong>Refund ID:</strong> ${refundId}</p>
+            </div>
+          </div>
+          ${buildCtaButton('View Account', `${this.appBaseUrl}/patient/dashboard`, '#2e7d32')}
+        </div>
+        ${buildFooter()}
+      </div>
+    `;
+
+    return this.sendEmail(to, `Refund Completed: Consultation with ${doctorName}`, htmlContent);
+  }
+
+  async sendRefundFailed(
+    to: string,
+    patientName: string,
+    doctorName: string,
+    amountInPaise: number,
+    reason?: string,
+  ): Promise<boolean> {
+    const amountFormatted = `₹${(amountInPaise / 100).toFixed(2)}`;
+
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+        ${buildHeader('Refund Notice ⚠️', '#c62828')}
+        <div style="padding: 20px;">
+          <div style="background-color: #f9f9f9; padding: 20px; border-radius: 6px; margin-bottom: 4px;">
+            <p style="color: #333333; font-size: 16px; margin-top: 0;">Hello <strong>${patientName}</strong>,</p>
+            <p style="color: #555555; line-height: 1.5; font-size: 15px;">
+              An issue occurred while processing your refund of <strong>${amountFormatted}</strong> for your appointment with <strong>${doctorName}</strong>.
+            </p>
+            <div style="background-color: #ffebee; padding: 15px; border-radius: 4px; border-left: 4px solid #c62828; margin: 15px 0;">
+              <p style="margin: 5px 0; color: #c62828;"><strong>Status:</strong> Processing Issue</p>
+              ${reason ? `<p style="margin: 5px 0; color: #333333;"><strong>Details:</strong> ${reason}</p>` : ''}
+              <p style="margin: 5px 0; color: #555555; font-size: 13px;">Our finance team has been notified and is manually resolving your transaction.</p>
+            </div>
+          </div>
+          ${buildCtaButton('Contact Support', `${this.appBaseUrl}/support`, '#c62828')}
+        </div>
+        ${buildFooter()}
+      </div>
+    `;
+
+    return this.sendEmail(to, `Update on your Refund for Consultation with ${doctorName}`, htmlContent);
+  }
+
   async sendWelcomeEmail(to: string, name: string, role: string): Promise<void> {
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">

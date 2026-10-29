@@ -9,6 +9,10 @@ import { Appointment } from '../appointment/entities/appointment.entity';
 import { Notification } from '../notification/entities/notification.entity';
 import { DoctorLeave } from '../doctor/entities/leave.entity';
 import { CheckInRequest } from '../check-in/entities/check-in-request.entity';
+import { Payment } from '../payment/entities/payment.entity';
+import { Refund } from '../payment/entities/refund.entity';
+import { WebhookEvent } from '../payment/entities/webhook-event.entity';
+import { ReminderJob } from '../reminder/entities/reminder-job.entity';
 
 export function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
   const databaseUrl = config.get<string>('DATABASE_URL');
@@ -26,6 +30,10 @@ export function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
       Notification,
       DoctorLeave,
       CheckInRequest,
+      Payment,
+      Refund,
+      WebhookEvent,
+      ReminderJob,
     ],
     synchronize: false,
     migrations: [__dirname + '/../migrations/*.js'],

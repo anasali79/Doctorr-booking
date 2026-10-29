@@ -13,6 +13,7 @@ import { CheckInModule } from './check-in/check-in.module';
 import { getDatabaseConfig } from './config/database.config';
 import { SocketsModule } from './sockets/sockets.module';
 import { ReminderModule } from './reminder/reminder.module';
+import { PaymentModule } from './payment/payment.module';
 
 @Module({
   controllers: [AppController],
@@ -38,6 +39,7 @@ import { ReminderModule } from './reminder/reminder.module';
     CheckInModule,
     SocketsModule,
     ReminderModule,
+    PaymentModule,
   ],
 })
 export class AppModule {}

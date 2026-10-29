@@ -11,11 +11,13 @@ import { DoctorModule } from '../doctor/doctor.module';
 import { NotificationModule } from '../notification/notification.module';
 import { EmailModule } from '../email/email.module';
 import { ReminderModule } from '../reminder/reminder.module';
+import { PaymentModule } from '../payment/payment.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Appointment, Doctor, Patient, DoctorLeave]),
     forwardRef(() => DoctorModule),
+    forwardRef(() => PaymentModule),
     NotificationModule,
     EmailModule,
     ReminderModule,

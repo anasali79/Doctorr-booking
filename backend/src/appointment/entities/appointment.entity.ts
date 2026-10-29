@@ -42,6 +42,12 @@ export class Appointment {
   @Column({ type: 'varchar', default: AppointmentStatus.CONFIRMED })
   status: AppointmentStatus;
 
+  @Column({ type: 'varchar', length: 50, default: 'UNPAID' })
+  paymentStatus: string;
+
+  @Column({ type: 'timestamp', nullable: true, default: null })
+  pendingExpiresAt: Date | null;
+
   @Column({ type: 'int', nullable: true, default: null })
   tokenNumber: number | null;
 
