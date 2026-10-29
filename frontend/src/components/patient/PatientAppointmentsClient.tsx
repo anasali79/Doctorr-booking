@@ -190,8 +190,11 @@ export function PatientAppointmentsClient({
       setRescheduleLoading(true);
       const res = await clientAxios.patch<{
         message: string;
-        data: Appointment;
+        data: any;
       }>(`/api/appointment/${reschedulingAppt.id}/reschedule`, {
+        date: rescheduleDate,
+        startTime: selectedSlot.startTime,
+        endTime: selectedSlot.endTime,
         newDate: rescheduleDate,
         newStartTime: selectedSlot.startTime,
         newEndTime: selectedSlot.endTime,
@@ -201,9 +204,15 @@ export function PatientAppointmentsClient({
         description: `New slot on ${formatDate(rescheduleDate)} at ${formatTime(selectedSlot.startTime)}`,
       });
 
-      setAppointments((prev) =>
-        prev.map((a) => (a.id === reschedulingAppt.id ? res.data.data : a)),
-      );
+      const resData = res.data?.data;
+      const newAppt = resData?.newAppointment || resData;
+
+      if (newAppt && newAppt.id) {
+        setAppointments((prev) => [
+          newAppt,
+          ...prev.filter((a) => a.id !== reschedulingAppt.id && a.id !== newAppt.id),
+        ]);
+      }
       setReschedulingAppt(null);
       router.refresh();
     } catch (err: unknown) {
@@ -422,14 +431,7 @@ export function PatientAppointmentsClient({
                       ? 'border-[#0066cc] bg-blue-50/50 text-[#0066cc] font-semibold'
                       : 'border-slate-200 hover:bg-slate-50 text-slate-700')}
                 >
-                  <input
-                    type="radio"
-                    name="cancelReason"
-                    value={preset}
-                    checked={cancelReasonPreset === preset}
-                    onChange={() => setCancelReasonPreset(preset)}
-                    className="accent-[#0066cc]"
-                  />
+                  <Input type="radio" name="cancelReason" value={preset} checked={cancelReasonPreset === preset} onChange={() => setCancelReasonPreset(preset)} className="accent-[#0066cc] w-4 h-4 shadow-none border-slate-300 p-0 inline-block h-4" />
                   <span>{preset}</span>
                 </label>
               ))}

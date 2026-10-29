@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
@@ -293,13 +294,7 @@ export function PatientPaymentsClient() {
                 <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Reason for Cancellation (optional)
                 </label>
-                <input
-                  type="text"
-                  value={refundReason}
-                  onChange={(e) => setRefundReason(e.target.value)}
-                  placeholder="e.g. Schedule conflict, feeling better"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs focus:outline-hidden focus:border-[#0066cc]"
-                />
+                <Input type="text" value={refundReason} onChange={(e) => setRefundReason(e.target.value)} placeholder="e.g. Schedule conflict, feeling better" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs focus:outline-hidden focus:border-[#0066cc] h-auto" />
               </div>
             </div>
 

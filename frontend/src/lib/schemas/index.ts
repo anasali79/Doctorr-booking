@@ -65,11 +65,23 @@ export const bookingSchema = z.object({
 
 export type BookingInput = z.infer<typeof bookingSchema>;
 
-export const rescheduleSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Start time must be in HH:mm format'),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/, 'End time must be in HH:mm format'),
-});
+export const rescheduleSchema = z
+  .object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format').optional(),
+    startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Start time must be in HH:mm format').optional(),
+    endTime: z.string().regex(/^\d{2}:\d{2}$/, 'End time must be in HH:mm format').optional(),
+    newDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format').optional(),
+    newStartTime: z.string().regex(/^\d{2}:\d{2}$/, 'Start time must be in HH:mm format').optional(),
+    newEndTime: z.string().regex(/^\d{2}:\d{2}$/, 'End time must be in HH:mm format').optional(),
+  })
+  .transform((data) => ({
+    date: (data.date || data.newDate) as string,
+    startTime: (data.startTime || data.newStartTime) as string,
+    endTime: (data.endTime || data.newEndTime) as string,
+  }))
+  .refine((data) => Boolean(data.date && data.startTime && data.endTime), {
+    message: 'Date, startTime, and endTime are required for rescheduling',
+  });
 
 export type RescheduleInput = z.infer<typeof rescheduleSchema>;
 

@@ -4,6 +4,8 @@ import { getDoctors } from '@/lib/api/doctors';
 import { getSession } from '@/lib/auth/session';
 import { Navbar } from '@/components/common/Navbar';
 import { DoctorCard } from '@/components/common/DoctorCard';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { SPECIALIZATIONS, SPECIALIZATION_LABELS } from '@/lib/constants';
 import {
   Calendar,
@@ -89,13 +91,7 @@ export default async function DoctorsPage({ searchParams }: DoctorsPageProps) {
           <form method="GET" action="/doctors" className="grid gap-3 sm:grid-cols-12">
             <div className="relative sm:col-span-5">
               <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                name="search"
-                defaultValue={search}
-                placeholder="Search by physician name or specialty"
-                className="w-full rounded-full border border-slate-200 bg-white py-2.5 pl-11 pr-4 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#0066cc] focus:outline-none focus:ring-2 focus:ring-[#0066cc]/10 transition-all shadow-2xs"
-              />
+              <Input type="text" name="search" defaultValue={search} placeholder="Search by physician name or specialty" className="w-full rounded-full border border-slate-200 bg-white py-2.5 pl-11 pr-4 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#0066cc] focus:outline-none focus:ring-2 focus:ring-[#0066cc]/10 transition-all shadow-2xs h-auto" />
             </div>
 
             <div className="sm:col-span-4">
@@ -114,10 +110,7 @@ export default async function DoctorsPage({ searchParams }: DoctorsPageProps) {
             </div>
 
             <div className="flex items-center gap-2 sm:col-span-3">
-              <button type="submit" className="btn-primary flex-1 py-2.5 text-xs">
-                <Filter className="h-3.5 w-3.5" />
-                Filter Slots
-              </button>
+              <Button type="submit" className="btn-primary flex-1 py-2.5 text-xs"><Filter className="h-3.5 w-3.5" />Filter Slots</Button>
               {(search || specialization) && (
                 <Link
                   href="/doctors"

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 
 type ActionType = 'manual-check-in' | 'start-consultation' | 'complete' | 'no-show';
@@ -185,12 +186,7 @@ export function DoctorLiveQueueClient({ initialAppointments, selectedDate, today
               action="/doctor/appointments"
               className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-xs"
             >
-              <input
-                type="date"
-                name="date"
-                defaultValue={selectedDate}
-                className="text-xs font-semibold text-slate-700 bg-transparent focus:outline-none"
-              />
+              <Input type="date" name="date" defaultValue={selectedDate} className="text-xs font-semibold text-slate-700 bg-transparent focus-visible:ring-0 shadow-none border-0 h-auto p-0" />
               <Button type="submit" size="xs" variant="ghost" className="text-xs font-bold text-blue-700 hover:text-blue-900 px-1">
                 Go
               </Button>
