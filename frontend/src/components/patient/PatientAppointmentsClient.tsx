@@ -759,7 +759,7 @@ export function PatientAppointmentsClient({
                   No open consultation slots found for this date.
                 </div>
               ) : (
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {rescheduleSlots.map((slot, idx) => {
                     const isBookable =
                       slot.status === 'available' ||
@@ -768,12 +768,12 @@ export function PatientAppointmentsClient({
 
                     return (
                       <Button
-                        key={`${slot.startTime}-${idx}`}
+                        key={`${slot.startTime}-${slot.endTime}-${idx}`}
                         type="button"
                         disabled={!isBookable}
                         variant="ghost"
                         onClick={() => setSelectedSlot(slot)}
-                        className={`p-2.5 rounded-xl border text-xs font-bold transition-all h-auto ${
+                        className={`p-2.5 rounded-xl border text-xs font-bold transition-all h-auto flex flex-col items-center justify-center gap-0.5 ${
                           isSelected
                             ? 'bg-black border-black text-white shadow-xs hover:bg-black hover:text-white'
                             : isBookable
@@ -781,7 +781,18 @@ export function PatientAppointmentsClient({
                             : 'opacity-40 cursor-not-allowed bg-zinc-100 text-zinc-400'
                         }`}
                       >
-                        {formatTime(slot.startTime)}
+                        <span className="whitespace-nowrap">
+                          {formatTime(slot.startTime)} – {formatTime(slot.endTime)}
+                        </span>
+                        {slot.schedulingType === 'WAVE' ? (
+                          <span className={`text-[9px] font-bold ${isSelected ? 'text-blue-200' : 'text-[#0066cc]'}`}>
+                            Wave ({slot.availableCount ?? 1} left)
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-medium opacity-75">
+                            {isBookable ? 'Available' : 'Booked'}
+                          </span>
+                        )}
                       </Button>
                     );
                   })}

@@ -1397,7 +1397,10 @@ export class AvailabilityService {
       const currentTimeInMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
 
       futureSlots = candidateSlots.filter(
-        (slot) => toMinutes(slot.startTime) > currentTimeInMinutes,
+        (slot) =>
+          slot.schedulingType === SchedulingType.WAVE
+            ? toMinutes(slot.endTime) > currentTimeInMinutes
+            : toMinutes(slot.startTime) > currentTimeInMinutes,
       );
     }
 

@@ -92,6 +92,7 @@ export interface Slot {
   schedulingType?: 'STREAM' | 'WAVE';
   bufferTime?: number;
   maxPatients?: number;
+  bookedCount?: number;
   availableCount?: number;
 }
 

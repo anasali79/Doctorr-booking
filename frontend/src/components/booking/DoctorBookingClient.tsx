@@ -15,6 +15,8 @@ import {
   Sunset,
   Moon,
   CheckCircle2,
+  Layers,
+  Users,
 } from 'lucide-react';
 import Link from 'next/link';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
@@ -266,19 +268,30 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
     }
   };
 
-  // Group slots by time period
-  const morningSlots = slots.filter((s) => parseInt(s.startTime.split(':')[0], 10) < 12);
-  const afternoonSlots = slots.filter((s) => {
+  // Separate WAVE slots and STREAM slots
+  const waveSlots = slots.filter((s) => s.schedulingType === 'WAVE');
+  const streamSlots = slots.filter((s) => s.schedulingType !== 'WAVE');
+
+  // Group stream slots by time period
+  const morningSlots = streamSlots.filter((s) => parseInt(s.startTime.split(':')[0], 10) < 12);
+  const afternoonSlots = streamSlots.filter((s) => {
     const h = parseInt(s.startTime.split(':')[0], 10);
     return h >= 12 && h < 17;
   });
-  const eveningSlots = slots.filter((s) => parseInt(s.startTime.split(':')[0], 10) >= 17);
+  const eveningSlots = streamSlots.filter((s) => parseInt(s.startTime.split(':')[0], 10) >= 17);
 
-  const availableCount = slots.filter(
-    (s) =>
+  // Total available booking count across stream & wave
+  const availableCount = slots.reduce((acc, s) => {
+    const isBookable =
       s.status === 'available' ||
-      s.status === 'cancel and available for booking',
-  ).length;
+      s.status === 'cancel and available for booking';
+    if (!isBookable) return acc;
+
+    if (s.schedulingType === 'WAVE') {
+      return acc + (s.availableCount !== undefined ? s.availableCount : 1);
+    }
+    return acc + 1;
+  }, 0);
 
   return (
     <div className="space-y-6">
@@ -368,6 +381,19 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
           </div>
         ) : (
           <div className="space-y-6">
+            {/* Wave Slots ("Bada Slot" with Start & End Time + Remaining Bookings) */}
+            {waveSlots.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-700">
+                  <Layers className="h-4 w-4 text-[#0066cc]" />
+                  <span>Wave Consultation Windows (Token-Based)</span>
+                </div>
+                <div className="space-y-3">
+                  {waveSlots.map((slot, idx) => renderWaveSlot(slot, idx))}
+                </div>
+              </div>
+            )}
+
             {/* Morning Slots */}
             {morningSlots.length > 0 && (
               <div>
@@ -375,7 +401,7 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
                   <Sun className="h-3.5 w-3.5 text-zinc-500" />
                   Morning
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-2.5">
                   {morningSlots.map((slot, idx) => renderSlotButton(slot, idx))}
                 </div>
               </div>
@@ -388,7 +414,7 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
                   <Sunset className="h-3.5 w-3.5 text-zinc-500" />
                   Afternoon
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-2.5">
                   {afternoonSlots.map((slot, idx) => renderSlotButton(slot, idx))}
                 </div>
               </div>
@@ -401,13 +427,13 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
                   <Moon className="h-3.5 w-3.5 text-zinc-500" />
                   Evening
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-2.5">
                   {eveningSlots.map((slot, idx) => renderSlotButton(slot, idx))}
                 </div>
               </div>
             )}
 
-            <div className="flex items-center gap-5 border-t border-slate-100 pt-4 text-xs text-slate-600">
+            <div className="flex flex-wrap items-center gap-5 border-t border-slate-100 pt-4 text-xs text-slate-600">
               <span className="flex items-center gap-2">
                 <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#0066cc]" />
                 Available Slot
@@ -416,6 +442,12 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
                 <span className="inline-block h-2.5 w-2.5 rounded-full bg-slate-300" />
                 Reserved / Booked
               </span>
+              {waveSlots.length > 0 && (
+                <span className="flex items-center gap-2">
+                  <span className="inline-block h-2.5 w-2.5 rounded-full bg-blue-500" />
+                  Wave Window (Live Capacity)
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -459,6 +491,12 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
                   <span className="font-bold text-slate-900 block">
                     {formatTime(selectedSlot.startTime)} - {formatTime(selectedSlot.endTime)}
                   </span>
+                  {selectedSlot.schedulingType === 'WAVE' && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#0066cc] bg-blue-50 px-2 py-0.5 rounded-full mt-1 border border-blue-200/60">
+                      <Layers className="h-2.5 w-2.5" />
+                      Wave Session • {selectedSlot.availableCount ?? 1} bookings remaining
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -535,24 +573,147 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
 
     return (
       <Button
-        key={`${slot.startTime}-${index}`}
+        key={`${slot.startTime}-${slot.endTime}-${index}`}
         type="button"
         variant="ghost"
         disabled={!isBookable}
         onClick={() => handleSelectSlot(slot)}
-        className={`flex cursor-pointer flex-col items-center justify-center gap-0.5 rounded-full border py-2 px-3 text-center transition-all duration-150 h-auto ${
+        className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border py-2.5 px-2 text-center transition-all duration-150 h-auto group ${
           isBookable
             ? 'border-slate-200 bg-white text-slate-800 hover:border-[#0066cc] hover:bg-[#0066cc] hover:text-white shadow-2xs active:scale-95'
-            : 'cursor-not-allowed border-slate-100 bg-slate-100 text-slate-400 opacity-60'
+            : 'cursor-not-allowed border-slate-100 bg-slate-100/80 text-slate-400 opacity-60'
         }`}
       >
-        <span className="text-xs font-bold tracking-tight">
-          {formatTime(slot.startTime)}
+        <span className="text-[11px] sm:text-xs font-bold tracking-tight whitespace-nowrap group-hover:text-white">
+          {formatTime(slot.startTime)} – {formatTime(slot.endTime)}
         </span>
-        <span className="text-[9px] uppercase font-bold tracking-wider opacity-75">
+        <span className="text-[9px] uppercase font-bold tracking-wider opacity-75 group-hover:text-blue-100">
           {isBookable ? 'Available' : 'Booked'}
         </span>
       </Button>
+    );
+  }
+
+  function renderWaveSlot(slot: Slot, index: number) {
+    const isBookable =
+      slot.status === 'available' ||
+      slot.status === 'cancel and available for booking';
+
+    const maxPatients = slot.maxPatients || 0;
+    const bookedCount = slot.bookedCount || 0;
+    const availableCount =
+      slot.availableCount !== undefined
+        ? slot.availableCount
+        : isBookable
+        ? Math.max(0, maxPatients - bookedCount)
+        : 0;
+
+    const isFull = availableCount <= 0 || !isBookable;
+    const percentBooked =
+      maxPatients > 0
+        ? Math.min(100, Math.round((bookedCount / maxPatients) * 100))
+        : isFull
+        ? 100
+        : 0;
+
+    return (
+      <div
+        key={`wave-slot-${slot.startTime}-${slot.endTime}-${index}`}
+        className={`relative overflow-hidden rounded-2xl border transition-all duration-200 p-4 sm:p-5 ${
+          !isFull
+            ? 'border-blue-200 bg-gradient-to-br from-blue-50/70 via-white to-indigo-50/30 hover:border-[#0066cc] hover:shadow-md'
+            : 'border-slate-200 bg-slate-50/80 opacity-70'
+        }`}
+      >
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* Left: Timing & Wave Badge */}
+          <div className="space-y-1.5 flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-[#0066cc]">
+                <Layers className="h-3 w-3" />
+                Wave Consultation Window
+              </span>
+              {!isFull ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Available for Booking
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-200 px-2.5 py-0.5 text-[10px] font-bold text-slate-600">
+                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                  Wave Full
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-baseline gap-2 pt-0.5">
+              <h3 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+                {formatTime(slot.startTime)} – {formatTime(slot.endTime)}
+              </h3>
+              <span className="text-xs font-semibold text-slate-500">
+                (Full Shift Window)
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Open batch/walk-in session. Patients are accommodated throughout this window with live token numbers.
+            </p>
+          </div>
+
+          {/* Right: Booking Capacity Remaining & CTA */}
+          <div className="flex flex-col sm:items-end gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
+            <div className="text-left sm:text-right">
+              <div className="flex items-center gap-1.5 sm:justify-end">
+                <Users className="h-4 w-4 text-[#0066cc]" />
+                <span className="text-sm sm:text-base font-extrabold text-slate-900">
+                  {availableCount} {availableCount === 1 ? 'Booking' : 'Bookings'} Remaining
+                </span>
+              </div>
+              {maxPatients > 0 ? (
+                <p className="text-[11px] font-semibold text-slate-500 mt-0.5">
+                  {bookedCount} booked / {maxPatients} total capacity
+                </p>
+              ) : (
+                <p className="text-[11px] font-semibold text-slate-500 mt-0.5">
+                  Open Capacity
+                </p>
+              )}
+            </div>
+
+            {/* Capacity Progress Bar */}
+            {maxPatients > 0 && (
+              <div className="w-full sm:w-48 h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200/60">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    availableCount <= 2 ? 'bg-amber-500' : 'bg-[#0066cc]'
+                  }`}
+                  style={{ width: `${percentBooked}%` }}
+                />
+              </div>
+            )}
+
+            <Button
+              type="button"
+              disabled={isFull}
+              onClick={() => handleSelectSlot(slot)}
+              className={`w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-xs h-auto ${
+                !isFull
+                  ? 'bg-[#0066cc] text-white hover:bg-[#0055b3] active:scale-95'
+                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+              }`}
+            >
+              {!isFull ? (
+                <span className="flex items-center gap-1.5">
+                  <span>Book in Wave ({formatTime(slot.startTime)} – {formatTime(slot.endTime)})</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </span>
+              ) : (
+                'Wave Session Full'
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
     );
   }
 }
