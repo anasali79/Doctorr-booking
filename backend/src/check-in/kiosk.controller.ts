@@ -1,11 +1,10 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { CheckInService } from './check-in.service';
 import { KioskScanDto } from './dto/kiosk-scan.dto';
 
 /**
- * Public kiosk endpoints — no login required.
- * Scanning QR only sends a check-in REQUEST to the patient's phone.
- * Patient must approve before check-in happens.
+ * Public kiosk and QR scan endpoints — no login required.
+ * Provides appointment verification, direct check-in, and no-show actions.
  */
 @Controller('kiosk')
 export class KioskController {
@@ -14,5 +13,20 @@ export class KioskController {
   @Post('scan')
   scan(@Body() dto: KioskScanDto) {
     return this.checkInService.requestCheckInFromKiosk(dto.appointmentId);
+  }
+
+  @Get('appointment/:id')
+  getAppointment(@Param('id') id: string) {
+    return this.checkInService.getAppointmentForKiosk(id);
+  }
+
+  @Post('appointment/:id/check-in')
+  checkIn(@Param('id') id: string) {
+    return this.checkInService.kioskDirectCheckIn(id);
+  }
+
+  @Post('appointment/:id/no-show')
+  noShow(@Param('id') id: string) {
+    return this.checkInService.kioskDirectNoShow(id);
   }
 }

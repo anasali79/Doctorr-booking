@@ -79,7 +79,15 @@ export class EmailService {
     this.fromEmail =
       this.configService.get<string>('BREVO_FROM_EMAIL') || 'schedula.sh@gmail.com';
     this.fromName = this.configService.get<string>('BREVO_FROM_NAME') || 'CareUp';
-    this.appBaseUrl = this.configService.get<string>('APP_BASE_URL') || 'https://schedula.app';
+    const configuredBase = this.configService.get<string>('APP_BASE_URL');
+    if (configuredBase) {
+      this.appBaseUrl = configuredBase.trim().replace(/\/+$/, '');
+    } else {
+      const clientUrls = (this.configService.get<string>('CLIENT_URL') || '').split(',');
+      const vercelUrl = clientUrls.find((u) => u.includes('vercel.app'));
+      const localUrl = clientUrls.find((u) => u.includes('3000')) || 'http://localhost:3000';
+      this.appBaseUrl = (vercelUrl || localUrl).trim().replace(/\/+$/, '');
+    }
 
     if (this.apiKey && this.apiKey !== 'your_brevo_api_key_here') {
       this.logger.log('Brevo Email Service initialized.');
@@ -166,18 +174,24 @@ export class EmailService {
 
     let qrImageTag = '';
     try {
-      const qrPayload = JSON.stringify({ appointmentId });
-      const encodedPayload = encodeURIComponent(qrPayload);
+      const checkInUrl = `${this.appBaseUrl}/checkin/${appointmentId}`;
+      const encodedPayload = encodeURIComponent(checkInUrl);
       const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&color=1a6b3c&bgcolor=ffffff&data=${encodedPayload}`;
       qrImageTag = `
-        <div style="text-align: center; margin: 20px 0;">
-          <p style="margin: 0 0 8px 0; color: #333333; font-weight: bold;">Your Check-In QR Code</p>
-          <img src="${qrImageUrl}" alt="Appointment QR Code"
-               width="180" height="180"
-               style="border: 2px solid #0066cc; border-radius: 8px; display: block; margin: 0 auto;" />
-          <p style="margin: 8px 0 0 0; font-size: 12px; color: #9e9e9e;">
-            Scan this QR at the hospital kiosk. You will receive a notification on your phone — tap Approve to check in.
+        <div style="text-align: center; margin: 20px 0; background-color: #ffffff; padding: 16px; border: 1px dashed #0066cc; border-radius: 8px;">
+          <p style="margin: 0 0 8px 0; color: #1e293b; font-weight: bold; font-size: 15px;">Your Check-In QR Code</p>
+          <a href="${checkInUrl}" target="_blank" style="display: inline-block;">
+            <img src="${qrImageUrl}" alt="Appointment QR Code"
+                 width="180" height="180"
+                 style="border: 2px solid #0066cc; border-radius: 8px; display: block; margin: 0 auto;" />
+          </a>
+          <p style="margin: 8px 0 12px 0; font-size: 12px; color: #64748b;">
+            Scan with your phone camera or tap below to open your Check-In page.
           </p>
+          <a href="${checkInUrl}" target="_blank"
+             style="display: inline-block; background-color: #0066cc; color: #ffffff; padding: 9px 20px; border-radius: 6px; font-weight: bold; font-size: 13px; text-decoration: none;">
+            Open Check-In Page &rarr;
+          </a>
         </div>`;
     } catch (err) {
       this.logger.warn('Failed to generate QR code for booking email:', err);

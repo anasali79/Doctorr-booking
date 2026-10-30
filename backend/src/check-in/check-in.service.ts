@@ -664,4 +664,253 @@ export class CheckInService {
       { status: CheckInRequestStatus.EXPIRED },
     );
   }
+
+  // ─── 7. Direct Kiosk / QR Scan Endpoints ─────────────────────────────────────
+
+  async getAppointmentForKiosk(appointmentId: string) {
+    const appointment = await this.appointmentRepo.findOne({
+      where: { id: appointmentId },
+      relations: { doctor: true, patient: true },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException(`Appointment with ID ${appointmentId} not found`);
+    }
+
+    const waitingAppointments = await this.appointmentRepo.find({
+      where: {
+        doctorId: appointment.doctorId,
+        date: appointment.date,
+        status: AppointmentStatus.CHECKED_IN,
+      },
+      order: {
+        checkedInAt: 'ASC',
+        tokenNumber: 'ASC',
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        id: appointment.id,
+        doctorId: appointment.doctorId,
+        doctorName: appointment.doctor?.fullName ?? 'Doctor',
+        doctorSpecialization: appointment.doctor?.specialization ?? 'General Physician',
+        doctorQualification: appointment.doctor?.qualification ?? '',
+        consultationFee: appointment.doctor?.consultationFee ?? 0,
+        patientName: appointment.patient?.fullName ?? 'Patient',
+        patientPhone: appointment.patient?.phone ?? '',
+        date: appointment.date,
+        startTime: appointment.startTime,
+        endTime: appointment.endTime,
+        tokenNumber: appointment.tokenNumber,
+        status: appointment.status,
+        paymentStatus: appointment.paymentStatus,
+        checkedInAt: appointment.checkedInAt ? appointment.checkedInAt.toISOString() : null,
+        queuePosition: appointment.queuePosition,
+        estimatedWaitTime: appointment.estimatedWaitTime,
+        waitingCount: waitingAppointments.length,
+        currentServingToken: appointment.doctor?.currentServingToken ?? null,
+      },
+    };
+  }
+
+  async kioskDirectCheckIn(appointmentId: string) {
+    const appointment = await this.appointmentRepo.findOne({
+      where: { id: appointmentId },
+      relations: { doctor: true, patient: { user: true } },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException(`Appointment with ID ${appointmentId} not found`);
+    }
+
+    if (appointment.status === AppointmentStatus.CHECKED_IN) {
+      return {
+        success: true,
+        message: 'Patient is already checked in.',
+        status: AppointmentStatus.CHECKED_IN,
+        data: {
+          id: appointment.id,
+          status: AppointmentStatus.CHECKED_IN,
+          checkedInAt: appointment.checkedInAt ? appointment.checkedInAt.toISOString() : new Date().toISOString(),
+        },
+      };
+    }
+
+    if (appointment.status === AppointmentStatus.COMPLETED) {
+      throw new BadRequestException('Appointment is already completed.');
+    }
+    if (appointment.status === AppointmentStatus.CANCELLED) {
+      throw new BadRequestException('Cannot check in for a cancelled appointment.');
+    }
+    if (appointment.status === AppointmentStatus.NO_SHOW) {
+      throw new BadRequestException('Cannot check in. Appointment is marked as no-show.');
+    }
+    if (appointment.status === AppointmentStatus.IN_CONSULTATION) {
+      throw new BadRequestException('Patient is currently in consultation.');
+    }
+
+    const todayStr = getTodayIST();
+    if (appointment.date > todayStr) {
+      throw new BadRequestException(`Check-in is only allowed on the appointment date (${appointment.date}).`);
+    }
+    if (appointment.date < todayStr) {
+      throw new BadRequestException('Appointment date has passed and is expired.');
+    }
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    let app: Appointment | null = null;
+    try {
+      app = await queryRunner.manager
+        .createQueryBuilder(Appointment, 'a')
+        .where('a.id = :id', { id: appointment.id })
+        .setLock('pessimistic_write')
+        .getOne();
+
+      if (!app || app.status !== AppointmentStatus.CONFIRMED) {
+        if (app?.status === AppointmentStatus.CHECKED_IN) {
+          await queryRunner.rollbackTransaction();
+          return {
+            success: true,
+            message: 'Patient is already checked in.',
+            status: AppointmentStatus.CHECKED_IN,
+            data: { id: app.id, status: AppointmentStatus.CHECKED_IN },
+          };
+        }
+        throw new ConflictException(`Cannot check in. Appointment status is ${app?.status}`);
+      }
+
+      app.status = AppointmentStatus.CHECKED_IN;
+      app.checkedInAt = new Date();
+      await queryRunner.manager.save(app);
+
+      await this.queueService.recalculateQueue(app.doctorId, app.date, queryRunner.manager);
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+
+    // Post-commit side effects
+    this.appointmentGateway?.emitAppointmentEvent(
+      SOCKET_EVENTS.CHECKED_IN,
+      {
+        appointmentId: app!.id,
+        patientId: app!.patientId,
+        doctorId: app!.doctorId,
+        status: AppointmentStatus.CHECKED_IN,
+        updatedAt: app!.checkedInAt!.toISOString(),
+      },
+    );
+
+    await this.queueService.broadcastQueueStatus(app!.doctorId, app!.date, this.dataSource.manager);
+
+    return {
+      success: true,
+      message: 'Checked in successfully! You are now in the doctor’s queue.',
+      status: AppointmentStatus.CHECKED_IN,
+      data: {
+        id: app!.id,
+        status: AppointmentStatus.CHECKED_IN,
+        checkedInAt: app!.checkedInAt!.toISOString(),
+      },
+    };
+  }
+
+  async kioskDirectNoShow(appointmentId: string) {
+    const appointment = await this.appointmentRepo.findOne({
+      where: { id: appointmentId },
+      relations: { doctor: true, patient: { user: true } },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException(`Appointment with ID ${appointmentId} not found`);
+    }
+
+    if (appointment.status === AppointmentStatus.NO_SHOW) {
+      return {
+        success: true,
+        message: 'Appointment is already marked as no-show.',
+        status: AppointmentStatus.NO_SHOW,
+        data: { id: appointment.id, status: AppointmentStatus.NO_SHOW },
+      };
+    }
+
+    if (appointment.status === AppointmentStatus.COMPLETED) {
+      throw new BadRequestException('Cannot mark a completed appointment as no-show.');
+    }
+    if (appointment.status === AppointmentStatus.CANCELLED) {
+      throw new BadRequestException('Appointment is already cancelled.');
+    }
+    if (appointment.status === AppointmentStatus.IN_CONSULTATION) {
+      throw new BadRequestException('Cannot mark appointment as no-show while in consultation.');
+    }
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    let app: Appointment | null = null;
+    try {
+      app = await queryRunner.manager
+        .createQueryBuilder(Appointment, 'a')
+        .where('a.id = :id', { id: appointment.id })
+        .setLock('pessimistic_write')
+        .getOne();
+
+      if (!app) {
+        throw new NotFoundException(`Appointment with ID ${appointmentId} not found`);
+      }
+
+      if (
+        app.status !== AppointmentStatus.CONFIRMED &&
+        app.status !== AppointmentStatus.CHECKED_IN
+      ) {
+        throw new BadRequestException(
+          `Cannot mark appointment as no-show. Status is ${app.status}, expected CONFIRMED or CHECKED_IN.`,
+        );
+      }
+
+      app.status = AppointmentStatus.NO_SHOW;
+      await queryRunner.manager.save(app);
+
+      await this.queueService.recalculateQueue(app.doctorId, app.date, queryRunner.manager);
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+
+    // Post-commit side effects
+    this.appointmentGateway?.emitAppointmentEvent(
+      SOCKET_EVENTS.NO_SHOW,
+      {
+        appointmentId: app!.id,
+        patientId: app!.patientId,
+        doctorId: app!.doctorId,
+        status: AppointmentStatus.NO_SHOW,
+        updatedAt: new Date().toISOString(),
+      },
+    );
+
+    await this.queueService.broadcastQueueStatus(app!.doctorId, app!.date, this.dataSource.manager);
+
+    return {
+      success: true,
+      message: 'Appointment marked as No-Show successfully.',
+      status: AppointmentStatus.NO_SHOW,
+      data: {
+        id: app!.id,
+        status: AppointmentStatus.NO_SHOW,
+      },
+    };
+  }
 }
