@@ -324,6 +324,67 @@ Patient cancels their own appointment.
 
 ---
 
+## 5. Doctor Clinical Records & Continuity of Care (`/api/doctor`)
+
+### A. Doctor Patients Directory
+Fetches all unique patients who have booked or attended appointments with this doctor, aggregated with visit counts, last visit date, next appointment, and recent clinical notes.
+
+- **Route:** `GET /api/doctor/patients`
+- **Query Params:** `?search=query` (searches name, phone, allergies, blood group)
+- **Access:** Authenticated `DOCTOR` only.
+
+### B. Patient Complete Medical Record & Timeline
+Fetches a specific patient's complete profile (blood group, allergies, chronic conditions, current medications), consultation stats, full appointment history, and historical clinical notes.
+
+- **Route:** `GET /api/doctor/patients/:patientId`
+- **Access:** Authenticated `DOCTOR` only.
+
+### C. Save Consultation Clinical Notes
+Persists clinical findings, observations, and prescription advice for a specific appointment.
+
+- **Route:** `PATCH /api/doctor/appointments/:id/clinical-notes`
+- **Request Body:**
+```json
+{
+  "notes": "Patient presented with acute pharyngitis. Prescribed amoxicillin 500mg TDS for 5 days.",
+  "reasonForVisit": "Sore throat and fever"
+}
+```
+- **Access:** Authenticated `DOCTOR` only.
+
+### D. Update Patient Medical Parameters by Doctor
+Allows the consulting physician to update a patient's allergies, chronic conditions, regular medications, and blood group.
+
+- **Route:** `PATCH /api/doctor/patients/:patientId/medical-record`
+- **Request Body:**
+```json
+{
+  "bloodGroup": "O+",
+  "allergies": "Penicillin",
+  "medicalHistory": "Mild asthma (2019)",
+  "currentMedication": "Salbutamol inhaler as needed"
+}
+```
+- **Access:** Authenticated `DOCTOR` only.
+
+---
+
+## 6. Multi-Channel Webhooks (`/webhooks`)
+
+### A. Inbound Messages
+Receives incoming messages from Vonage WhatsApp and SMS.
+
+- **Route:** `POST /webhooks/inbound`
+- **Response:** `200 OK` (`{ status: "received" }`)
+
+### B. Delivery Status
+Receives message delivery receipts (submitted, delivered, read, rejected, failed).
+
+- **Route:** `POST /webhooks/status`
+- **Response:** `200 OK` (`{ status: "ok" }`)
+
+---
+
 ## 📜 Scripts Reference
 
 | Command | Description |

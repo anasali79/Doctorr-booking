@@ -1,47 +1,74 @@
-# Schedula — Clinical Appointment Booking & Realtime Queue Tracker
+# Schedula (CareUp) — Clinical Appointment Booking & Realtime Queue Tracker
 
-> **Production-grade Full-Stack Healthcare Platform**  
-> Built with **Next.js (App Router)**, **TypeScript**, **Tailwind CSS**, **NestJS 11**, **TypeORM**, **PostgreSQL**, and **Socket.IO**.
-
----
-
-## 🚀 Live Demo & Production Architecture
-
-- **Frontend:** Next.js App Router (Deployed on Vercel)
-- **Backend:** NestJS 11 + TypeORM (Deployed on Render)
-- **Database:** PostgreSQL (Neon Serverless Postgres)
-- **Realtime Service:** Socket.IO WebSocket Gateway (`/appointments` namespace)
+> **Production-Grade Full-Stack Healthcare Platform**  
+> Built with **Next.js 16 (App Router & Turbopack)**, **TypeScript**, **Tailwind CSS**, **NestJS 11**, **TypeORM**, **PostgreSQL (Neon Serverless)**, **Socket.IO WebSockets**, **Vonage Messages & SMS API**, and **Razorpay**.
 
 ---
 
-## 🩺 System Overview & Features
+## Live Production Deployments
 
-Schedula eliminates waiting room friction by providing instant auto-confirmed specialist bookings, real-time consultation tracking, and token-based clinic queues.
+- **Frontend Web Application:** [https://frontend-tau-five-72.vercel.app](https://frontend-tau-five-72.vercel.app) (Deployed on Vercel)
+- **Backend REST API & WebSockets:** [https://doctorr-booking-1.onrender.com](https://doctorr-booking-1.onrender.com) (Deployed on Render)
+- **Database:** PostgreSQL on Neon Serverless with TypeORM migrations
+- **Postman API Collection:** [View and Test APIs Here](https://www.postman.com/work-anas79-6594293/workspace/anas-ali-s-workspace/collection/50962245-d9f6454f-bca8-472e-91cd-a1de685fce2c?action=share&source=copy-link&creator=50962245)
+
+---
+
+## Key Features & Healthcare Workflows
 
 ### 1. Patient Experience
-- **Specialist Discovery:** Search by doctor name or filter by 10 medical specializations with live availability badges.
-- **Smart Booking:** Browse slots up to doctor-specified booking windows; auto-confirmation without waiting for manual approval.
-- **Live Queue Tracker:** Real-time visibility into current token number, queue position (`#queuePosition`), and estimated wait times.
-- **Appointment Management:** Cancel or reschedule booked slots with instant slot release.
-- **Notification Center:** Clinical alerts for bookings, reschedules, and consultation status changes.
+- **Specialist Discovery:** Search physicians by name or filter across 10 medical specializations with real-time availability badges.
+- **Consultation Booking:** Browse appointment slots up to practitioner booking limits; instant reservation and auto-confirmation.
+- **Live Queue Tracker:** Real-time visibility into queue position (`#queuePosition`), current serving token, and estimated consultation wait times.
+- **Medical Health Profile:** View recorded blood group, known allergies, chronic conditions, regular medications, and doctor consultation notes from past completed visits.
+- **Appointment Management:** Live reschedule and cancellation workflows with automatic slot release and refund triggering.
+- **Notification Center & Preferences:** Multi-channel alert dispatch (Email, SMS, WhatsApp) with customizable preference toggles.
 
 ### 2. Practitioner / Doctor Portal
-- **Real-Time Clinical Dashboard:** Grouped metrics from the database (Today's queue, upcoming bookings, completed consultations, cancellations, no-shows, unique patients).
-- **Roster & Queue Actions:**
-  - `CONFIRMED` → **Check In** (assigns queue token)
-  - `CHECKED_IN` → **Start Consultation** (alerts patient into consultation room)
-  - `IN_CONSULTATION` → **Complete** (marks consultation concluded)
-  - Mark **No-Show** or **Cancel**
-- **Recurring Weekly Availability Editor:** Configure shifts per day of week, slot duration (15/20/30/45/60 min), buffer time, and scheduling mode (**STREAM** vs **WAVE**).
-- **Leave Management:** Block non-working dates with automated patient notification safeguards.
+- **My Day Schedule & Queue:** Real-time patient roster with sequential token numbers, appointment statuses, and quick action triage:
+  - `CONFIRMED` -> **Check In** (assigns queue token)
+  - `CHECKED_IN` -> **Start Consultation** (alerts patient into consultation room)
+  - `IN_CONSULTATION` -> **Complete** (marks consultation concluded)
+  - **No-Show** & **Doctor Cancellation**
+- **Current Patient Details Card:** Real-time medical history, allergies alerts, past visits with this doctor, and persistent clinical notes.
+- **Comprehensive Patient Medical Profile Modal:**
+  - Complete demographics (Age, Gender, Blood Group, Contact).
+  - Editable Clinical Record (Allergies, Chronic Conditions, Regular Medications).
+  - Historical visit timeline with past doctor notes.
+  - Quick consultation note writer directly into the database.
+- **Patients Directory (`/doctor/patients`):**
+  - Searchable, filterable directory of all past and active patients.
+  - Filter by returning patients (2+ visits), allergy alerts, or recent visits.
+  - Quick access to full clinical records to maintain continuity of care across future appointments.
+- **Recurring Availability Engine:** Configure working shifts per day of week, slot durations (15/20/30/45/60 min), buffer time, and scheduling mode (**STREAM** vs **WAVE**).
+- **Leave Management:** Mark dates as unavailable with automated patient reschedule notifications.
+
+### 3. Realtime Notification Infrastructure
+- **WhatsApp (Vonage Messages API):**
+  - Official Messages API Sandbox integration (`https://messages-sandbox.nexmo.com/v1/messages`).
+  - Supports Application JWT authentication via `private.key` (including Render Secret Files at `/etc/secrets/private.key`) and API Key / Secret fallback.
+  - Alphanumeric sender mapping and test number allow-listing.
+- **SMS (Vonage SMS API):**
+  - Official Vonage SMS REST API integration (`https://rest.nexmo.com/sms/json`).
+  - Alphanumeric sender ID `CareUp` with auto-routing to verified test phone numbers in development.
+- **Webhooks:**
+  - `POST /webhooks/inbound` for incoming WhatsApp and SMS messages.
+  - `POST /webhooks/status` for delivery receipts (delivered, read, failed).
+- **Email:** Responsive HTML clinical templates via Nodemailer.
+- **In-App Realtime:** Socket.IO WebSocket broadcasts and in-app notifications.
+
+### 4. Payments & Refunds (Razorpay)
+- **Token Hold:** 15-minute slot reservation during payment checkout (`PENDING_PAYMENT`).
+- **Signature Verification:** Server-side HMAC SHA256 validation of Razorpay payment signatures.
+- **Automated Refunds:** Automatic refund initiation when appointments are cancelled by the clinic or doctor.
 
 ---
 
-## 🔑 Demo Accounts (Pre-configured via Seed)
+## Demo Accounts
 
-All accounts share the default password: **`Password123!`**
+All pre-seeded demo accounts share the default password: **`Password123!`**
 
-### 👨‍⚕️ Specialist Doctors
+### Specialist Doctors
 
 | Doctor Name | Specialization | Email | Experience |
 |---|---|---|---|
@@ -54,7 +81,7 @@ All accounts share the default password: **`Password123!`**
 | **Dr. Meera Reddy** | Gynecologist | `meera.reddy@schedula.com` | 15 Years |
 | **Dr. Farhan Khan** | ENT Specialist | `farhan.khan@schedula.com` | 7 Years |
 
-### 🧑‍💼 Patients
+### Patients
 
 | Patient Name | Email | Details |
 |---|---|---|
@@ -63,114 +90,119 @@ All accounts share the default password: **`Password123!`**
 
 ---
 
-## 🧠 Technical Deep-Dive (Interview & Demo Explanations)
+## Technical Architecture
 
-### 1. Why Bearer Authentication via Next.js Route Handlers?
-Cross-domain cookies (e.g. Next.js on `vercel.app` calling NestJS on `onrender.com`) frequently get blocked by Safari's Intelligent Tracking Prevention (ITP) and browser incognito modes.
-**Solution:** The Next.js server owns the HttpOnly `access_token` cookie on the Next domain. Server components and route handlers decode the session using `jose` and pass `Authorization: Bearer <token>` to the backend API.
-
-### 2. Double-Booking Concurrency Safeguards
-When multiple patients attempt to book the same slot simultaneously:
-- Bookings execute within PostgreSQL `SERIALIZABLE` transactions.
-- Slot validation and insertion are isolated.
-- Concurrent conflicts trigger PostgreSQL code `40001` (serialization failure) or `23505` (unique constraint), which our backend maps to `409 ConflictException` with clean user messaging.
-
-### 3. Realtime WebSocket Architecture
-- The WebSocket gateway connects to `/appointments` via pure WebSocket transport.
-- On connection, clients join role-scoped private rooms: `doctor:<doctorId>` and `patient:<patientId>`.
-- Events emitted:
-  - `appointment.booked` & `appointment.rescheduled`: Triggered immediately after the DB transaction commits; alerts the doctor live.
-  - `appointment.checked_in`, `appointment.consultation_started`, `appointment.completed`: Alerts the patient live and updates their queue dashboard.
+```
+                                  ┌──────────────────────────┐
+                                  │   Next.js 16 Frontend    │
+                                  │   (Vercel App Router)    │
+                                  └────────────┬─────────────┘
+                                               │
+                        ┌──────────────────────┴──────────────────────┐
+                        │ REST API (Bearer Auth) / WebSocket (/appts) │
+                        ▼                                             ▼
+         ┌──────────────────────────────┐              ┌──────────────────────────────┐
+         │     NestJS 11 Backend        │              │     Socket.IO Gateway        │
+         │     (Render Web Service)     │              │     (Live Queue & Events)    │
+         └──────────────┬───────────────┘              └──────────────────────────────┘
+                        │
+         ┌──────────────┼───────────────────────────┬──────────────────────────┐
+         ▼              ▼                           ▼                          ▼
+┌────────────────┐ ┌────────────────┐      ┌─────────────────┐       ┌─────────────────┐
+│ Neon Postgres  │ │ Vonage Messages│      │   Vonage SMS    │       │ Razorpay Orders │
+│ (TypeORM ORM)  │ │ (WhatsApp API) │      │   (SMS REST)    │       │ & Auto-Refunds  │
+└────────────────┘ └────────────────┘      └─────────────────┘       └─────────────────┘
+```
 
 ---
 
-## 🛠️ Local Development Setup
+## Local Development Setup
 
 ### Prerequisites
 - Node.js >= 18
-- PostgreSQL (Local or Neon Database URL)
+- PostgreSQL database (Local or Neon Serverless connection string)
 
 ### 1. Backend Setup
+
 ```bash
-cd Schedula-anas-main/Schedula-anas-main/Backend
+cd backend
 
 # Install dependencies
 npm install
 
-# Run database migrations (applies FixSchemaDrift)
+# Configure environment variables
+cp .env.example .env
+
+# Run database migrations
 npm run migration:run
 
-# Seed test doctors & patients
+# Seed initial doctors and patients
 npm run seed
 
-# Start NestJS backend (runs on http://localhost:3000)
+# Run unit test suite (26 tests)
+npm test
+
+# Start NestJS development server (http://localhost:3001)
 npm run start:dev
 ```
 
 ### 2. Frontend Setup
+
 ```bash
 cd frontend
 
 # Install dependencies
 npm install
 
-# Configure environment variables (.env.local)
+# Configure environment variables
 cp .env.example .env.local
 
-# Build verification
+# Run production build check
 npm run build
 
-# Start Next.js App Router development server (runs on http://localhost:3001)
-npm run dev -- -p 3001
+# Start Next.js development server (http://localhost:3000)
+npm run dev
 ```
 
 ---
 
-## 🧪 Two-Browser Verification Flow
-
-1. Open **Browser 1 (Chrome)**: Log in as `rajesh.sharma@schedula.com` (Doctor). Navigate to `/doctor/dashboard`. Notice the live indicator is active.
-2. Open **Browser 2 (Incognito/Firefox)**: Log in as `patient1@schedula.com` (Patient). Navigate to `/doctors`, select Dr. Rajesh Sharma, and book an available slot.
-3. **Observation in Browser 1:** Instantly, a toast notification pops up ("*New Appointment! Rahul Verma booked a slot*") and the today's queue table automatically refreshes to display the patient row without page reload!
-4. **Doctor consultation flow:**
-   - Click **Check In**: Patient in Browser 2 sees their status update to *Checked In* and receives their queue position.
-   - Click **Start Consultation**: Patient in Browser 2 receives a live alert ("*Consultation Started! Please proceed into the room*").
-   - Click **Complete**: Both dashboards reflect the finished state.
-
----
-
-## 📦 Project Structure
+## Project Structure
 
 ```
 Doc-booking/
-├── frontend/                          # Next.js 16 App Router application
+├── backend/                           # NestJS 11 REST API & WebSocket Gateway
 │   ├── src/
-│   │   ├── app/                       # App Router pages and route handlers
-│   │   │   ├── (auth)/login & signup  # Authentication pages
-│   │   │   ├── doctors/               # Public discovery & slot picker
-│   │   │   ├── patient/               # Patient dashboard, appointments, notifications
-│   │   │   ├── doctor/                # Doctor dashboard, appointments, availability, leave
-│   │   │   └── api/                   # Server-side proxy and auth route handlers
-│   │   ├── components/                # Reusable UI components & providers
-│   │   ├── hooks/                     # Custom hooks (useAppointmentSocket)
-│   │   ├── lib/                       # API clients, utils, schemas, constants
-│   │   └── middleware.ts              # Route protection & role redirection
+│   │   ├── appointment/               # Booking logic, queue calculations, serialization
+│   │   ├── doctor/                    # Doctor profiles, patients directory, availability, leaves
+│   │   ├── patient/                   # Patient medical profiles, history, dashboard
+│   │   ├── notification/              # Multi-channel notification engine (Vonage, Email, In-App)
+│   │   │   ├── providers/             # Vonage SMS, Vonage WhatsApp, Nodemailer, In-App
+│   │   │   └── templates/             # Professional notification templates
+│   │   ├── payment/                   # Razorpay orders, signatures, refunds
+│   │   ├── sockets/                   # Realtime appointment gateway (/appointments)
+│   │   ├── migrations/                # Database schema migrations
+│   │   └── seed.ts                    # Reference data seeder
 │   └── package.json
 │
-├── Schedula-anas-main/
-│   └── Schedula-anas-main/
-│       └── Backend/                   # NestJS 11 REST API & WebSocket Gateway
-│           ├── src/
-│           │   ├── appointment/       # Booking logic, queue calculation, serialization
-│           │   ├── doctor/            # Doctor profile, recurring availability, leaves
-│           │   ├── patient/           # Patient profile & dashboard
-│           │   ├── sockets/           # Realtime appointment gateway (/appointments)
-│           │   ├── migrations/        # 1782277030000-FixSchemaDrift.ts
-│           │   └── seed.ts            # 8 doctors + 2 patients database seeder
-│           └── package.json
+├── frontend/                          # Next.js 16 App Router application
+│   ├── src/
+│   │   ├── app/                       # App Router routes and Next.js server proxies
+│   │   │   ├── (auth)/login & signup  # Authentication
+│   │   │   ├── doctors/               # Public specialist directory & slot picker
+│   │   │   ├── patient/               # Patient dashboard, medical notes, appointments
+│   │   │   ├── doctor/                # Doctor dashboard, my-day, patients directory, availability
+│   │   │   └── api/                   # API proxies and session handlers
+│   │   ├── components/                # Modular React UI components & modals
+│   │   │   ├── doctor/                # MyDayClient, DoctorPatientsClient, PatientProfileModal
+│   │   │   ├── patient/               # PatientProfileForm, LiveQueueButton
+│   │   │   └── common/                # NotificationPreferencesDialog, DoctorAvatar
+│   │   ├── lib/                       # API clients, axios interceptors, schemas, utils
+│   │   └── types/                     # Shared TypeScript interfaces
+│   └── package.json
 └── README.md
 ```
 
 ---
 
-## 📜 License
+## License
 MIT License. Developed for Schedula Healthcare Systems.
