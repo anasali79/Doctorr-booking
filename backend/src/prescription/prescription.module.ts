@@ -21,3 +21,4 @@ import { PrescriptionController } from './prescription.controller';
   exports: [PrescriptionService],
 })
 export class PrescriptionModule {}
+

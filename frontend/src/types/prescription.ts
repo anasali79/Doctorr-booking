@@ -68,3 +68,4 @@ export interface CreatePrescriptionPayload {
   followUpDate?: string;
   notes?: string;
 }
+

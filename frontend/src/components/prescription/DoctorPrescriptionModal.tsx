@@ -792,3 +792,4 @@ export function DoctorPrescriptionModal({
     </>
   );
 }
+

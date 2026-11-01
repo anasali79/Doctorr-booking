@@ -85,3 +85,4 @@ export class Prescription {
   @UpdateDateColumn()
   updatedAt: Date;
 }
+

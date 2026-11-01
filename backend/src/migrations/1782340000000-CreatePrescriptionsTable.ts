@@ -43,3 +43,4 @@ export class CreatePrescriptionsTable1782340000000 implements MigrationInterface
     await queryRunner.query(`DROP TABLE IF EXISTS "prescriptions";`);
   }
 }
+

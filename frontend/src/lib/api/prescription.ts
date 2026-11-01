@@ -42,3 +42,4 @@ export async function getPrescriptionById(
   );
   return res.data?.data || null;
 }
+
