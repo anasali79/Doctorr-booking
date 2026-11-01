@@ -26,6 +26,7 @@ import { DoctorDiscoveryQueryDto } from './dto/doctor-discovery-query.dto';
 import { AvailabilityService } from './availability.service';
 import { GetSlotsQueryDto, NextAvailableQueryDto } from './dto/availability.dto';
 import { AppointmentService } from '../appointment/appointment.service';
+import { RescheduleAppointmentDto } from '../appointment/dto/reschedule-appointment.dto';
 
 @Controller('doctor')
 export class DoctorController {
@@ -103,6 +104,25 @@ export class DoctorController {
     id: string,
   ) {
     return this.appointmentService.cancelAppointmentByDoctor(user.id, id);
+  }
+
+  @Patch('appointments/:id/reschedule')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.DOCTOR)
+  rescheduleAppointmentByDoctor(
+    @CurrentUser() user: { id: string },
+    @Param(
+      'id',
+      new ParseUUIDPipe({
+        version: '4',
+        exceptionFactory: () =>
+          new BadRequestException('Invalid appointment ID format'),
+      }),
+    )
+    id: string,
+    @Body() dto: RescheduleAppointmentDto,
+  ) {
+    return this.appointmentService.rescheduleAppointmentByDoctor(user.id, id, dto);
   }
 
   // ─── Doctor Patients Directory & Clinical History ─────────────────────────────

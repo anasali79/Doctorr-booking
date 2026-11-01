@@ -1502,6 +1502,323 @@ export class AppointmentService {
     };
   }
 
+  async rescheduleAppointmentByDoctor(
+    userId: string,
+    appointmentId: string,
+    dto: RescheduleAppointmentDto,
+  ) {
+    const targetDate = dto.date || dto.newDate;
+    const targetStartTime = dto.startTime || dto.newStartTime;
+    const targetEndTime = dto.endTime || dto.newEndTime;
+
+    if (!targetDate || !targetStartTime || !targetEndTime) {
+      throw new BadRequestException('date, startTime, and endTime are required');
+    }
+
+    dto.date = targetDate;
+    dto.startTime = targetStartTime;
+    dto.endTime = targetEndTime;
+
+    const doctor = await this.getDoctorByUserId(userId);
+
+    const appointment = await this.appointmentRepo.findOne({
+      where: { id: appointmentId },
+      relations: { doctor: true, patient: { user: true } },
+    });
+    if (!appointment) throw new NotFoundException(`Appointment with ID ${appointmentId} not found`);
+
+    if (appointment.doctorId !== doctor.id) {
+      throw new ForbiddenException('Access denied: You can only reschedule your own appointments');
+    }
+    if (appointment.status === AppointmentStatus.CANCELLED) {
+      throw new BadRequestException('Cannot reschedule a cancelled appointment');
+    }
+    if (appointment.status === AppointmentStatus.RESCHEDULED) {
+      throw new BadRequestException('This appointment has already been rescheduled');
+    }
+    if (appointment.status === AppointmentStatus.COMPLETED) {
+      throw new BadRequestException('Cannot reschedule an already completed appointment');
+    }
+
+    if (
+      appointment.date === dto.date &&
+      appointment.startTime === dto.startTime &&
+      appointment.endTime === dto.endTime
+    ) {
+      throw new BadRequestException('Cannot reschedule to the same date and time slot');
+    }
+
+    this.validateFutureDateTime(dto.date, dto.startTime);
+
+    // ── Doctor leave check ──────────────────────────────────────────────────
+    const leaveOnRescheduleDate = await this.leaveRepo.findOne({
+      where: { doctorId: doctor.id, date: dto.date },
+    });
+    if (leaveOnRescheduleDate) {
+      throw new BadRequestException(
+        'You are marked as unavailable on this date. Please select another date.',
+      );
+    }
+
+    let slotInfo: {
+      startTime: string;
+      endTime: string;
+      status: SlotStatus;
+      schedulingType: string;
+      maxPatients?: number;
+      bookedCount?: number;
+      availableCount?: number;
+    };
+
+    try {
+      slotInfo = await this.validateSlotExists(doctor.id, dto.date, dto.startTime, dto.endTime);
+    } catch (error: any) {
+      if (error instanceof BadRequestException || error instanceof ConflictException) {
+        const suggestion = await this.availabilityService.findNextAvailableSlot(doctor.id, dto.date);
+        const response: any = {
+          message: suggestion
+            ? 'Requested slot is unavailable. Here is the next available slot.'
+            : 'Requested slot is unavailable. No alternative slots found in the next 30 days.',
+          error: (error as Error).message,
+          ...(suggestion && { suggestedSlot: suggestion }),
+        };
+        throw new ConflictException(response);
+      }
+      throw error;
+    }
+
+    if (slotInfo.schedulingType === 'WAVE') {
+      if ((slotInfo.bookedCount ?? 0) >= (slotInfo.maxPatients ?? 0)) {
+        const suggestion = await this.availabilityService.findNextAvailableSlot(
+          doctor.id, dto.date, dto.startTime, dto.endTime,
+        );
+        throw new ConflictException({
+          message: suggestion ? 'Requested wave is full. Here is the next available slot.' : 'Requested wave is full',
+          ...(suggestion && { suggestedSlot: suggestion }),
+        });
+      }
+    } else {
+      const existingBooking = await this.appointmentRepo.findOne({
+        where: {
+          doctorId: doctor.id,
+          date: dto.date,
+          startTime: dto.startTime,
+          endTime: dto.endTime,
+          status: AppointmentStatus.CONFIRMED,
+        },
+      });
+      if (existingBooking) {
+        const suggestion = await this.availabilityService.findNextAvailableSlot(
+          doctor.id, dto.date, dto.startTime, dto.endTime,
+        );
+        throw new ConflictException({
+          message: suggestion
+            ? 'Requested slot is already booked. Here is the next available slot.'
+            : 'Requested slot is already booked',
+          ...(suggestion && { suggestedSlot: suggestion }),
+        });
+      }
+    }
+
+    const previousDate = appointment.date;
+    const previousStartTime = appointment.startTime;
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction('SERIALIZABLE');
+
+    let savedNewAppointment: Appointment;
+
+    try {
+      const appToLock = await queryRunner.manager.findOne(Appointment, {
+        where: { id: appointment.id },
+        lock: { mode: 'pessimistic_write' },
+        loadEagerRelations: false,
+      });
+
+      if (!appToLock || appToLock.status === AppointmentStatus.RESCHEDULED) {
+        throw new BadRequestException('Appointment is already rescheduled');
+      }
+
+      await this.assertNoDuplicateBookingOnDay(
+        queryRunner.manager,
+        appointment.patientId,
+        doctor.id,
+        dto.date,
+        appointment.id,
+      );
+
+      if (slotInfo.schedulingType === 'WAVE') {
+        await queryRunner.manager.find(Appointment, {
+          where: { doctorId: doctor.id, date: dto.date, startTime: dto.startTime, endTime: dto.endTime },
+          lock: { mode: 'pessimistic_write' },
+          loadEagerRelations: false,
+        });
+        await this.assertWaveCapacityAvailable(
+          queryRunner.manager,
+          doctor.id,
+          dto.date,
+          dto.startTime,
+          dto.endTime,
+          slotInfo.maxPatients ?? 0,
+        );
+      } else {
+        const existingBooking = await queryRunner.manager.findOne(Appointment, {
+          where: {
+            doctorId: doctor.id,
+            date: dto.date,
+            startTime: dto.startTime,
+            endTime: dto.endTime,
+            status: AppointmentStatus.CONFIRMED,
+          },
+          lock: { mode: 'pessimistic_write' },
+          loadEagerRelations: false,
+        });
+        if (existingBooking) throw new ConflictException('Requested slot is already booked');
+      }
+
+      appToLock.status = AppointmentStatus.RESCHEDULED;
+      await queryRunner.manager.save(appToLock);
+
+      const tokenNumber = await this.assignTokenNumber(
+        queryRunner.manager,
+        doctor.id,
+        dto.date,
+        dto.startTime,
+        dto.endTime,
+      );
+
+      const newAppointment = this.appointmentRepo.create({
+        doctorId: doctor.id,
+        patientId: appointment.patientId,
+        date: dto.date,
+        startTime: dto.startTime,
+        endTime: dto.endTime,
+        status: AppointmentStatus.CONFIRMED,
+        paymentStatus: appointment.paymentStatus || 'PAID',
+        tokenNumber,
+      });
+
+      savedNewAppointment = await queryRunner.manager.save(newAppointment);
+
+      const todayStr = getTodayIST();
+      if (previousDate === todayStr) {
+        await this.queueService.recalculateQueue(doctor.id, previousDate, queryRunner.manager);
+      }
+      if (savedNewAppointment.date === todayStr) {
+        await this.queueService.recalculateQueue(savedNewAppointment.doctorId, savedNewAppointment.date, queryRunner.manager);
+      }
+
+      await queryRunner.commitTransaction();
+    } catch (error: any) {
+      await queryRunner.rollbackTransaction();
+      if (error?.code === '40001' || error?.code === '23505') {
+        throw new ConflictException('Slot already booked or race condition occurred, please pick another slot');
+      }
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+
+    const todayStr = getTodayIST();
+    if (previousDate === todayStr) {
+      await this.queueService.broadcastQueueStatus(doctor.id, previousDate, this.dataSource.manager);
+    }
+    if (savedNewAppointment.date === todayStr) {
+      await this.queueService.broadcastQueueStatus(savedNewAppointment.doctorId, savedNewAppointment.date, this.dataSource.manager);
+    }
+
+    const doctorReason = dto.rescheduleReason || dto.reason || `Rescheduled by Dr. ${doctor.fullName}`;
+
+    const rescheduledNotif = buildAppointmentNotification('rescheduled to', doctor.fullName, dto.date, dto.startTime);
+    await this.sendNotification(
+      appointment.patientId,
+      'Appointment Rescheduled by Doctor',
+      `${rescheduledNotif.message} (${doctorReason})`,
+      NotificationType.APPOINTMENT_RESCHEDULED,
+      doctorReason,
+    );
+
+    const fullNewAppointment = await this.appointmentRepo.findOne({
+      where: { id: savedNewAppointment.id },
+      relations: { doctor: true, patient: { user: true } },
+    });
+
+    if (fullNewAppointment) {
+      this.sendRescheduleEmail(fullNewAppointment, previousDate, previousStartTime);
+
+      if (this.notificationDispatcher) {
+        const patientUser = fullNewAppointment.patient?.user;
+        const recipients: any[] = [];
+        if (patientUser) {
+          recipients.push({
+            id: fullNewAppointment.patientId,
+            userId: patientUser.id,
+            name: fullNewAppointment.patient?.fullName || 'Patient',
+            email: patientUser.email,
+            phone: fullNewAppointment.patient?.phone || null,
+            role: 'PATIENT',
+          });
+        }
+        if (recipients.length > 0) {
+          this.notificationDispatcher.dispatchAsync({
+            eventType: NotificationEventType.APPOINTMENT_RESCHEDULED,
+            recipients,
+            appointmentId: fullNewAppointment.id,
+            data: {
+              patientName: fullNewAppointment.patient?.fullName,
+              doctorName: doctor.fullName,
+              specialization: doctor.specialization,
+              appointmentDate: fullNewAppointment.date,
+              startTime: fullNewAppointment.startTime,
+              endTime: fullNewAppointment.endTime,
+              tokenNumber: fullNewAppointment.tokenNumber,
+              previousDate,
+              previousStartTime,
+              rescheduleReason: doctorReason,
+              appointmentId: fullNewAppointment.id,
+            },
+          });
+        }
+      }
+      await this.reminderService?.cancelRemindersForAppointment(appointment.id);
+      await this.reminderService?.scheduleAppointmentReminders(fullNewAppointment);
+    }
+
+    this.appointmentGateway?.emitAppointmentEvent(SOCKET_EVENTS.RESCHEDULED, {
+      appointmentId: savedNewAppointment.id,
+      patientId: savedNewAppointment.patientId,
+      doctorId: savedNewAppointment.doctorId,
+      status: savedNewAppointment.status,
+      updatedAt: new Date().toISOString(),
+      patientName: appointment.patient?.fullName || 'Patient',
+      date: savedNewAppointment.date,
+      startTime: savedNewAppointment.startTime,
+      endTime: savedNewAppointment.endTime,
+    });
+
+    return {
+      message: 'Appointment rescheduled successfully by doctor',
+      data: {
+        previousAppointment: {
+          id: appointment.id,
+          date: previousDate,
+          startTime: previousStartTime,
+          endTime: appointment.endTime,
+          status: AppointmentStatus.RESCHEDULED,
+        },
+        newAppointment: {
+          id: savedNewAppointment.id,
+          date: savedNewAppointment.date,
+          startTime: savedNewAppointment.startTime,
+          endTime: savedNewAppointment.endTime,
+          tokenNumber: savedNewAppointment.tokenNumber,
+          status: savedNewAppointment.status,
+        },
+      },
+    };
+  }
+
   async getPatientDashboardStats(userId: string) {
     const patient = await this.getPatientByUserId(userId);
     const todayStr = getTodayIST();

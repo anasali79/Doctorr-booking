@@ -18,7 +18,9 @@ import {
   Calendar,
   Layers,
   Loader2,
+  CalendarSync,
 } from 'lucide-react';
+import { DoctorRescheduleModal } from './DoctorRescheduleModal';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import {
   Table,
@@ -55,6 +57,7 @@ export function DoctorAppointmentsTable({
   );
 
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [reschedulingAppt, setReschedulingAppt] = useState<Appointment | null>(null);
 
   // Compute upcoming (today or future dates, not cancelled)
   const upcomingList = allList.filter(
@@ -344,6 +347,16 @@ export function DoctorAppointmentsTable({
                               type="button"
                               variant="ghost"
                               size="iconSm"
+                              onClick={() => setReschedulingAppt(appt)}
+                              className="p-1.5 rounded-full border border-blue-200 hover:bg-blue-50 text-[#0066cc] text-xs transition-colors cursor-pointer"
+                              title="Reschedule Appointment"
+                            >
+                              <CalendarSync className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="iconSm"
                               onClick={() => handleCancel(appt.id)}
                               disabled={loadingId === `${appt.id}-cancel`}
                               className="p-1.5 rounded-full border border-rose-200 hover:bg-rose-50 text-rose-600 text-xs transition-colors cursor-pointer"
@@ -355,6 +368,7 @@ export function DoctorAppointmentsTable({
                         )}
 
                         {appt.status === 'CHECKED_IN' && (
+                          <>
                           <Button
                             type="button"
                             variant="ghost"
@@ -375,6 +389,17 @@ export function DoctorAppointmentsTable({
                             )}
                             <span>Start Consultation</span>
                           </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="iconSm"
+                            onClick={() => setReschedulingAppt(appt)}
+                            className="p-1.5 rounded-full border border-blue-200 hover:bg-blue-50 text-[#0066cc] text-xs transition-colors cursor-pointer"
+                            title="Reschedule Appointment"
+                          >
+                            <CalendarSync className="w-3.5 h-3.5" />
+                          </Button>
+                          </>
                         )}
 
                         {appt.status === 'IN_CONSULTATION' && (
