@@ -1,9 +1,11 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger, Optional, Inject, forwardRef } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { INotificationProvider, ProviderSendOptions } from '../interfaces/notification-provider.interface';
 import { NotificationChannel } from '../enums/notification-channel.enum';
 import { ChannelSendResult } from '../interfaces/notification-payload.interface';
 import { DeliveryStatus } from '../enums/delivery-status.enum';
-import { NotificationService } from '../notification.service';
+import { Notification } from '../entities/notification.entity';
 import { NotificationType } from '../enums/notification-type.enum';
 import { AppointmentGateway } from '../../sockets/appointment.gateway';
 
@@ -13,8 +15,10 @@ export class InAppProvider implements INotificationProvider {
   readonly channel = NotificationChannel.IN_APP;
 
   constructor(
-    private readonly notificationService: NotificationService,
+    @InjectRepository(Notification)
+    private readonly notificationRepo: Repository<Notification>,
     @Optional()
+    @Inject(forwardRef(() => AppointmentGateway))
     private readonly appointmentGateway?: AppointmentGateway,
   ) {}
 
@@ -37,24 +41,30 @@ export class InAppProvider implements INotificationProvider {
     }
 
     try {
-      let createdNotif: any;
+      let createdNotif: Notification;
 
       if (recipientRole === 'DOCTOR') {
-        createdNotif = await this.notificationService.createDoctorNotification(
-          recipientId,
-          template.title,
-          template.inAppMessage,
-          (metadata?.notificationType as NotificationType) || NotificationType.APPOINTMENT_BOOKED,
-          template.note || null,
-        );
+        const notif = this.notificationRepo.create({
+          doctorId: recipientId,
+          patientId: null,
+          title: template.title,
+          message: template.inAppMessage,
+          type: (metadata?.notificationType as NotificationType) || NotificationType.APPOINTMENT_BOOKED,
+          note: template.note || null,
+          isRead: false,
+        });
+        createdNotif = await this.notificationRepo.save(notif);
       } else {
-        createdNotif = await this.notificationService.createNotification(
-          recipientId,
-          template.title,
-          template.inAppMessage,
-          (metadata?.notificationType as NotificationType) || NotificationType.APPOINTMENT_BOOKED,
-          template.note || null,
-        );
+        const notif = this.notificationRepo.create({
+          patientId: recipientId,
+          doctorId: null,
+          title: template.title,
+          message: template.inAppMessage,
+          type: (metadata?.notificationType as NotificationType) || NotificationType.APPOINTMENT_BOOKED,
+          note: template.note || null,
+          isRead: false,
+        });
+        createdNotif = await this.notificationRepo.save(notif);
       }
 
       // Realtime websocket broadcast if available
@@ -89,4 +99,3 @@ export class InAppProvider implements INotificationProvider {
     }
   }
 }
-

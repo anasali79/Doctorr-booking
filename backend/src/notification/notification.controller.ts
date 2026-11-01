@@ -16,12 +16,16 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Role } from '../common/enums/role.enum';
 import { NotificationService } from './notification.service';
+import { NotificationScheduler } from './notification.scheduler';
 import { UpdateNotificationPreferenceDto } from './dto/update-preference.dto';
 
 @Controller('notifications')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class NotificationController {
-  constructor(private readonly notificationService: NotificationService) {}
+  constructor(
+    private readonly notificationService: NotificationService,
+    private readonly notificationScheduler: NotificationScheduler,
+  ) {}
 
   // ─── Unread Count & Mark Read ────────────────────────────────────────────────
   @Get('unread-count')
@@ -94,7 +98,7 @@ export class NotificationController {
 
   @Post('admin/:id/retry')
   @Roles(Role.DOCTOR)
-  retryDelivery(
+  async retryDelivery(
     @Param(
       'id',
       new ParseUUIDPipe({
@@ -105,7 +109,13 @@ export class NotificationController {
     )
     id: string,
   ) {
-    return this.notificationService.manualRetryDelivery(id);
+    const success = await this.notificationScheduler.retrySingleDelivery(id);
+    return {
+      success,
+      message: success
+        ? 'Manual retry executed successfully'
+        : 'Manual retry failed or delivery is already processing',
+    };
   }
 
   // ─── In-App Notifications List ───────────────────────────────────────────────

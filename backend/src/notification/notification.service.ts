@@ -16,7 +16,7 @@ import { Doctor } from '../doctor/entities/doctor.entity';
 import { NotificationType } from './enums/notification-type.enum';
 import { Role } from '../common/enums/role.enum';
 import { UpdateNotificationPreferenceDto } from './dto/update-preference.dto';
-import { NotificationScheduler } from './notification.scheduler';
+import { DeliveryStatus } from './enums/delivery-status.enum';
 
 // Format date to readable string
 function formatDate(date: Date): string {
@@ -56,9 +56,6 @@ export class NotificationService {
 
     @InjectRepository(Doctor)
     private readonly doctorRepo: Repository<Doctor>,
-
-    @Inject(forwardRef(() => NotificationScheduler))
-    private readonly notificationScheduler: NotificationScheduler,
   ) {}
 
   /**
@@ -401,12 +398,13 @@ export class NotificationService {
       throw new NotFoundException(`Delivery with ID ${deliveryId} not found`);
     }
 
-    const success = await this.notificationScheduler.retrySingleDelivery(deliveryId);
+    delivery.status = DeliveryStatus.RETRY_PENDING;
+    delivery.nextRetryAt = new Date();
+    await this.deliveryRepo.save(delivery);
+
     return {
-      success,
-      message: success
-        ? 'Manual retry executed successfully'
-        : 'Manual retry failed or delivery is already processing',
+      success: true,
+      message: 'Delivery marked for immediate retry',
     };
   }
 }
