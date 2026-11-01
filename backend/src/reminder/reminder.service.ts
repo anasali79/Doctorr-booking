@@ -7,13 +7,11 @@ import { ReminderJob } from './entities/reminder-job.entity';
 import { ReminderJobStatus } from './enums/reminder-job-status.enum';
 import { ReminderJobType } from './enums/reminder-job-type.enum';
 import { AppointmentStatus } from '../common/enums/appointment-status.enum';
-import { NotificationService } from '../notification/notification.service';
-import { NotificationType } from '../notification/enums/notification-type.enum';
-import { EmailService } from '../email/email.service';
+import { NotificationDispatcher } from '../notification/notification.dispatcher';
+import { NotificationEventType } from '../notification/enums/notification-event-type.enum';
 import { formatTime, getTodayIST, getTomorrowIST } from '../common/utils/appointment.utils';
 
 function parseAppointmentDateTimeIST(dateStr: string, timeStr: string): Date {
-  // Appointment date is in IST (+05:30)
   return new Date(`${dateStr}T${timeStr}:00+05:30`);
 }
 
@@ -28,13 +26,12 @@ export class ReminderService {
     @InjectRepository(ReminderJob)
     private readonly reminderJobRepo: Repository<ReminderJob>,
 
-    private readonly notificationService: NotificationService,
-    private readonly emailService: EmailService,
+    private readonly notificationDispatcher: NotificationDispatcher,
     private readonly dataSource: DataSource,
   ) {}
 
   /**
-   * Schedule durable 24-hour and 1-hour reminders for a confirmed appointment
+   * Schedule durable reminders (24h, 2h, and 30m) for a confirmed appointment
    */
   async scheduleAppointmentReminders(appointment: Appointment): Promise<void> {
     try {
@@ -53,15 +50,27 @@ export class ReminderService {
         );
       }
 
-      // 2. 1-Hour Reminder
-      const time1h = new Date(apptTime.getTime() - 1 * 60 * 60 * 1000);
-      if (time1h > now) {
+      // 2. 2-Hour Reminder
+      const time2h = new Date(apptTime.getTime() - 2 * 60 * 60 * 1000);
+      if (time2h > now) {
         await this.createOrUpdateReminderJob(
           appointment.id,
           appointment.patientId,
           appointment.doctorId,
-          ReminderJobType.REMINDER_1H,
-          time1h,
+          ReminderJobType.REMINDER_2H,
+          time2h,
+        );
+      }
+
+      // 3. 30-Minute Reminder
+      const time30m = new Date(apptTime.getTime() - 30 * 60 * 1000);
+      if (time30m > now) {
+        await this.createOrUpdateReminderJob(
+          appointment.id,
+          appointment.patientId,
+          appointment.doctorId,
+          ReminderJobType.REMINDER_30M,
+          time30m,
         );
       }
     } catch (err: any) {
@@ -104,7 +113,7 @@ export class ReminderService {
   }
 
   /**
-   * Invalidate scheduled reminders on appointment cancellation or completion
+   * Invalidate scheduled reminders on appointment cancellation, completion, or reschedule
    */
   async cancelRemindersForAppointment(appointmentId: string): Promise<void> {
     try {
@@ -127,7 +136,7 @@ export class ReminderService {
   }
 
   /**
-   * Persistent Worker Cron: processes due 24h/1h reminders every minute
+   * Persistent Worker Cron: processes due 24h, 2h, and 30m reminders every minute
    * Prevents duplicates across multiple workers using atomic DB row locking
    */
   @Cron('*/1 * * * *')
@@ -150,7 +159,6 @@ export class ReminderService {
       await queryRunner.startTransaction();
 
       try {
-        // Atomic lock on the reminder job record to prevent duplicate worker execution
         const lockedJob = await queryRunner.manager.findOne(ReminderJob, {
           where: { id: job.id },
           lock: { mode: 'pessimistic_write' },
@@ -161,16 +169,15 @@ export class ReminderService {
           continue;
         }
 
-        // Atomically claim the job
         lockedJob.status = ReminderJobStatus.PROCESSING;
         lockedJob.attempts += 1;
         await queryRunner.manager.save(lockedJob);
         await queryRunner.commitTransaction();
 
-        // Immediate pre-send invariant check: Appointment must still be CONFIRMED
+        // Invariant check: Appointment must still be CONFIRMED
         const appointment = await this.appointmentRepo.findOne({
           where: { id: lockedJob.appointmentId },
-          relations: { doctor: true, patient: { user: true } },
+          relations: { doctor: { user: true }, patient: { user: true } },
         });
 
         if (!appointment || appointment.status !== AppointmentStatus.CONFIRMED) {
@@ -179,31 +186,48 @@ export class ReminderService {
           continue;
         }
 
-        const patientEmail = appointment.patient?.user?.email;
+        const patientUser = appointment.patient?.user;
         const patientName = appointment.patient?.fullName || 'Patient';
         const doctorName = appointment.doctor?.fullName || 'Doctor';
-        const leadLabel = lockedJob.type === ReminderJobType.REMINDER_24H ? 'tomorrow' : 'in 1 hour';
 
-        if (patientEmail) {
-          await this.emailService.sendAppointmentReminder(
-            patientEmail,
-            patientName,
-            doctorName,
-            appointment.date,
-            appointment.startTime,
-            appointment.tokenNumber,
-            leadLabel,
-          );
+        let eventType = NotificationEventType.APPOINTMENT_REMINDER_24H;
+        let leadLabel = 'tomorrow';
+
+        if (lockedJob.type === ReminderJobType.REMINDER_2H || lockedJob.type === ReminderJobType.REMINDER_1H) {
+          eventType = NotificationEventType.APPOINTMENT_REMINDER_2H;
+          leadLabel = 'in 2 hours';
+        } else if (lockedJob.type === ReminderJobType.REMINDER_30M) {
+          eventType = NotificationEventType.APPOINTMENT_REMINDER_30M;
+          leadLabel = 'in 30 minutes';
         }
 
-        const notifMsg = `Reminder: Your appointment with Dr. ${doctorName} is ${leadLabel} at ${formatTime(appointment.startTime)}.`;
-        await this.notificationService.createNotification(
-          appointment.patientId,
-          'Appointment Reminder',
-          notifMsg,
-          NotificationType.APPOINTMENT_REMINDER,
-          appointment.tokenNumber ? `Token #${appointment.tokenNumber}` : null,
-        );
+        // Dispatch across all 4 channels (Email, In-App, WhatsApp, SMS) via centralized dispatcher
+        if (patientUser) {
+          await this.notificationDispatcher.dispatch({
+            eventType,
+            recipients: [
+              {
+                id: appointment.patientId,
+                userId: patientUser.id,
+                name: patientName,
+                email: patientUser.email,
+                phone: appointment.patient?.phone || null,
+                role: 'PATIENT',
+              },
+            ],
+            appointmentId: appointment.id,
+            data: {
+              patientName,
+              doctorName,
+              specialization: appointment.doctor?.specialization,
+              appointmentDate: appointment.date,
+              startTime: appointment.startTime,
+              tokenNumber: appointment.tokenNumber,
+              leadTimeLabel: leadLabel,
+              appointmentId: appointment.id,
+            },
+          });
+        }
 
         lockedJob.status = ReminderJobStatus.SENT;
         lockedJob.sentAt = new Date();
@@ -239,25 +263,37 @@ export class ReminderService {
           status: AppointmentStatus.CONFIRMED,
           reminderSent: false,
         },
-        relations: { doctor: true, patient: { user: true } },
+        relations: { doctor: { user: true }, patient: { user: true } },
       });
 
       for (const appt of appointments) {
         try {
-          const patientEmail = appt.patient?.user?.email;
-          const patientName = appt.patient?.fullName || 'Patient';
-          const doctorName = appt.doctor?.fullName || 'Doctor';
-
-          if (patientEmail) {
-            await this.emailService.sendAppointmentReminder(
-              patientEmail,
-              patientName,
-              doctorName,
-              appt.date,
-              appt.startTime,
-              appt.tokenNumber,
-              'today',
-            );
+          const patientUser = appt.patient?.user;
+          if (patientUser) {
+            await this.notificationDispatcher.dispatch({
+              eventType: NotificationEventType.APPOINTMENT_REMINDER_2H,
+              recipients: [
+                {
+                  id: appt.patientId,
+                  userId: patientUser.id,
+                  name: appt.patient.fullName,
+                  email: patientUser.email,
+                  phone: appt.patient.phone || null,
+                  role: 'PATIENT',
+                },
+              ],
+              appointmentId: appt.id,
+              data: {
+                patientName: appt.patient.fullName,
+                doctorName: appt.doctor?.fullName,
+                specialization: appt.doctor?.specialization,
+                appointmentDate: appt.date,
+                startTime: appt.startTime,
+                tokenNumber: appt.tokenNumber,
+                leadTimeLabel: 'today',
+                appointmentId: appt.id,
+              },
+            });
           }
 
           appt.reminderSent = true;
@@ -284,25 +320,37 @@ export class ReminderService {
           status: AppointmentStatus.CONFIRMED,
           reminderSent: false,
         },
-        relations: { doctor: true, patient: { user: true } },
+        relations: { doctor: { user: true }, patient: { user: true } },
       });
 
       for (const appt of appointments) {
         try {
-          const patientEmail = appt.patient?.user?.email;
-          const patientName = appt.patient?.fullName || 'Patient';
-          const doctorName = appt.doctor?.fullName || 'Doctor';
-
-          if (patientEmail) {
-            await this.emailService.sendAppointmentReminder(
-              patientEmail,
-              patientName,
-              doctorName,
-              appt.date,
-              appt.startTime,
-              appt.tokenNumber,
-              'tomorrow',
-            );
+          const patientUser = appt.patient?.user;
+          if (patientUser) {
+            await this.notificationDispatcher.dispatch({
+              eventType: NotificationEventType.APPOINTMENT_REMINDER_24H,
+              recipients: [
+                {
+                  id: appt.patientId,
+                  userId: patientUser.id,
+                  name: appt.patient.fullName,
+                  email: patientUser.email,
+                  phone: appt.patient.phone || null,
+                  role: 'PATIENT',
+                },
+              ],
+              appointmentId: appt.id,
+              data: {
+                patientName: appt.patient.fullName,
+                doctorName: appt.doctor?.fullName,
+                specialization: appt.doctor?.specialization,
+                appointmentDate: appt.date,
+                startTime: appt.startTime,
+                tokenNumber: appt.tokenNumber,
+                leadTimeLabel: 'tomorrow',
+                appointmentId: appt.id,
+              },
+            });
           }
 
           appt.reminderSent = true;

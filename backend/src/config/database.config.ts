@@ -7,6 +7,8 @@ import { RecurringAvailability } from '../doctor/entities/recurring-availability
 import { CustomAvailability } from '../doctor/entities/custom-availability.entity';
 import { Appointment } from '../appointment/entities/appointment.entity';
 import { Notification } from '../notification/entities/notification.entity';
+import { NotificationPreference } from '../notification/entities/notification-preference.entity';
+import { NotificationDelivery } from '../notification/entities/notification-delivery.entity';
 import { DoctorLeave } from '../doctor/entities/leave.entity';
 import { CheckInRequest } from '../check-in/entities/check-in-request.entity';
 import { Payment } from '../payment/entities/payment.entity';
@@ -28,6 +30,8 @@ export function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
       CustomAvailability,
       Appointment,
       Notification,
+      NotificationPreference,
+      NotificationDelivery,
       DoctorLeave,
       CheckInRequest,
       Payment,
@@ -36,7 +40,7 @@ export function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
       ReminderJob,
     ],
     synchronize: false,
-    migrations: [__dirname + '/../migrations/*.js'],
+    migrations: [__dirname + '/../migrations/*.{js,ts}'],
     migrationsRun: true,
     logging: false,
     ssl: isProduction ? { rejectUnauthorized: false } : false,

@@ -19,6 +19,8 @@ import { CheckInRequest } from './entities/check-in-request.entity';
 import { CheckInRequestStatus } from './enums/check-in-request-status.enum';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../notification/enums/notification-type.enum';
+import { NotificationDispatcher } from '../notification/notification.dispatcher';
+import { NotificationEventType } from '../notification/enums/notification-event-type.enum';
 
 @Injectable()
 export class CheckInService {
@@ -41,6 +43,9 @@ export class CheckInService {
 
     @Optional()
     private readonly appointmentGateway: AppointmentGateway,
+
+    @Optional()
+    private readonly notificationDispatcher?: NotificationDispatcher,
   ) { }
 
   // ─── Private Helpers ──────────────────────────────────────────────────────────
@@ -379,6 +384,56 @@ export class CheckInService {
     }
 
     await this.queueService.broadcastQueueStatus(doctor.id, appointment!.date, this.dataSource.manager);
+
+    if (this.notificationDispatcher && appointment) {
+      this.appointmentRepo.findOne({
+        where: { id: appointment.id },
+        relations: { patient: { user: true }, doctor: { user: true } },
+      }).then((fullAppt) => {
+        if (!fullAppt) return;
+        const patientUser = fullAppt.patient?.user;
+        const doctorUser = fullAppt.doctor?.user;
+        const recipients: any[] = [];
+
+        if (patientUser) {
+          recipients.push({
+            id: fullAppt.patientId,
+            userId: patientUser.id,
+            name: fullAppt.patient?.fullName || 'Patient',
+            email: patientUser.email,
+            phone: fullAppt.patient?.phone || null,
+            role: 'PATIENT',
+          });
+        }
+        if (doctorUser) {
+          recipients.push({
+            id: fullAppt.doctorId,
+            userId: doctorUser.id,
+            name: fullAppt.doctor?.fullName || 'Doctor',
+            email: doctorUser.email,
+            phone: fullAppt.doctor?.phone || null,
+            role: 'DOCTOR',
+          });
+        }
+
+        if (recipients.length > 0) {
+          this.notificationDispatcher?.dispatchAsync({
+            eventType: NotificationEventType.APPOINTMENT_COMPLETED,
+            recipients,
+            appointmentId: fullAppt.id,
+            data: {
+              patientName: fullAppt.patient?.fullName,
+              doctorName: fullAppt.doctor?.fullName,
+              specialization: fullAppt.doctor?.specialization,
+              appointmentDate: fullAppt.date,
+              startTime: fullAppt.startTime,
+              tokenNumber: fullAppt.tokenNumber,
+              appointmentId: fullAppt.id,
+            },
+          });
+        }
+            }).catch(() => {});
+    }
 
     return {
       success: true,

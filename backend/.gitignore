@@ -2,3 +2,7 @@ node_modules/
 dist/
 .env
 *.log
+*.key
+*.pem
+private.key
+/etc/secrets/

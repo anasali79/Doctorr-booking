@@ -15,11 +15,15 @@ import {
   Clock,
   UserCheck,
   AlertCircle,
+  Settings,
+  Activity,
 } from 'lucide-react';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { NotificationPreferencesDialog } from '@/components/common/NotificationPreferencesDialog';
+import { NotificationMonitoringModal } from '@/components/doctor/NotificationMonitoringModal';
 
 interface DoctorNotificationsClientProps {
   initialNotifications: NotificationItem[];
@@ -33,6 +37,8 @@ export function DoctorNotificationsClient({
   const [filter, setFilter] = useState<'ALL' | 'UNREAD'>('ALL');
   const [markingAll, setMarkingAll] = useState(false);
   const [markingId, setMarkingId] = useState<string | null>(null);
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [monitorOpen, setMonitorOpen] = useState(false);
 
   const handleMarkAllRead = async () => {
     try {
@@ -125,23 +131,47 @@ export function DoctorNotificationsClient({
             } h-auto`}>Unread ({unreadCount})</Button>
         </div>
 
-        {unreadCount > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={handleMarkAllRead}
-            disabled={markingAll}
-            className="rounded-xl text-xs font-semibold gap-1.5 self-start sm:self-auto border-slate-200 hover:bg-slate-50"
+            onClick={() => setMonitorOpen(true)}
+            className="rounded-xl text-xs font-semibold gap-1.5 border-slate-200 hover:bg-slate-50 text-slate-700 h-auto py-1.5"
           >
-            {markingAll ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <CheckCheck className="w-3.5 h-3.5 text-[#0066cc]" />
-            )}
-            <span>Mark all as read</span>
+            <Activity className="w-3.5 h-3.5 text-[#0066cc]" />
+            <span>Delivery Monitor</span>
           </Button>
-        )}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setPreferencesOpen(true)}
+            className="rounded-xl text-xs font-semibold gap-1.5 border-slate-200 hover:bg-slate-50 text-slate-700 h-auto py-1.5"
+          >
+            <Settings className="w-3.5 h-3.5 text-slate-600" />
+            <span>Preferences</span>
+          </Button>
+
+          {unreadCount > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleMarkAllRead}
+              disabled={markingAll}
+              className="rounded-xl text-xs font-semibold gap-1.5 self-start sm:self-auto border-slate-200 hover:bg-slate-50 h-auto py-1.5"
+            >
+              {markingAll ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <CheckCheck className="w-3.5 h-3.5 text-[#0066cc]" />
+              )}
+              <span>Mark all as read</span>
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Notifications List */}
@@ -223,6 +253,16 @@ export function DoctorNotificationsClient({
           })}
         </div>
       )}
+
+      <NotificationPreferencesDialog
+        open={preferencesOpen}
+        onOpenChange={setPreferencesOpen}
+      />
+
+      <NotificationMonitoringModal
+        open={monitorOpen}
+        onOpenChange={setMonitorOpen}
+      />
     </div>
   );
 }

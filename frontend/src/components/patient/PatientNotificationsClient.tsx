@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation';
 import { NotificationItem } from '@/types';
 import { formatDate } from '@/lib/utils';
 import { toast } from 'sonner';
-import { Bell, CheckCheck, Inbox, Loader2 } from 'lucide-react';
+import { Bell, CheckCheck, Inbox, Loader2, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
+import { NotificationPreferencesDialog } from '@/components/common/NotificationPreferencesDialog';
 
 interface PatientNotificationsClientProps {
   initialNotifications: NotificationItem[];
@@ -19,6 +20,7 @@ export function PatientNotificationsClient({
   const router = useRouter();
   const [notifications, setNotifications] = useState(initialNotifications);
   const [markingAll, setMarkingAll] = useState(false);
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
 
   const handleMarkAllRead = async () => {
     try {
@@ -55,16 +57,36 @@ export function PatientNotificationsClient({
           {unreadCount} unread notification{unreadCount === 1 ? '' : 's'}
         </span>
 
-        {unreadCount > 0 && (
-          <Button type="button" variant="outline" size="sm" onClick={handleMarkAllRead} disabled={markingAll} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-colors cursor-pointer disabled:opacity-60 h-auto">
-            {markingAll ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <CheckCheck className="w-3.5 h-3.5 text-blue-600" />
-            )}
-            <span>Mark all as read</span>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setPreferencesOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-colors cursor-pointer h-auto"
+          >
+            <Settings className="w-3.5 h-3.5 text-slate-500" />
+            <span>Preferences</span>
           </Button>
-        )}
+
+          {unreadCount > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleMarkAllRead}
+              disabled={markingAll}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-colors cursor-pointer disabled:opacity-60 h-auto"
+            >
+              {markingAll ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <CheckCheck className="w-3.5 h-3.5 text-blue-600" />
+              )}
+              <span>Mark all as read</span>
+            </Button>
+          )}
+        </div>
       </div>
 
       {notifications.length === 0 ? (
@@ -131,6 +153,11 @@ export function PatientNotificationsClient({
           ))}
         </div>
       )}
+
+      <NotificationPreferencesDialog
+        open={preferencesOpen}
+        onOpenChange={setPreferencesOpen}
+      />
     </div>
   );
 }

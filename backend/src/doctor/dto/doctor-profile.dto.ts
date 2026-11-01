@@ -31,10 +31,13 @@ export class CreateDoctorProfileDto {
   @Min(0)
   consultationFee: number;
 
-
   @IsString()
   @IsOptional()
   profileDetails?: string;
+
+  @IsString()
+  @IsOptional()
+  phone?: string;
 
   @IsBoolean()
   @IsOptional()
@@ -47,5 +50,3 @@ export class CreateDoctorProfileDto {
 }
 
 export class UpdateDoctorProfileDto extends PartialType(CreateDoctorProfileDto) {}
-
-

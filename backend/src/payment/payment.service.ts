@@ -29,6 +29,8 @@ import { RazorpayService } from './providers/razorpay.service';
 import { EmailService } from '../email/email.service';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../notification/enums/notification-type.enum';
+import { NotificationDispatcher } from '../notification/notification.dispatcher';
+import { NotificationEventType } from '../notification/enums/notification-event-type.enum';
 import { AppointmentGateway, SOCKET_EVENTS } from '../sockets/appointment.gateway';
 import { QueueService } from '../appointment/queue.service';
 import { AvailabilityService } from '../doctor/availability.service';
@@ -79,6 +81,9 @@ export class PaymentService {
 
     @Optional()
     private readonly appointmentGateway?: AppointmentGateway,
+
+    @Optional()
+    private readonly notificationDispatcher?: NotificationDispatcher,
   ) {}
 
   private async getPatientByUserId(userId: string): Promise<Patient> {
@@ -291,6 +296,34 @@ export class PaymentService {
 
     await this.paymentRepo.save(payment);
 
+    if (this.notificationDispatcher) {
+      this.notificationDispatcher.dispatchAsync({
+        eventType: NotificationEventType.PAYMENT_INITIATED,
+        recipients: [
+          {
+            id: patient.id,
+            userId: patient.userId,
+            name: patient.fullName,
+            email: patient.user?.email || null,
+            phone: patient.phone || null,
+            role: 'PATIENT',
+          },
+        ],
+        appointmentId: reservedAppointment.id,
+        paymentId: payment.id,
+        data: {
+          patientName: patient.fullName,
+          doctorName: doctor.fullName,
+          specialization: doctor.specialization,
+          appointmentDate: reservedAppointment.date,
+          startTime: reservedAppointment.startTime,
+          amountInPaise,
+          orderId: providerOrder.id,
+          appointmentId: reservedAppointment.id,
+        },
+      });
+    }
+
     return {
       orderId: providerOrder.id,
       amount: amountInPaise,
@@ -483,6 +516,40 @@ export class PaymentService {
       paymentStatus: 'FAILED',
       pendingExpiresAt: null,
     });
+
+    if (this.notificationDispatcher) {
+      this.appointmentRepo.findOne({
+        where: { id: payment.appointmentId },
+        relations: { patient: { user: true }, doctor: true },
+      }).then((appt) => {
+        if (appt?.patient?.user) {
+          this.notificationDispatcher?.dispatchAsync({
+            eventType: NotificationEventType.PAYMENT_FAILED,
+            recipients: [
+              {
+                id: appt.patientId,
+                userId: appt.patient.user.id,
+                name: appt.patient.fullName,
+                email: appt.patient.user.email,
+                phone: appt.patient.phone || null,
+                role: 'PATIENT',
+              },
+            ],
+            appointmentId: appt.id,
+            paymentId: payment.id,
+            data: {
+              patientName: appt.patient.fullName,
+              doctorName: appt.doctor?.fullName,
+              specialization: appt.doctor?.specialization,
+              appointmentDate: appt.date,
+              startTime: appt.startTime,
+              amountInPaise: payment.amount,
+              appointmentId: appt.id,
+            },
+          });
+        }
+      }).catch(() => {});
+    }
   }
 
   private async processRefundProcessedWebhook(entity: any): Promise<void> {
@@ -508,6 +575,31 @@ export class PaymentService {
           refund.providerRefundId || refund.id,
         );
       }
+
+      if (this.notificationDispatcher && refund.patient?.user) {
+        this.notificationDispatcher.dispatchAsync({
+          eventType: NotificationEventType.REFUND_SUCCESSFUL,
+          recipients: [
+            {
+              id: refund.patientId,
+              userId: refund.patient.user.id,
+              name: refund.patient.fullName,
+              email: refund.patient.user.email,
+              phone: refund.patient.phone || null,
+              role: 'PATIENT',
+            },
+          ],
+          appointmentId: refund.appointmentId,
+          refundId: refund.id,
+          data: {
+            patientName: refund.patient.fullName,
+            doctorName: refund.appointment?.doctor?.fullName || 'Doctor',
+            amountInPaise: refund.amount,
+            refundId: refund.providerRefundId || refund.id,
+            appointmentId: refund.appointmentId,
+          },
+        });
+      }
     }
   }
 
@@ -517,7 +609,7 @@ export class PaymentService {
 
     const refund = await this.refundRepo.findOne({
       where: { providerRefundId },
-      relations: { patient: { user: true }, appointment: { doctor: true } },
+      relations: { payment: true, patient: { user: true }, appointment: { doctor: true } },
     });
 
     if (refund) {
@@ -534,6 +626,31 @@ export class PaymentService {
           refund.amount,
           refund.errorDescription || 'Bank processing error',
         );
+      }
+
+      if (this.notificationDispatcher && refund.patient?.user) {
+        this.notificationDispatcher.dispatchAsync({
+          eventType: NotificationEventType.REFUND_FAILED,
+          recipients: [
+            {
+              id: refund.patientId,
+              userId: refund.patient.user.id,
+              name: refund.patient.fullName,
+              email: refund.patient.user.email,
+              phone: refund.patient.phone || null,
+              role: 'PATIENT',
+            },
+          ],
+          appointmentId: refund.appointmentId,
+          refundId: refund.id,
+          data: {
+            patientName: refund.patient.fullName,
+            doctorName: refund.appointment?.doctor?.fullName || 'Doctor',
+            amountInPaise: refund.amount,
+            refundId: refund.providerRefundId || refund.id,
+            appointmentId: refund.appointmentId,
+          },
+        });
       }
     }
   }
@@ -911,6 +1028,76 @@ export class PaymentService {
         startTime: appt.startTime,
         endTime: appt.endTime,
       });
+
+      // 7. Multi-Channel Notification: Dispatch across Email, In-App, WhatsApp, and SMS
+      if (this.notificationDispatcher && fullAppt) {
+        const patientUser = fullAppt.patient?.user;
+        const doctorWithUser = await this.doctorRepo.findOne({
+          where: { id: fullAppt.doctorId },
+          relations: { user: true },
+        });
+
+        const recipients: any[] = [];
+        if (patientUser) {
+          recipients.push({
+            id: fullAppt.patientId,
+            userId: patientUser.id,
+            name: fullAppt.patient?.fullName || 'Patient',
+            email: patientUser.email,
+            phone: fullAppt.patient?.phone || null,
+            role: 'PATIENT',
+          });
+        }
+        if (doctorWithUser?.user) {
+          recipients.push({
+            id: fullAppt.doctorId,
+            userId: doctorWithUser.user.id,
+            name: doctorWithUser.fullName,
+            email: doctorWithUser.user.email,
+            phone: doctorWithUser.phone || null,
+            role: 'DOCTOR',
+          });
+        }
+
+        if (recipients.length > 0) {
+          // 1. Payment Successful
+          this.notificationDispatcher.dispatchAsync({
+            eventType: NotificationEventType.PAYMENT_SUCCESSFUL,
+            recipients: recipients.filter((r) => r.role === 'PATIENT'),
+            appointmentId: fullAppt.id,
+            paymentId: payment.id,
+            data: {
+              patientName: fullAppt.patient?.fullName,
+              doctorName: fullAppt.doctor?.fullName,
+              specialization: fullAppt.doctor?.specialization,
+              appointmentDate: fullAppt.date,
+              startTime: fullAppt.startTime,
+              amountInPaise: payment.amount,
+              paymentId: payment.paymentId,
+              orderId: payment.orderId,
+              appointmentId: fullAppt.id,
+            },
+          });
+
+          // 2. Appointment Confirmed
+          this.notificationDispatcher.dispatchAsync({
+            eventType: NotificationEventType.APPOINTMENT_CONFIRMED,
+            recipients,
+            appointmentId: fullAppt.id,
+            paymentId: payment.id,
+            data: {
+              patientName: fullAppt.patient?.fullName,
+              doctorName: fullAppt.doctor?.fullName,
+              specialization: fullAppt.doctor?.specialization,
+              appointmentDate: fullAppt.date,
+              startTime: fullAppt.startTime,
+              endTime: fullAppt.endTime,
+              tokenNumber: fullAppt.tokenNumber,
+              appointmentId: fullAppt.id,
+            },
+          });
+        }
+      }
     } catch (err: any) {
       this.logger.error('Error during post-confirmation side effects:', err.message);
     }
@@ -1184,6 +1371,35 @@ export class PaymentService {
       );
     }
 
+    if (this.notificationDispatcher && appointment.patient?.user) {
+      this.notificationDispatcher.dispatchAsync({
+        eventType: NotificationEventType.REFUND_INITIATED,
+        recipients: [
+          {
+            id: appointment.patientId,
+            userId: appointment.patient.user.id,
+            name: appointment.patient.fullName,
+            email: appointment.patient.user.email,
+            phone: appointment.patient.phone || null,
+            role: 'PATIENT',
+          },
+        ],
+        appointmentId: appointment.id,
+        refundId: savedRefund.id,
+        data: {
+          patientName: appointment.patient.fullName,
+          doctorName: appointment.doctor?.fullName,
+          specialization: appointment.doctor?.specialization,
+          appointmentDate: appointment.date,
+          startTime: appointment.startTime,
+          amountInPaise: refundAmount,
+          refundId: providerRefund.id,
+          reason: dto.reason,
+          appointmentId: appointment.id,
+        },
+      });
+    }
+
     return {
       message: 'Refund initiated successfully',
       data: {
@@ -1420,6 +1636,38 @@ export class PaymentService {
 
           await queryRunner.commitTransaction();
           reconciledCount++;
+
+          if (this.notificationDispatcher) {
+            this.appointmentRepo.findOne({
+              where: { id: appt.id },
+              relations: { patient: { user: true }, doctor: true },
+            }).then((fullExpAppt) => {
+              if (fullExpAppt?.patient?.user) {
+                this.notificationDispatcher?.dispatchAsync({
+                  eventType: NotificationEventType.APPOINTMENT_EXPIRED,
+                  recipients: [
+                    {
+                      id: fullExpAppt.patientId,
+                      userId: fullExpAppt.patient.user.id,
+                      name: fullExpAppt.patient.fullName,
+                      email: fullExpAppt.patient.user.email,
+                      phone: fullExpAppt.patient.phone || null,
+                      role: 'PATIENT',
+                    },
+                  ],
+                  appointmentId: fullExpAppt.id,
+                  data: {
+                    patientName: fullExpAppt.patient.fullName,
+                    doctorName: fullExpAppt.doctor?.fullName,
+                    specialization: fullExpAppt.doctor?.specialization,
+                    appointmentDate: fullExpAppt.date,
+                    startTime: fullExpAppt.startTime,
+                    appointmentId: fullExpAppt.id,
+                  },
+                });
+              }
+            }).catch(() => {});
+          }
         } catch (txErr) {
           await queryRunner.rollbackTransaction();
           throw txErr;

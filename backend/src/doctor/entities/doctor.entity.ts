@@ -36,7 +36,6 @@ export class Doctor {
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   consultationFee: number;
 
-
   @Column({ type: 'text', nullable: true })
   profileDetails: string | null;
 
@@ -49,10 +48,12 @@ export class Doctor {
   @Column({ type: 'int', nullable: true, default: null })
   maxFutureBookingDays: number | null;
 
+  @Column({ type: 'varchar', length: 20, nullable: true, default: null })
+  phone: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
   @UpdateDateColumn()
   updatedAt: Date;
-  phone: null;
 }

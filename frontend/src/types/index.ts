@@ -123,13 +123,59 @@ export interface DoctorLeave {
 
 export interface NotificationItem {
   id: string;
-  patientId: string;
+  patientId?: string;
+  doctorId?: string;
   title: string;
   message: string;
   note?: string;
   type: string;
   isRead: boolean;
   createdAt: string;
+}
+
+export interface NotificationPreference {
+  id: string;
+  userId: string;
+  emailEnabled: boolean;
+  inAppEnabled: boolean;
+  whatsappEnabled: boolean;
+  smsEnabled: boolean;
+  remindersEnabled: boolean;
+  paymentAlertsEnabled: boolean;
+  refundAlertsEnabled: boolean;
+}
+
+export interface NotificationDeliveryItem {
+  id: string;
+  eventType: string;
+  recipientId: string;
+  recipientRole: string;
+  channel: 'EMAIL' | 'IN_APP' | 'WHATSAPP' | 'SMS';
+  destination: string;
+  appointmentId?: string;
+  paymentId?: string;
+  status: 'PENDING' | 'PROCESSING' | 'ACCEPTED' | 'SENT' | 'DELIVERED' | 'FAILED' | 'RETRY_PENDING' | 'UNKNOWN';
+  errorCode?: string;
+  errorMessage?: string;
+  retryCount: number;
+  maxRetries: number;
+  nextRetryAt?: string;
+  sentAt?: string;
+  deliveredAt?: string;
+  createdAt: string;
+  appointment?: {
+    id: string;
+    date: string;
+    startTime: string;
+  };
+}
+
+export interface NotificationDeliveryStats {
+  total: number;
+  successful: number;
+  failed: number;
+  retryPending: number;
+  channelBreakdown: { channel: string; status: string; count: string | number }[];
 }
 
 export interface DoctorDashboardStats {

@@ -2,15 +2,21 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { Notification } from './entities/notification.entity';
+import { NotificationPreference } from './entities/notification-preference.entity';
+import { NotificationDelivery } from './entities/notification-delivery.entity';
 import { Patient } from '../patient/entities/patient.entity';
 import { Doctor } from '../doctor/entities/doctor.entity';
 import { NotificationType } from './enums/notification-type.enum';
 import { Role } from '../common/enums/role.enum';
+import { UpdateNotificationPreferenceDto } from './dto/update-preference.dto';
+import { NotificationScheduler } from './notification.scheduler';
 
 // Format date to readable string
 function formatDate(date: Date): string {
@@ -39,12 +45,21 @@ export class NotificationService {
     @InjectRepository(Notification)
     private readonly notificationRepo: Repository<Notification>,
 
+    @InjectRepository(NotificationPreference)
+    private readonly preferenceRepo: Repository<NotificationPreference>,
+
+    @InjectRepository(NotificationDelivery)
+    private readonly deliveryRepo: Repository<NotificationDelivery>,
+
     @InjectRepository(Patient)
     private readonly patientRepo: Repository<Patient>,
 
     @InjectRepository(Doctor)
     private readonly doctorRepo: Repository<Doctor>,
-  ) { }
+
+    @Inject(forwardRef(() => NotificationScheduler))
+    private readonly notificationScheduler: NotificationScheduler,
+  ) {}
 
   /**
    * Helper method to get patient by userId
@@ -267,6 +282,131 @@ export class NotificationService {
       data: {
         unreadCount,
       },
+    };
+  }
+
+  // ─── USER PREFERENCES ─────────────────────────────────────────────────────────
+
+  async getUserPreferences(userId: string) {
+    let pref = await this.preferenceRepo.findOne({ where: { userId } });
+    if (!pref) {
+      pref = this.preferenceRepo.create({
+        userId,
+        emailEnabled: true,
+        inAppEnabled: true,
+        whatsappEnabled: true,
+        smsEnabled: true,
+        remindersEnabled: true,
+        paymentAlertsEnabled: true,
+        refundAlertsEnabled: true,
+      });
+      pref = await this.preferenceRepo.save(pref);
+    }
+    return {
+      success: true,
+      message: 'Notification preferences retrieved',
+      data: pref,
+    };
+  }
+
+  async updateUserPreferences(userId: string, dto: UpdateNotificationPreferenceDto) {
+    let pref = await this.preferenceRepo.findOne({ where: { userId } });
+    if (!pref) {
+      pref = this.preferenceRepo.create({
+        userId,
+        ...dto,
+      });
+    } else {
+      Object.assign(pref, dto);
+    }
+    const updated = await this.preferenceRepo.save(pref);
+    return {
+      success: true,
+      message: 'Notification preferences updated successfully',
+      data: updated,
+    };
+  }
+
+  // ─── ADMIN MONITORING & MANUAL RETRY ──────────────────────────────────────────
+
+  async getAdminDeliveryLogs(
+    page: number = 1,
+    limit: number = 20,
+    channel?: string,
+    status?: string,
+  ) {
+    const query = this.deliveryRepo.createQueryBuilder('delivery')
+      .leftJoinAndSelect('delivery.appointment', 'appointment')
+      .orderBy('delivery.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    if (channel) {
+      query.andWhere('delivery.channel = :channel', { channel });
+    }
+    if (status) {
+      query.andWhere('delivery.status = :status', { status });
+    }
+
+    const [deliveries, total] = await query.getManyAndCount();
+
+    return {
+      success: true,
+      data: deliveries,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async getAdminDeliveryStats() {
+    const statsRaw = await this.deliveryRepo
+      .createQueryBuilder('d')
+      .select('d.channel', 'channel')
+      .addSelect('d.status', 'status')
+      .addSelect('COUNT(*)', 'count')
+      .groupBy('d.channel')
+      .addGroupBy('d.status')
+      .getRawMany();
+
+    const totalDeliveries = await this.deliveryRepo.count();
+    const successfulDeliveries = await this.deliveryRepo.count({
+      where: [{ status: 'DELIVERED' as any }, { status: 'SENT' as any }, { status: 'ACCEPTED' as any }],
+    });
+    const failedDeliveries = await this.deliveryRepo.count({
+      where: { status: 'FAILED' as any },
+    });
+    const retryPendingDeliveries = await this.deliveryRepo.count({
+      where: { status: 'RETRY_PENDING' as any },
+    });
+
+    return {
+      success: true,
+      data: {
+        total: totalDeliveries,
+        successful: successfulDeliveries,
+        failed: failedDeliveries,
+        retryPending: retryPendingDeliveries,
+        channelBreakdown: statsRaw,
+      },
+    };
+  }
+
+  async manualRetryDelivery(deliveryId: string) {
+    const delivery = await this.deliveryRepo.findOne({ where: { id: deliveryId } });
+    if (!delivery) {
+      throw new NotFoundException(`Delivery with ID ${deliveryId} not found`);
+    }
+
+    const success = await this.notificationScheduler.retrySingleDelivery(deliveryId);
+    return {
+      success,
+      message: success
+        ? 'Manual retry executed successfully'
+        : 'Manual retry failed or delivery is already processing',
     };
   }
 }

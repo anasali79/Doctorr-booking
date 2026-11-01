@@ -7,6 +7,8 @@ import { RecurringAvailability } from './doctor/entities/recurring-availability.
 import { CustomAvailability } from './doctor/entities/custom-availability.entity';
 import { Appointment } from './appointment/entities/appointment.entity';
 import { Notification } from './notification/entities/notification.entity';
+import { NotificationPreference } from './notification/entities/notification-preference.entity';
+import { NotificationDelivery } from './notification/entities/notification-delivery.entity';
 import { DoctorLeave } from './doctor/entities/leave.entity';
 import { CheckInRequest } from './check-in/entities/check-in-request.entity';
 import { Payment } from './payment/entities/payment.entity';
@@ -26,6 +28,8 @@ const shared: DataSourceOptions = {
     CustomAvailability,
     Appointment,
     Notification,
+    NotificationPreference,
+    NotificationDelivery,
     DoctorLeave,
     CheckInRequest,
     Payment,

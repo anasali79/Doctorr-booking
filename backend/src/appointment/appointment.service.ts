@@ -22,6 +22,8 @@ import { AvailabilityService } from '../doctor/availability.service';
 import { SlotStatus } from '../doctor/dto/availability.dto';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../notification/enums/notification-type.enum';
+import { NotificationDispatcher } from '../notification/notification.dispatcher';
+import { NotificationEventType } from '../notification/enums/notification-event-type.enum';
 import { EmailService } from '../email/email.service';
 import { formatTime, formatDate, getTodayIST, getMaxFutureDateIST } from '../common/utils/appointment.utils';
 import { AppointmentGateway, SOCKET_EVENTS } from '../sockets/appointment.gateway';
@@ -127,6 +129,9 @@ export class AppointmentService {
     @Optional()
     @Inject(forwardRef(() => PaymentService))
     private readonly paymentService?: PaymentService,
+
+    @Optional()
+    private readonly notificationDispatcher?: NotificationDispatcher,
   ) {
     if (!this.appointmentGateway) {
       this.logger.warn(
@@ -426,6 +431,54 @@ export class AppointmentService {
     }
 
     this.sendBookingEmail(fullAppointment);
+
+    // Multi-Channel Dispatch across Email, In-App, WhatsApp, and SMS
+    if (this.notificationDispatcher) {
+      const patientUser = fullAppointment.patient?.user;
+      this.doctorRepo.findOne({
+        where: { id: fullAppointment.doctorId },
+        relations: { user: true },
+      }).then((doctorWithUser) => {
+        const recipients: any[] = [];
+        if (patientUser) {
+          recipients.push({
+            id: fullAppointment.patientId,
+            userId: patientUser.id,
+            name: fullAppointment.patient?.fullName || 'Patient',
+            email: patientUser.email,
+            phone: fullAppointment.patient?.phone || null,
+            role: 'PATIENT',
+          });
+        }
+        if (doctorWithUser?.user) {
+          recipients.push({
+            id: fullAppointment.doctorId,
+            userId: doctorWithUser.user.id,
+            name: doctorWithUser.fullName,
+            email: doctorWithUser.user.email,
+            phone: doctorWithUser.phone || null,
+            role: 'DOCTOR',
+          });
+        }
+        if (recipients.length > 0) {
+          this.notificationDispatcher?.dispatchAsync({
+            eventType: NotificationEventType.APPOINTMENT_CONFIRMED,
+            recipients,
+            appointmentId: fullAppointment.id,
+            data: {
+              patientName: fullAppointment.patient?.fullName,
+              doctorName: fullAppointment.doctor?.fullName,
+              specialization: fullAppointment.doctor?.specialization,
+              appointmentDate: fullAppointment.date,
+              startTime: fullAppointment.startTime,
+              endTime: fullAppointment.endTime,
+              tokenNumber: fullAppointment.tokenNumber,
+              appointmentId: fullAppointment.id,
+            },
+          });
+        }
+      }).catch((err) => this.logger.warn(`Failed to dispatch booking notification: ${err.message}`));
+    }
     await this.reminderService?.scheduleAppointmentReminders(fullAppointment);
 
     // P0-3: Emit booking event to doctor room AFTER commit
@@ -729,6 +782,98 @@ export class AppointmentService {
     );
 
         this.sendCancellationEmail(updatedAppointment);
+
+    if (this.notificationDispatcher) {
+      const patientUser = updatedAppointment.patient?.user;
+      this.doctorRepo.findOne({
+        where: { id: updatedAppointment.doctorId },
+        relations: { user: true },
+      }).then((doctorWithUser) => {
+        const recipients: any[] = [];
+        if (patientUser) {
+          recipients.push({
+            id: updatedAppointment.patientId,
+            userId: patientUser.id,
+            name: updatedAppointment.patient?.fullName || 'Patient',
+            email: patientUser.email,
+            phone: updatedAppointment.patient?.phone || null,
+            role: 'PATIENT',
+          });
+        }
+        if (doctorWithUser?.user) {
+          recipients.push({
+            id: updatedAppointment.doctorId,
+            userId: doctorWithUser.user.id,
+            name: doctorWithUser.fullName,
+            email: doctorWithUser.user.email,
+            phone: doctorWithUser.phone || null,
+            role: 'DOCTOR',
+          });
+        }
+        if (recipients.length > 0) {
+          this.notificationDispatcher?.dispatchAsync({
+            eventType: NotificationEventType.APPOINTMENT_CANCELLED_BY_DOCTOR,
+            recipients,
+            appointmentId: updatedAppointment.id,
+            data: {
+              patientName: updatedAppointment.patient?.fullName,
+              doctorName: updatedAppointment.doctor?.fullName,
+              specialization: updatedAppointment.doctor?.specialization,
+              appointmentDate: updatedAppointment.date,
+              startTime: updatedAppointment.startTime,
+              cancelReason: 'Doctor cancelled appointment',
+              appointmentId: updatedAppointment.id,
+            },
+          });
+        }
+      }).catch((err) => this.logger.warn(`Failed to dispatch doctor cancel notification: ${err.message}`));
+    }
+
+    if (this.notificationDispatcher) {
+      const patientUser = updatedAppointment.patient?.user;
+      this.doctorRepo.findOne({
+        where: { id: updatedAppointment.doctorId },
+        relations: { user: true },
+      }).then((doctorWithUser) => {
+        const recipients: any[] = [];
+        if (patientUser) {
+          recipients.push({
+            id: updatedAppointment.patientId,
+            userId: patientUser.id,
+            name: updatedAppointment.patient?.fullName || 'Patient',
+            email: patientUser.email,
+            phone: updatedAppointment.patient?.phone || null,
+            role: 'PATIENT',
+          });
+        }
+        if (doctorWithUser?.user) {
+          recipients.push({
+            id: updatedAppointment.doctorId,
+            userId: doctorWithUser.user.id,
+            name: doctorWithUser.fullName,
+            email: doctorWithUser.user.email,
+            phone: doctorWithUser.phone || null,
+            role: 'DOCTOR',
+          });
+        }
+        if (recipients.length > 0) {
+          this.notificationDispatcher?.dispatchAsync({
+            eventType: NotificationEventType.APPOINTMENT_CANCELLED_BY_PATIENT,
+            recipients,
+            appointmentId: updatedAppointment.id,
+            data: {
+              patientName: updatedAppointment.patient?.fullName,
+              doctorName: updatedAppointment.doctor?.fullName,
+              specialization: updatedAppointment.doctor?.specialization,
+              appointmentDate: updatedAppointment.date,
+              startTime: updatedAppointment.startTime,
+              cancelReason: reason || 'Patient requested cancellation',
+              appointmentId: updatedAppointment.id,
+            },
+          });
+        }
+      }).catch((err) => this.logger.warn(`Failed to dispatch patient cancel notification: ${err.message}`));
+    }
 
     await this.reminderService?.cancelRemindersForAppointment(updatedAppointment.id);
 
@@ -1047,6 +1192,56 @@ export class AppointmentService {
 
     if (fullNewAppointment) {
       this.sendRescheduleEmail(fullNewAppointment, previousDate, previousStartTime);
+
+      if (this.notificationDispatcher) {
+        const patientUser = fullNewAppointment.patient?.user;
+        this.doctorRepo.findOne({
+          where: { id: fullNewAppointment.doctorId },
+          relations: { user: true },
+        }).then((doctorWithUser) => {
+          const recipients: any[] = [];
+          if (patientUser) {
+            recipients.push({
+              id: fullNewAppointment.patientId,
+              userId: patientUser.id,
+              name: fullNewAppointment.patient?.fullName || 'Patient',
+              email: patientUser.email,
+              phone: fullNewAppointment.patient?.phone || null,
+              role: 'PATIENT',
+            });
+          }
+          if (doctorWithUser?.user) {
+            recipients.push({
+              id: fullNewAppointment.doctorId,
+              userId: doctorWithUser.user.id,
+              name: doctorWithUser.fullName,
+              email: doctorWithUser.user.email,
+              phone: doctorWithUser.phone || null,
+              role: 'DOCTOR',
+            });
+          }
+          if (recipients.length > 0) {
+            this.notificationDispatcher?.dispatchAsync({
+              eventType: NotificationEventType.APPOINTMENT_RESCHEDULED,
+              recipients,
+              appointmentId: fullNewAppointment.id,
+              data: {
+                patientName: fullNewAppointment.patient?.fullName,
+                doctorName: fullNewAppointment.doctor?.fullName,
+                specialization: fullNewAppointment.doctor?.specialization,
+                appointmentDate: fullNewAppointment.date,
+                startTime: fullNewAppointment.startTime,
+                endTime: fullNewAppointment.endTime,
+                tokenNumber: fullNewAppointment.tokenNumber,
+                previousDate,
+                previousStartTime,
+                rescheduleReason: dto.rescheduleReason || 'Patient requested reschedule',
+                appointmentId: fullNewAppointment.id,
+              },
+            });
+          }
+        }).catch((err) => this.logger.warn(`Failed to dispatch reschedule notification: ${err.message}`));
+      }
       await this.reminderService?.cancelRemindersForAppointment(appointment.id);
       await this.reminderService?.scheduleAppointmentReminders(fullNewAppointment);
     }
@@ -1241,6 +1436,52 @@ export class AppointmentService {
     );
 
     this.sendCancellationEmail(updatedAppointment);
+
+    if (this.notificationDispatcher) {
+      const patientUser = updatedAppointment.patient?.user;
+      this.doctorRepo.findOne({
+        where: { id: updatedAppointment.doctorId },
+        relations: { user: true },
+      }).then((doctorWithUser) => {
+        const recipients: any[] = [];
+        if (patientUser) {
+          recipients.push({
+            id: updatedAppointment.patientId,
+            userId: patientUser.id,
+            name: updatedAppointment.patient?.fullName || 'Patient',
+            email: patientUser.email,
+            phone: updatedAppointment.patient?.phone || null,
+            role: 'PATIENT',
+          });
+        }
+        if (doctorWithUser?.user) {
+          recipients.push({
+            id: updatedAppointment.doctorId,
+            userId: doctorWithUser.user.id,
+            name: doctorWithUser.fullName,
+            email: doctorWithUser.user.email,
+            phone: doctorWithUser.phone || null,
+            role: 'DOCTOR',
+          });
+        }
+        if (recipients.length > 0) {
+          this.notificationDispatcher?.dispatchAsync({
+            eventType: NotificationEventType.APPOINTMENT_CANCELLED_BY_DOCTOR,
+            recipients,
+            appointmentId: updatedAppointment.id,
+            data: {
+              patientName: updatedAppointment.patient?.fullName,
+              doctorName: updatedAppointment.doctor?.fullName,
+              specialization: updatedAppointment.doctor?.specialization,
+              appointmentDate: updatedAppointment.date,
+              startTime: updatedAppointment.startTime,
+              cancelReason: 'Doctor cancelled appointment',
+              appointmentId: updatedAppointment.id,
+            },
+          });
+        }
+      }).catch((err) => this.logger.warn(`Failed to dispatch doctor cancel notification: ${err.message}`));
+    }
 
     await this.reminderService?.cancelRemindersForAppointment(updatedAppointment.id);
 

@@ -67,4 +67,12 @@ export class RescheduleAppointmentDto {
     message: 'newEndTime must be in HH:MM format (24-hour), e.g. "10:15"',
   })
   newEndTime?: string;
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
+
+  @IsOptional()
+  @IsString()
+  rescheduleReason?: string;
 }
