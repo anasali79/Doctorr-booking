@@ -685,23 +685,70 @@ export function MyDayClient({
 
                           {/* Action Button */}
                           <TableCell className="py-3 px-3 text-right whitespace-nowrap">
-                            {appt.status === 'CHECKED_IN' ? (
-                              <Button type="button" size="xs" onClick={(e) => { e.stopPropagation(); handleAction(appt.id, 'start-consultation'); }} disabled={actionLoadingId === `${appt.id}-start-consultation`} className="inline-flex items-center gap-1 rounded-lg bg-[#0066cc] px-3.5 py-1 text-xs font-semibold text-white hover:bg-[#0055b3] transition-all shadow-xs h-auto">
-                                {actionLoadingId === `${appt.id}-start-consultation` ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  'Start'
-                                )}
-                              </Button>
-                            ) : appt.status === 'IN_CONSULTATION' ? (
-                              <Button type="button" variant="outline" size="xs" onClick={(e) => { e.stopPropagation(); setSelectedApptId(appt.id); }} className="inline-flex items-center gap-1 rounded-lg border border-[#0066cc] bg-white px-3.5 py-1 text-xs font-semibold text-[#0066cc] hover:bg-blue-50 transition-all shadow-xs h-auto">
-                                View
-                              </Button>
-                            ) : appt.status === 'CONFIRMED' ? (
-                              <Button type="button" variant="ghost" size="xs" onClick={(e) => { e.stopPropagation(); handleAction(appt.id, 'manual-check-in'); }} className="text-slate-400 hover:text-[#0066cc] text-xs font-medium h-auto p-0">—</Button>
-                            ) : (
-                              <span className="text-slate-300">—</span>
-                            )}
+                            <div className="inline-flex items-center gap-1.5 justify-end">
+                              {appt.status === 'CHECKED_IN' ? (
+                                <Button
+                                  type="button"
+                                  size="xs"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleAction(appt.id, 'start-consultation');
+                                  }}
+                                  disabled={actionLoadingId === `${appt.id}-start-consultation`}
+                                  className="inline-flex items-center gap-1 rounded-lg bg-[#0066cc] px-3.5 py-1 text-xs font-semibold text-white hover:bg-[#0055b3] transition-all shadow-xs h-auto"
+                                >
+                                  {actionLoadingId === `${appt.id}-start-consultation` ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    'Start'
+                                  )}
+                                </Button>
+                              ) : appt.status === 'IN_CONSULTATION' ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="xs"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedApptId(appt.id);
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-[#0066cc] bg-white px-3.5 py-1 text-xs font-semibold text-[#0066cc] hover:bg-blue-50 transition-all shadow-xs h-auto"
+                                >
+                                  View
+                                </Button>
+                              ) : appt.status === 'CONFIRMED' ? (
+                                <Button
+                                  type="button"
+                                  size="xs"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleAction(appt.id, 'manual-check-in');
+                                  }}
+                                  className="text-slate-500 hover:text-[#0066cc] text-xs font-medium h-auto px-2 py-0.5 rounded border border-slate-200 hover:border-blue-200"
+                                >
+                                  Check In
+                                </Button>
+                              ) : (
+                                <span className="text-slate-300">—</span>
+                              )}
+
+                              {['CONFIRMED', 'CHECKED_IN'].includes(appt.status) && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="xs"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setReschedulingAppt(appt);
+                                    setRescheduleModalOpen(true);
+                                  }}
+                                  className="p-1 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-500 hover:text-[#0066cc] transition-all h-auto cursor-pointer"
+                                  title="Reschedule Appointment"
+                                >
+                                  <CalendarSync className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
@@ -1197,6 +1244,7 @@ export function MyDayClient({
           setReschedulingAppt(null);
         }}
         appointment={reschedulingAppt || currentAppt}
+        doctorId={profile.id}
         onRescheduled={() => {
           fetchAppointmentsForDate(selectedDate);
           router.refresh();

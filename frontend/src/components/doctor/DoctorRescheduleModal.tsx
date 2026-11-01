@@ -24,6 +24,7 @@ interface DoctorRescheduleModalProps {
   isOpen: boolean;
   onClose: () => void;
   appointment: Appointment | null;
+  doctorId?: string;
   onRescheduled: () => void;
 }
 
@@ -46,6 +47,7 @@ export function DoctorRescheduleModal({
   isOpen,
   onClose,
   appointment,
+  doctorId,
   onRescheduled,
 }: DoctorRescheduleModalProps) {
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
@@ -65,6 +67,9 @@ export function DoctorRescheduleModal({
   // Reason & Submission
   const [rescheduleReason, setRescheduleReason] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
+
+  const resolvedDoctorId =
+    appointment?.doctorId || (appointment as any)?.doctor?.id || doctorId;
 
   // Helper: Add days to YYYY-MM-DD
   const addDays = (dateStr: string, days: number): string => {
@@ -89,9 +94,14 @@ export function DoctorRescheduleModal({
     });
   };
 
+  const parseSlotData = (res: any): RawSlot[] => {
+    const d = res?.data?.data || res?.data;
+    return Array.isArray(d) ? d : [];
+  };
+
   // 1. Fetch smart 3-day slot suggestions when modal opens
   const fetchSmartSuggestions = useCallback(async () => {
-    if (!appointment) return;
+    if (!appointment || !resolvedDoctorId) return;
     setLoadingSuggestions(true);
     setSmartSlots([]);
     setSelectedSlot(null);
@@ -106,19 +116,19 @@ export function DoctorRescheduleModal({
     try {
       const [res1, res2, res3] = await Promise.all([
         clientAxios
-          .get(`/api/doctor/${appointment.doctorId}/slots-proxy?date=${day1}`)
+          .get(`/api/doctor/${resolvedDoctorId}/slots-proxy?date=${day1}`)
           .catch(() => ({ data: { data: [] } })),
         clientAxios
-          .get(`/api/doctor/${appointment.doctorId}/slots-proxy?date=${day2}`)
+          .get(`/api/doctor/${resolvedDoctorId}/slots-proxy?date=${day2}`)
           .catch(() => ({ data: { data: [] } })),
         clientAxios
-          .get(`/api/doctor/${appointment.doctorId}/slots-proxy?date=${day3}`)
+          .get(`/api/doctor/${resolvedDoctorId}/slots-proxy?date=${day3}`)
           .catch(() => ({ data: { data: [] } })),
       ]);
 
-      const slots1: RawSlot[] = res1.data?.data || [];
-      const slots2: RawSlot[] = res2.data?.data || [];
-      const slots3: RawSlot[] = res3.data?.data || [];
+      const slots1: RawSlot[] = parseSlotData(res1);
+      const slots2: RawSlot[] = parseSlotData(res2);
+      const slots3: RawSlot[] = parseSlotData(res3);
 
       const availableStatuses = ['AVAILABLE', 'CANCEL_AND_AVAILABLE'];
 
@@ -217,7 +227,7 @@ export function DoctorRescheduleModal({
     } finally {
       setLoadingSuggestions(false);
     }
-  }, [appointment]);
+  }, [appointment, resolvedDoctorId]);
 
   useEffect(() => {
     if (isOpen && appointment) {
@@ -232,13 +242,13 @@ export function DoctorRescheduleModal({
   // 2. Fetch manual slots when user changes manual date
   const fetchManualSlots = useCallback(
     async (dateStr: string) => {
-      if (!appointment || !dateStr) return;
+      if (!resolvedDoctorId || !dateStr) return;
       setLoadingManualSlots(true);
       try {
         const res = await clientAxios.get(
-          `/api/doctor/${appointment.doctorId}/slots-proxy?date=${dateStr}`,
+          `/api/doctor/${resolvedDoctorId}/slots-proxy?date=${dateStr}`,
         );
-        const slots: RawSlot[] = res.data?.data || [];
+        const slots: RawSlot[] = parseSlotData(res);
         const availableStatuses = ['AVAILABLE', 'CANCEL_AND_AVAILABLE'];
         const todayStr = getTodayIST();
         const now = new Date();
@@ -246,7 +256,7 @@ export function DoctorRescheduleModal({
 
         const filtered = slots.filter((s) => {
           if (!availableStatuses.includes(s.status)) return false;
-          if (dateStr === appointment.date && s.startTime === appointment.startTime) return false;
+          if (dateStr === appointment?.date && s.startTime === appointment?.startTime) return false;
           if (dateStr === todayStr && s.startTime <= currentHoursMin) return false;
           return true;
         });
@@ -259,7 +269,7 @@ export function DoctorRescheduleModal({
         setLoadingManualSlots(false);
       }
     },
-    [appointment],
+    [appointment, resolvedDoctorId],
   );
 
   const handleManualDateSelect = (newDate: string) => {
@@ -323,12 +333,20 @@ export function DoctorRescheduleModal({
   const nextDates = Array.from({ length: 7 }, (_, i) => addDays(todayStr, i));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden max-h-[92vh] flex flex-col">
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="w-full max-w-xl rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden my-6 flex flex-col max-h-[92vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+        <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-blue-100/70 text-[#0066cc] flex items-center justify-center shrink-0 border border-blue-200">
+            <div className="h-10 w-10 rounded-2xl bg-blue-100/70 text-[#0066cc] flex items-center justify-center shrink-0 border border-blue-200">
               <CalendarSync className="h-5 w-5" />
             </div>
             <div>
@@ -343,7 +361,7 @@ export function DoctorRescheduleModal({
           <button
             type="button"
             onClick={onClose}
-            className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 flex items-center justify-center transition-colors cursor-pointer"
+            className="h-8 w-8 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 flex items-center justify-center transition-colors cursor-pointer"
           >
             <X className="h-4 w-4" />
           </button>
@@ -352,7 +370,7 @@ export function DoctorRescheduleModal({
         {/* Scrollable Content */}
         <div className="p-5 sm:p-6 overflow-y-auto space-y-5 text-xs text-slate-700">
           {/* Current Patient & Appointment Info Banner */}
-          <div className="rounded-xl p-3.5 bg-blue-50/70 border border-blue-100 flex items-center justify-between gap-3">
+          <div className="rounded-2xl p-3.5 bg-blue-50/70 border border-blue-100 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="h-9 w-9 rounded-full bg-white text-blue-700 font-bold flex items-center justify-center text-xs shrink-0 border border-blue-200 shadow-2xs">
                 <User className="h-4 w-4" />
@@ -396,12 +414,12 @@ export function DoctorRescheduleModal({
                 {[1, 2, 3, 4].map((i) => (
                   <div
                     key={i}
-                    className="h-18 rounded-xl border border-slate-100 bg-slate-50/60 animate-pulse"
+                    className="h-20 rounded-2xl border border-slate-100 bg-slate-50/60 animate-pulse"
                   />
                 ))}
               </div>
             ) : smartSlots.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50/40 p-4 text-center space-y-1">
+              <div className="rounded-2xl border border-dashed border-amber-200 bg-amber-50/40 p-4 text-center space-y-1">
                 <AlertCircle className="h-4 w-4 text-amber-600 mx-auto" />
                 <p className="font-medium text-slate-700">No immediate slots free in the next 3 days</p>
                 <p className="text-[11px] text-slate-500">
@@ -425,14 +443,14 @@ export function DoctorRescheduleModal({
                           endTime: opt.endTime,
                         })
                       }
-                      className={`relative p-3 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+                      className={`relative p-3.5 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between ${
                         isSelected
                           ? 'border-[#0066cc] bg-blue-50/80 ring-2 ring-[#0066cc]/20 shadow-xs'
                           : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200/80">
+                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200/80">
                           {opt.tag}
                         </span>
                         {isSelected && (
@@ -442,7 +460,7 @@ export function DoctorRescheduleModal({
                         )}
                       </div>
 
-                      <div className="mt-2 space-y-0.5">
+                      <div className="mt-2.5 space-y-0.5">
                         <div className="font-bold text-slate-900 text-xs">
                           {formatDate(opt.date)}
                         </div>
@@ -483,7 +501,7 @@ export function DoctorRescheduleModal({
             </button>
 
             {showManualPicker && (
-              <div className="space-y-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
+              <div className="space-y-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
                 {/* Horizontal Date Picker */}
                 <div>
                   <span className="text-[11px] font-semibold text-slate-600 block mb-1.5">
@@ -504,7 +522,7 @@ export function DoctorRescheduleModal({
                           key={d}
                           type="button"
                           onClick={() => handleManualDateSelect(d)}
-                          className={`flex flex-col items-center justify-center min-w-13 py-2 px-2 rounded-xl text-center transition-all cursor-pointer ${
+                          className={`flex flex-col items-center justify-center min-w-13 py-2 px-2 rounded-2xl text-center transition-all cursor-pointer ${
                             isDateActive
                               ? 'bg-[#0066cc] text-white shadow-xs'
                               : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
@@ -537,7 +555,7 @@ export function DoctorRescheduleModal({
                       Loading slots...
                     </div>
                   ) : manualSlots.length === 0 ? (
-                    <div className="py-4 text-center text-slate-400 bg-white rounded-lg border border-slate-200 text-xs">
+                    <div className="py-4 text-center text-slate-400 bg-white rounded-xl border border-slate-200 text-xs">
                       No free slots available on {formatDate(manualDate)}. Please select another date above.
                     </div>
                   ) : (
@@ -564,7 +582,7 @@ export function DoctorRescheduleModal({
                                       endTime: s.endTime,
                                     })
                                   }
-                                  className={`py-1.5 px-2 rounded-lg text-xs font-semibold border transition-all text-center cursor-pointer ${
+                                  className={`py-1.5 px-2 rounded-xl text-xs font-semibold border transition-all text-center cursor-pointer ${
                                     isSel
                                       ? 'border-[#0066cc] bg-[#0066cc] text-white shadow-xs'
                                       : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
@@ -600,7 +618,7 @@ export function DoctorRescheduleModal({
                                       endTime: s.endTime,
                                     })
                                   }
-                                  className={`py-1.5 px-2 rounded-lg text-xs font-semibold border transition-all text-center cursor-pointer ${
+                                  className={`py-1.5 px-2 rounded-xl text-xs font-semibold border transition-all text-center cursor-pointer ${
                                     isSel
                                       ? 'border-[#0066cc] bg-[#0066cc] text-white shadow-xs'
                                       : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
@@ -636,7 +654,7 @@ export function DoctorRescheduleModal({
                                       endTime: s.endTime,
                                     })
                                   }
-                                  className={`py-1.5 px-2 rounded-lg text-xs font-semibold border transition-all text-center cursor-pointer ${
+                                  className={`py-1.5 px-2 rounded-xl text-xs font-semibold border transition-all text-center cursor-pointer ${
                                     isSel
                                       ? 'border-[#0066cc] bg-[#0066cc] text-white shadow-xs'
                                       : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
@@ -658,7 +676,7 @@ export function DoctorRescheduleModal({
 
           {/* New Slot Preview Card */}
           {selectedSlot && (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5 space-y-2">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3.5 space-y-2">
               <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
                 <Check className="h-3 w-3 stroke-[3]" />
                 Selected Reschedule Target
@@ -701,7 +719,7 @@ export function DoctorRescheduleModal({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-100 flex items-center justify-end gap-2.5 bg-slate-50/70">
+        <div className="p-4 border-t border-slate-100 flex items-center justify-end gap-2.5 bg-slate-50/80">
           <Button
             type="button"
             variant="ghost"
@@ -735,4 +753,3 @@ export function DoctorRescheduleModal({
     </div>
   );
 }
-
