@@ -3,10 +3,33 @@ import { ConfigService } from '@nestjs/config';
 
 import { formatTime, formatDate } from '../common/utils/appointment.utils';
 
-function buildTokenMsg(tokenNumber: number | null): string {
-  if (!tokenNumber) return '';
-  return `<p style="margin: 5px 0; color: #333333;"><strong>Token Number:</strong> ${tokenNumber}</p>`;
-}
+// ─── Inline SVG Icons for HTML Email Clients ─────────────────────────────────
+const SVG_ICONS = {
+  medicalCross: `
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto;">
+      <path d="M12 2v20M2 12h20"/>
+    </svg>`,
+  calendar: `
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0066cc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; margin-right: 6px;">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+    </svg>`,
+  clock: `
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0066cc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; margin-right: 6px;">
+      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+    </svg>`,
+  doctor: `
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0066cc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; margin-right: 6px;">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+    </svg>`,
+  creditCard: `
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0066cc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; margin-right: 6px;">
+      <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+    </svg>`,
+  shieldCheck: `
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; margin-right: 6px;">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/>
+    </svg>`,
+};
 
 function htmlToPlainText(html: string): string {
   return html
@@ -22,47 +45,96 @@ function htmlToPlainText(html: string): string {
     .trim();
 }
 
-function buildHeader(title: string, titleColor: string): string {
+function buildBaseEmailWrapper(
+  badgeText: string,
+  badgeBg: string,
+  badgeColor: string,
+  badgeBorder: string,
+  title: string,
+  bodyHtml: string,
+  ctaLabel?: string,
+  ctaUrl?: string,
+  appBaseUrl: string = 'https://doctorbook-five.vercel.app',
+): string {
   return `
-    <div style="background-color: #0066cc; padding: 24px 20px; text-align: center; border-radius: 8px 8px 0 0;">
-      <p style="margin: 0; font-size: 22px; font-weight: bold; color: #ffffff; letter-spacing: 1px;"> CareUp</p>
-      <p style="margin: 4px 0 0 0; font-size: 12px; color: #bae0fd; letter-spacing: 0.5px; text-transform: uppercase;">Healthcare Appointment Companion</p>
-    </div>
-    <div style="text-align: center; padding: 24px 20px 0 20px;">
-      <h2 style="color: ${titleColor}; margin: 0; font-size: 22px;">${title}</h2>
-    </div>
-  `;
-}
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>${title}</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #f6f8fb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0f172a; -webkit-font-smoothing: antialiased;">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f6f8fb; padding: 24px 12px;">
+        <tr>
+          <td align="center">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.04);">
+              
+              <!-- Header -->
+              <tr>
+                <td style="background-color: #0055b3; background: linear-gradient(135deg, #004494 0%, #0066cc 100%); padding: 24px 32px;">
+                  <table cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td style="background-color: rgba(255, 255, 255, 0.18); border-radius: 8px; width: 36px; height: 36px; text-align: center; vertical-align: middle;">
+                        ${SVG_ICONS.medicalCross}
+                      </td>
+                      <td style="padding-left: 14px; vertical-align: middle;">
+                        <span style="font-size: 20px; font-weight: 700; color: #ffffff; letter-spacing: 0.5px; display: block; line-height: 1.2;">CareUp</span>
+                        <span style="font-size: 11px; color: #bae0fd; letter-spacing: 0.6px; text-transform: uppercase; display: block; font-weight: 600;">Clinical Healthcare Appointments</span>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
 
-function buildFooter(): string {
-  return `
-    <hr style="border: none; border-top: 1px solid #eeeeee; margin: 24px 0 16px 0;" />
-    <table width="100%" cellpadding="0" cellspacing="0" border="0">
-      <tr>
-        <td style="text-align: center; padding-bottom: 8px;">
-          <p style="margin: 0; font-size: 12px; color: #9e9e9e;">
-            This is an automated email from <strong>CareUp</strong>. Please do not reply directly.
-          </p>
-          <p style="margin: 6px 0 0 0; font-size: 11px; color: #bdbdbd;">
-            © ${new Date().getFullYear()} CareUp &nbsp;|&nbsp;
-            <a href="https://schedula.app/support" style="color: #bdbdbd; text-decoration: underline;">Support</a> &nbsp;|&nbsp;
-            <a href="https://schedula.app/unsubscribe" style="color: #bdbdbd; text-decoration: underline;">Unsubscribe</a>
-          </p>
-        </td>
-      </tr>
-    </table>
-  `;
-}
+              <!-- Badge & Title -->
+              <tr>
+                <td style="padding: 28px 32px 0 32px;">
+                  <div style="display: inline-block; background-color: ${badgeBg}; color: ${badgeColor}; border: 1px solid ${badgeBorder}; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; padding: 4px 12px; border-radius: 20px;">
+                    ${badgeText}
+                  </div>
+                  <h1 style="color: #0f172a; font-size: 22px; font-weight: 700; margin: 14px 0 16px 0; line-height: 1.3;">
+                    ${title}
+                  </h1>
+                </td>
+              </tr>
 
-function buildCtaButton(label: string, url: string, color: string): string {
-  return `
-    <div style="text-align: center; margin: 20px 0;">
-      <a href="${url}"
-         style="display: inline-block; padding: 12px 28px; background-color: ${color}; color: #ffffff;
-                text-decoration: none; border-radius: 6px; font-size: 15px; font-weight: bold;">
-        ${label}
-      </a>
-    </div>
+              <!-- Content Body -->
+              <tr>
+                <td style="padding: 0 32px 28px 32px; color: #334155; font-size: 14px; line-height: 1.6;">
+                  ${bodyHtml}
+
+                  ${ctaLabel && ctaUrl ? `
+                    <div style="margin: 28px 0 8px 0; text-align: left;">
+                      <a href="${ctaUrl}" target="_blank" style="display: inline-block; background-color: #0066cc; color: #ffffff; font-size: 14px; font-weight: 600; text-decoration: none; padding: 12px 28px; border-radius: 8px; letter-spacing: 0.2px;">
+                        ${ctaLabel} &rarr;
+                      </a>
+                    </div>
+                  ` : ''}
+                </td>
+              </tr>
+
+              <!-- Clinical Compliance Footer -->
+              <tr>
+                <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 24px 32px; text-align: left;">
+                  <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b; line-height: 1.5;">
+                    <strong>Confidential Medical Notice:</strong> This communication is generated by CareUp Healthcare Platform and contains confidential clinical records intended solely for the recipient.
+                  </p>
+                  <p style="margin: 0; font-size: 11px; color: #94a3b8; line-height: 1.6;">
+                    CareUp Clinical Systems &bull; <a href="${appBaseUrl}/support" style="color: #0066cc; text-decoration: none;">Support Desk</a>
+                  </p>
+                  <p style="margin: 6px 0 0 0; font-size: 11px; color: #94a3b8;">
+                    &copy; ${new Date().getFullYear()} CareUp. All rights reserved.
+                  </p>
+                </td>
+              </tr>
+
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
   `;
 }
 
@@ -166,30 +238,25 @@ export class EmailService {
   ): Promise<boolean> {
     const formattedDate = formatDate(date);
     const formattedTime = formatTime(startTime);
-    const tokenMsg = buildTokenMsg(tokenNumber);
-
-    const contactMsg = contactnumber
-      ? `<p style="margin: 5px 0; color: #333333;"><strong>Contact:</strong> ${contactnumber}</p>`
-      : '';
 
     let qrImageTag = '';
     try {
       const checkInUrl = `${this.appBaseUrl}/checkin/${appointmentId}`;
       const encodedPayload = encodeURIComponent(checkInUrl);
-      const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&color=1a6b3c&bgcolor=ffffff&data=${encodedPayload}`;
+      const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&color=0066cc&bgcolor=ffffff&data=${encodedPayload}`;
       qrImageTag = `
-        <div style="text-align: center; margin: 20px 0; background-color: #ffffff; padding: 16px; border: 1px dashed #0066cc; border-radius: 8px;">
-          <p style="margin: 0 0 8px 0; color: #1e293b; font-weight: bold; font-size: 15px;">Your Check-In QR Code</p>
+        <div style="text-align: center; margin: 24px 0; background-color: #f8fafc; padding: 20px; border: 1px dashed #0066cc; border-radius: 8px;">
+          <p style="margin: 0 0 8px 0; color: #0f172a; font-weight: 700; font-size: 14px;">Clinic Check-In QR Code</p>
           <a href="${checkInUrl}" target="_blank" style="display: inline-block;">
             <img src="${qrImageUrl}" alt="Appointment QR Code"
-                 width="180" height="180"
+                 width="160" height="160"
                  style="border: 2px solid #0066cc; border-radius: 8px; display: block; margin: 0 auto;" />
           </a>
-          <p style="margin: 8px 0 12px 0; font-size: 12px; color: #64748b;">
-            Scan with your phone camera or tap below to open your Check-In page.
+          <p style="margin: 10px 0 14px 0; font-size: 12px; color: #64748b;">
+            Scan with your smartphone at the clinic reception to enter the queue.
           </p>
           <a href="${checkInUrl}" target="_blank"
-             style="display: inline-block; background-color: #0066cc; color: #ffffff; padding: 9px 20px; border-radius: 6px; font-weight: bold; font-size: 13px; text-decoration: none;">
+             style="display: inline-block; background-color: #0066cc; color: #ffffff; padding: 8px 18px; border-radius: 6px; font-weight: 600; font-size: 13px; text-decoration: none;">
             Open Check-In Page &rarr;
           </a>
         </div>`;
@@ -197,34 +264,64 @@ export class EmailService {
       this.logger.warn('Failed to generate QR code for booking email:', err);
     }
 
-    const htmlContent = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
-        ${buildHeader('Appointment Confirmed! ✅', '#2e7d32')}
-        <div style="padding: 20px;">
-          <div style="background-color: #f9f9f9; padding: 20px; border-radius: 6px; margin-bottom: 4px;">
-            <p style="color: #333333; font-size: 16px; margin-top: 0;">Hello <strong>${patientName}</strong>,</p>
-            <p style="color: #555555; line-height: 1.5; font-size: 15px;">
-              Your appointment has been successfully booked with <strong>${doctorName}</strong>.
-            </p>
-            <div style="background-color: #ffffff; padding: 15px; border-radius: 4px; border-left: 4px solid #2e7d32; margin: 15px 0;">
-              <p style="margin: 5px 0; color: #333333;"><strong>Doctor:</strong> ${doctorName} (${specialization})</p>
-              <p style="margin: 5px 0; color: #333333;"><strong>Date:</strong> ${formattedDate}</p>
-              <p style="margin: 5px 0; color: #333333;"><strong>Time:</strong> ${formattedTime}</p>
-              ${tokenMsg}
-              ${contactMsg}
-            </div>
-            <p style="color: #555555; line-height: 1.5; font-size: 15px;">
-              Please arrive <strong>5 minutes</strong> before your scheduled time.
-            </p>
-            ${qrImageTag}
-          </div>
-          ${buildCtaButton('View My Appointments', `${this.appBaseUrl}/appointments`, '#2e7d32')}
-        </div>
-        ${buildFooter()}
-      </div>
+    const bodyHtml = `
+      <p style="margin: 0 0 16px 0;">Dear ${patientName},</p>
+      <p style="margin: 0 0 16px 0;">Your clinical appointment has been confirmed with <strong>Dr. ${doctorName}</strong>.</p>
+      
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin: 18px 0;">
+        <tr>
+          <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; background-color: #f1f5f9;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #475569; letter-spacing: 0.6px;">Consultation Summary</td>
+                ${tokenNumber ? `<td align="right"><span style="background-color: #0066cc; color: #ffffff; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 12px;">TOKEN #${tokenNumber}</span></td>` : ''}
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 16px;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding: 5px 0; font-size: 13px; color: #64748b; width: 34%;">Doctor:</td>
+                <td style="padding: 5px 0; font-size: 14px; font-weight: 600; color: #0f172a;">${SVG_ICONS.doctor} Dr. ${doctorName} <span style="font-weight: 400; color: #64748b; font-size: 12px;">(${specialization})</span></td>
+              </tr>
+              <tr>
+                <td style="padding: 5px 0; font-size: 13px; color: #64748b;">Date:</td>
+                <td style="padding: 5px 0; font-size: 14px; font-weight: 600; color: #0f172a;">${SVG_ICONS.calendar} ${formattedDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 5px 0; font-size: 13px; color: #64748b;">Time:</td>
+                <td style="padding: 5px 0; font-size: 14px; font-weight: 600; color: #0f172a;">${SVG_ICONS.clock} ${formattedTime}</td>
+              </tr>
+              ${contactnumber ? `
+                <tr>
+                  <td style="padding: 5px 0; font-size: 13px; color: #64748b;">Clinic Contact:</td>
+                  <td style="padding: 5px 0; font-size: 13px; color: #334155;">${contactnumber}</td>
+                </tr>
+              ` : ''}
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <p style="margin: 16px 0 0 0;">Please arrive <strong>10 minutes prior</strong> to your scheduled slot for registration.</p>
+      ${qrImageTag}
     `;
 
-    return this.sendEmail(to, `Appointment Booked: ${doctorName}`, htmlContent);
+    const htmlContent = buildBaseEmailWrapper(
+      'CONFIRMED',
+      '#f0fdf4',
+      '#16a34a',
+      '#bbf7d0',
+      'Appointment Confirmed',
+      bodyHtml,
+      'View My Appointments',
+      `${this.appBaseUrl}/patient/appointments`,
+      this.appBaseUrl,
+    );
+
+    return this.sendEmail(to, `Appointment Confirmed: Dr. ${doctorName}`, htmlContent);
   }
 
   async sendCancellationNotification(
@@ -237,26 +334,28 @@ export class EmailService {
     const formattedDate = formatDate(date);
     const formattedTime = formatTime(startTime);
 
-    const htmlContent = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
-        ${buildHeader('Appointment Cancelled ', '#c62828')}
-        <div style="padding: 20px;">
-          <div style="background-color: #f9f9f9; padding: 20px; border-radius: 6px; margin-bottom: 4px;">
-            <p style="color: #333333; font-size: 16px; margin-top: 0;">Hello <strong>${patientName}</strong>,</p>
-            <p style="color: #555555; line-height: 1.5; font-size: 15px;">
-              Your appointment with <strong>${doctorName}</strong> on <strong>${formattedDate}</strong> at <strong>${formattedTime}</strong> has been cancelled.
-            </p>
-            <p style="color: #555555; line-height: 1.5; font-size: 15px;">
-              If you'd like to book a new appointment, you can do so from the app.
-            </p>
-          </div>
-          ${buildCtaButton('Book a New Appointment', `${this.appBaseUrl}/book`, '#c62828')}
-        </div>
-        ${buildFooter()}
+    const bodyHtml = `
+      <p style="margin: 0 0 16px 0;">Dear ${patientName},</p>
+      <p style="margin: 0 0 16px 0;">Your appointment with <strong>Dr. ${doctorName}</strong> on <strong>${formattedDate}</strong> at <strong>${formattedTime}</strong> has been cancelled.</p>
+      <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 14px 18px; margin: 16px 0;">
+        <p style="margin: 0; font-size: 13px; color: #991b1b;">If a consultation fee was paid, a full refund has been initiated to your original payment method.</p>
       </div>
+      <p style="margin: 16px 0 0 0;">If you wish to reschedule or select another specialist, please visit the portal.</p>
     `;
 
-    return this.sendEmail(to, `Appointment Cancelled: ${doctorName}`, htmlContent);
+    const htmlContent = buildBaseEmailWrapper(
+      'CANCELLED',
+      '#fef2f2',
+      '#dc2626',
+      '#fecaca',
+      'Appointment Cancelled',
+      bodyHtml,
+      'Book a New Appointment',
+      `${this.appBaseUrl}/doctors`,
+      this.appBaseUrl,
+    );
+
+    return this.sendEmail(to, `Appointment Cancelled: Dr. ${doctorName}`, htmlContent);
   }
 
   async sendRescheduleNotification(
@@ -274,47 +373,66 @@ export class EmailService {
     const formattedTime = formatTime(startTime);
     const formattedPreviousDate = previousDate ? formatDate(previousDate) : null;
     const formattedPreviousTime = previousTime ? formatTime(previousTime) : null;
-    const tokenMsg = buildTokenMsg(tokenNumber);
 
-    const htmlContent = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
-        ${buildHeader('Appointment Rescheduled ', '#1976d2')}
-        <div style="padding: 20px;">
-          <div style="background-color: #f9f9f9; padding: 20px; border-radius: 6px; margin-bottom: 4px;">
-            <p style="color: #333333; font-size: 16px; margin-top: 0;">Hello <strong>${patientName}</strong>,</p>
-            <p style="color: #555555; line-height: 1.5; font-size: 15px;">
-              Your appointment has been successfully rescheduled. Here are your updated details:
-            </p>
+    const bodyHtml = `
+      <p style="margin: 0 0 16px 0;">Dear ${patientName},</p>
+      <p style="margin: 0 0 16px 0;">Your appointment has been successfully rescheduled. Please find your updated schedule details below:</p>
 
-            <div style="background-color: #e8f5e9; padding: 15px; border-radius: 4px; border-left: 4px solid #4caf50; margin-bottom: 12px;">
-              <p style="margin: 0 0 5px 0; color: #2e7d32; font-weight: bold; font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase;">New Schedule</p>
-              <p style="margin: 5px 0; color: #333333;"><strong>Doctor:</strong> ${doctorName} (${specialization})</p>
-              <p style="margin: 5px 0; color: #333333;"><strong>Date:</strong> ${formattedDate}</p>
-              <p style="margin: 5px 0; color: #333333;"><strong>Time:</strong> ${formattedTime}</p>
-              ${tokenMsg}
-            </div>
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin: 18px 0;">
+        <tr>
+          <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; background-color: #f1f5f9;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #475569; letter-spacing: 0.6px;">Updated Consultation Slot</td>
+                ${tokenNumber ? `<td align="right"><span style="background-color: #0066cc; color: #ffffff; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 12px;">TOKEN #${tokenNumber}</span></td>` : ''}
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 16px;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding: 5px 0; font-size: 13px; color: #64748b; width: 34%;">Doctor:</td>
+                <td style="padding: 5px 0; font-size: 14px; font-weight: 600; color: #0f172a;">${SVG_ICONS.doctor} Dr. ${doctorName} (${specialization})</td>
+              </tr>
+              <tr>
+                <td style="padding: 5px 0; font-size: 13px; color: #64748b;">New Date:</td>
+                <td style="padding: 5px 0; font-size: 14px; font-weight: 600; color: #0f172a;">${SVG_ICONS.calendar} ${formattedDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 5px 0; font-size: 13px; color: #64748b;">New Time:</td>
+                <td style="padding: 5px 0; font-size: 14px; font-weight: 600; color: #0f172a;">${SVG_ICONS.clock} ${formattedTime}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
 
-            ${formattedPreviousDate ? `
-            <div style="background-color: #ffebee; padding: 15px; border-radius: 4px; border-left: 4px solid #ef5350; margin-bottom: 12px;">
-              <p style="margin: 0 0 5px 0; color: #c62828; font-weight: bold; font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase;">Previous Schedule (Cancelled)</p>
-              <p style="margin: 5px 0; color: #757575;"><strong>Date:</strong> <span style="text-decoration: line-through;">${formattedPreviousDate}</span></p>
-              <p style="margin: 5px 0; color: #757575;"><strong>Time:</strong> <span style="text-decoration: line-through;">${formattedPreviousTime}</span></p>
-            </div>
-            ` : ''}
-
-            <p style="color: #555555; line-height: 1.5; font-size: 15px;">
-              Please arrive <strong>5 minutes</strong> before your rescheduled time. For any questions, contact our support team.
-            </p>
-          </div>
-          ${buildCtaButton('View My Appointments', `${this.appBaseUrl}/appointments`, '#1976d2')}
+      ${formattedPreviousDate ? `
+        <div style="background-color: #f1f5f9; border-left: 3px solid #64748b; padding: 10px 14px; border-radius: 4px; margin-bottom: 16px;">
+          <span style="font-size: 12px; color: #475569;"><strong>Previous Slot:</strong> <del>${formattedPreviousDate} at ${formattedPreviousTime}</del></span>
         </div>
-        ${buildFooter()}
-      </div>
+      ` : ''}
+
+      <p style="margin: 16px 0 0 0;">Please arrive <strong>10 minutes prior</strong> to your rescheduled slot for check-in.</p>
     `;
+
+    const htmlContent = buildBaseEmailWrapper(
+      'RESCHEDULED',
+      '#eff6ff',
+      '#0066cc',
+      '#bae0fd',
+      'Appointment Rescheduled',
+      bodyHtml,
+      'View Updated Appointment',
+      `${this.appBaseUrl}/patient/appointments`,
+      this.appBaseUrl,
+    );
 
     return this.sendEmail(
       to,
-      `Your Appointment with ${doctorName} Has Been Rescheduled`,
+      `Appointment Rescheduled: Dr. ${doctorName}`,
       htmlContent,
     );
   }
@@ -330,33 +448,58 @@ export class EmailService {
   ): Promise<boolean> {
     const formattedDate = formatDate(date);
     const formattedTime = formatTime(startTime);
-    const tokenMsg = buildTokenMsg(tokenNumber);
 
-    const htmlContent = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
-        ${buildHeader('Appointment Reminder ⏰', '#d32f2f')}
-        <div style="padding: 20px;">
-          <div style="background-color: #f9f9f9; padding: 20px; border-radius: 6px; margin-bottom: 4px;">
-            <p style="color: #333333; font-size: 16px; margin-top: 0;">Hello <strong>${patientName}</strong>,</p>
-            <p style="color: #555555; line-height: 1.5; font-size: 15px;">
-              Friendly reminder — your appointment with <strong>${doctorName}</strong> is coming up <strong>${leadTimeLabel}</strong>!
-            </p>
-            <div style="background-color: #ffffff; padding: 15px; border-radius: 4px; border-left: 4px solid #d32f2f; margin: 15px 0;">
-              <p style="margin: 5px 0; color: #333333;"><strong>Date:</strong> ${formattedDate}</p>
-              <p style="margin: 5px 0; color: #333333;"><strong>Time:</strong> ${formattedTime}</p>
-              ${tokenMsg}
-            </div>
-            <p style="color: #555555; line-height: 1.5; font-size: 15px;">
-              Please arrive <strong>5 minutes</strong> before your scheduled slot.
-            </p>
-          </div>
-          ${buildCtaButton('View Appointment Details', `${this.appBaseUrl}/appointments`, '#d32f2f')}
-        </div>
-        ${buildFooter()}
-      </div>
+    const bodyHtml = `
+      <p style="margin: 0 0 16px 0;">Dear ${patientName},</p>
+      <p style="margin: 0 0 16px 0;">This is a scheduled reminder for your clinical consultation with <strong>Dr. ${doctorName}</strong> scheduled <strong>${leadTimeLabel}</strong>.</p>
+
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin: 18px 0;">
+        <tr>
+          <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; background-color: #f1f5f9;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #475569; letter-spacing: 0.6px;">Appointment Particulars</td>
+                ${tokenNumber ? `<td align="right"><span style="background-color: #0066cc; color: #ffffff; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 12px;">TOKEN #${tokenNumber}</span></td>` : ''}
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 16px;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding: 5px 0; font-size: 13px; color: #64748b; width: 34%;">Doctor:</td>
+                <td style="padding: 5px 0; font-size: 14px; font-weight: 600; color: #0f172a;">${SVG_ICONS.doctor} Dr. ${doctorName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 5px 0; font-size: 13px; color: #64748b;">Date:</td>
+                <td style="padding: 5px 0; font-size: 14px; font-weight: 600; color: #0f172a;">${SVG_ICONS.calendar} ${formattedDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 5px 0; font-size: 13px; color: #64748b;">Time:</td>
+                <td style="padding: 5px 0; font-size: 14px; font-weight: 600; color: #0f172a;">${SVG_ICONS.clock} ${formattedTime}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <p style="margin: 16px 0 0 0;">Please arrive 10 minutes prior to your time. Scan your QR code at the clinic reception to enter the queue.</p>
     `;
 
-    return this.sendEmail(to, `Reminder: Appointment ${leadTimeLabel} with ${doctorName}`, htmlContent);
+    const htmlContent = buildBaseEmailWrapper(
+      `REMINDER: ${leadTimeLabel.toUpperCase()}`,
+      '#eff6ff',
+      '#0066cc',
+      '#bae0fd',
+      'Appointment Reminder',
+      bodyHtml,
+      'View Appointment Details',
+      `${this.appBaseUrl}/patient/appointments`,
+      this.appBaseUrl,
+    );
+
+    return this.sendEmail(to, `Reminder: Appointment ${leadTimeLabel} with Dr. ${doctorName}`, htmlContent);
   }
 
   async sendPaymentSuccess(
@@ -373,32 +516,61 @@ export class EmailService {
     const formattedDate = formatDate(date);
     const formattedTime = formatTime(startTime);
 
-    const htmlContent = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
-        ${buildHeader('Payment Received! 💳', '#2e7d32')}
-        <div style="padding: 20px;">
-          <div style="background-color: #f9f9f9; padding: 20px; border-radius: 6px; margin-bottom: 4px;">
-            <p style="color: #333333; font-size: 16px; margin-top: 0;">Hello <strong>${patientName}</strong>,</p>
-            <p style="color: #555555; line-height: 1.5; font-size: 15px;">
-              We have successfully received your payment of <strong>${amountFormatted}</strong> for your consultation with <strong>${doctorName}</strong>.
-            </p>
-            <div style="background-color: #ffffff; padding: 15px; border-radius: 4px; border-left: 4px solid #2e7d32; margin: 15px 0;">
-              <p style="margin: 5px 0; color: #333333;"><strong>Amount Paid:</strong> ${amountFormatted}</p>
-              <p style="margin: 5px 0; color: #333333;"><strong>Payment ID:</strong> ${paymentId}</p>
-              <p style="margin: 5px 0; color: #333333;"><strong>Order ID:</strong> ${orderId}</p>
-              <p style="margin: 5px 0; color: #333333;"><strong>Appointment Date:</strong> ${formattedDate} at ${formattedTime}</p>
-            </div>
-            <p style="color: #555555; line-height: 1.5; font-size: 13px;">
-              A formal receipt is available in your Patient Portal under Payment History.
-            </p>
-          </div>
-          ${buildCtaButton('View Payment History', `${this.appBaseUrl}/patient/dashboard`, '#2e7d32')}
-        </div>
-        ${buildFooter()}
-      </div>
+    const bodyHtml = `
+      <p style="margin: 0 0 16px 0;">Dear ${patientName},</p>
+      <p style="margin: 0 0 16px 0;">We have successfully verified your payment of <strong>${amountFormatted}</strong> for your consultation with <strong>Dr. ${doctorName}</strong>.</p>
+      
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin: 18px 0;">
+        <tr>
+          <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; background-color: #f1f5f9;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #475569; letter-spacing: 0.6px;">Payment Breakdown</td>
+                <td align="right"><span style="background-color: #16a34a; color: #ffffff; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 12px;">VERIFIED</span></td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 16px;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding: 5px 0; font-size: 13px; color: #64748b; width: 34%;">Amount Paid:</td>
+                <td style="padding: 5px 0; font-size: 16px; font-weight: 700; color: #16a34a;">${amountFormatted}</td>
+              </tr>
+              <tr>
+                <td style="padding: 5px 0; font-size: 13px; color: #64748b;">Payment ID:</td>
+                <td style="padding: 5px 0; font-size: 13px; font-family: monospace; color: #334155;">${paymentId}</td>
+              </tr>
+              <tr>
+                <td style="padding: 5px 0; font-size: 13px; color: #64748b;">Order ID:</td>
+                <td style="padding: 5px 0; font-size: 13px; font-family: monospace; color: #334155;">${orderId}</td>
+              </tr>
+              <tr>
+                <td style="padding: 5px 0; font-size: 13px; color: #64748b;">Scheduled Slot:</td>
+                <td style="padding: 5px 0; font-size: 13px; color: #334155;">${formattedDate} at ${formattedTime}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <p style="margin: 16px 0 0 0;">An official invoice is archived in your Patient Portal for reimbursement claims.</p>
     `;
 
-    return this.sendEmail(to, `Payment Successful: Consultation with ${doctorName}`, htmlContent);
+    const htmlContent = buildBaseEmailWrapper(
+      'PAYMENT VERIFIED',
+      '#f0fdf4',
+      '#16a34a',
+      '#bbf7d0',
+      'Payment Receipt Verified',
+      bodyHtml,
+      'View Payment History',
+      `${this.appBaseUrl}/patient/payments`,
+      this.appBaseUrl,
+    );
+
+    return this.sendEmail(to, `Payment Successful: Consultation with Dr. ${doctorName}`, htmlContent);
   }
 
   async sendRefundInitiated(
@@ -411,29 +583,61 @@ export class EmailService {
   ): Promise<boolean> {
     const amountFormatted = `₹${(amountInPaise / 100).toFixed(2)}`;
 
-    const htmlContent = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
-        ${buildHeader('Refund Initiated ↩️', '#0066cc')}
-        <div style="padding: 20px;">
-          <div style="background-color: #f9f9f9; padding: 20px; border-radius: 6px; margin-bottom: 4px;">
-            <p style="color: #333333; font-size: 16px; margin-top: 0;">Hello <strong>${patientName}</strong>,</p>
-            <p style="color: #555555; line-height: 1.5; font-size: 15px;">
-              A refund of <strong>${amountFormatted}</strong> for your consultation with <strong>${doctorName}</strong> has been initiated.
-            </p>
-            <div style="background-color: #ffffff; padding: 15px; border-radius: 4px; border-left: 4px solid #0066cc; margin: 15px 0;">
-              <p style="margin: 5px 0; color: #333333;"><strong>Refund Amount:</strong> ${amountFormatted}</p>
-              <p style="margin: 5px 0; color: #333333;"><strong>Refund Reference:</strong> ${refundId}</p>
-              ${reason ? `<p style="margin: 5px 0; color: #333333;"><strong>Reason:</strong> ${reason}</p>` : ''}
-              <p style="margin: 5px 0; color: #757575; font-size: 13px;">Refunds typically appear in your original payment method in 5-7 business days.</p>
-            </div>
-          </div>
-          ${buildCtaButton('View Refund Status', `${this.appBaseUrl}/patient/dashboard`, '#0066cc')}
-        </div>
-        ${buildFooter()}
-      </div>
+    const bodyHtml = `
+      <p style="margin: 0 0 16px 0;">Dear ${patientName},</p>
+      <p style="margin: 0 0 16px 0;">A refund of <strong>${amountFormatted}</strong> for your consultation with <strong>Dr. ${doctorName}</strong> has been initiated.</p>
+
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin: 18px 0;">
+        <tr>
+          <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; background-color: #f1f5f9;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #475569; letter-spacing: 0.6px;">Refund Statement</td>
+                <td align="right"><span style="background-color: #0066cc; color: #ffffff; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 12px;">INITIATED</span></td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 16px;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding: 5px 0; font-size: 13px; color: #64748b; width: 34%;">Refund Amount:</td>
+                <td style="padding: 5px 0; font-size: 16px; font-weight: 700; color: #0066cc;">${amountFormatted}</td>
+              </tr>
+              <tr>
+                <td style="padding: 5px 0; font-size: 13px; color: #64748b;">Refund ID:</td>
+                <td style="padding: 5px 0; font-size: 13px; font-family: monospace; color: #334155;">${refundId}</td>
+              </tr>
+              ${reason ? `
+                <tr>
+                  <td style="padding: 5px 0; font-size: 13px; color: #64748b;">Reason:</td>
+                  <td style="padding: 5px 0; font-size: 13px; color: #334155;">${reason}</td>
+                </tr>
+              ` : ''}
+              <tr>
+                <td style="padding: 5px 0; font-size: 13px; color: #64748b;">Processing Window:</td>
+                <td style="padding: 5px 0; font-size: 13px; color: #64748b;">5 to 7 business days to original payment method</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
     `;
 
-    return this.sendEmail(to, `Refund Initiated for Consultation with ${doctorName}`, htmlContent);
+    const htmlContent = buildBaseEmailWrapper(
+      'REFUND INITIATED',
+      '#eff6ff',
+      '#0066cc',
+      '#bae0fd',
+      'Refund Process Initiated',
+      bodyHtml,
+      'View Refund Status',
+      `${this.appBaseUrl}/patient/payments`,
+      this.appBaseUrl,
+    );
+
+    return this.sendEmail(to, `Refund Initiated: Consultation with Dr. ${doctorName}`, htmlContent);
   }
 
   async sendRefundCompleted(
@@ -445,27 +649,29 @@ export class EmailService {
   ): Promise<boolean> {
     const amountFormatted = `₹${(amountInPaise / 100).toFixed(2)}`;
 
-    const htmlContent = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
-        ${buildHeader('Refund Completed ✅', '#2e7d32')}
-        <div style="padding: 20px;">
-          <div style="background-color: #f9f9f9; padding: 20px; border-radius: 6px; margin-bottom: 4px;">
-            <p style="color: #333333; font-size: 16px; margin-top: 0;">Hello <strong>${patientName}</strong>,</p>
-            <p style="color: #555555; line-height: 1.5; font-size: 15px;">
-              Your refund of <strong>${amountFormatted}</strong> for your appointment with <strong>${doctorName}</strong> has been successfully processed by your bank.
-            </p>
-            <div style="background-color: #ffffff; padding: 15px; border-radius: 4px; border-left: 4px solid #2e7d32; margin: 15px 0;">
-              <p style="margin: 5px 0; color: #333333;"><strong>Amount Credited:</strong> ${amountFormatted}</p>
-              <p style="margin: 5px 0; color: #333333;"><strong>Refund ID:</strong> ${refundId}</p>
-            </div>
-          </div>
-          ${buildCtaButton('View Account', `${this.appBaseUrl}/patient/dashboard`, '#2e7d32')}
-        </div>
-        ${buildFooter()}
+    const bodyHtml = `
+      <p style="margin: 0 0 16px 0;">Dear ${patientName},</p>
+      <p style="margin: 0 0 16px 0;">Your refund of <strong>${amountFormatted}</strong> for appointment with <strong>Dr. ${doctorName}</strong> has been successfully processed by your bank.</p>
+
+      <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; margin: 18px 0;">
+        <p style="margin: 4px 0; font-size: 14px;"><strong>Amount Credited:</strong> <span style="font-weight: 700; color: #16a34a;">${amountFormatted}</span></p>
+        <p style="margin: 4px 0; font-size: 13px; color: #334155;"><strong>Refund ID:</strong> <span style="font-family: monospace;">${refundId}</span></p>
       </div>
     `;
 
-    return this.sendEmail(to, `Refund Completed: Consultation with ${doctorName}`, htmlContent);
+    const htmlContent = buildBaseEmailWrapper(
+      'REFUND CREDITED',
+      '#f0fdf4',
+      '#16a34a',
+      '#bbf7d0',
+      'Refund Completed',
+      bodyHtml,
+      'View Account',
+      `${this.appBaseUrl}/patient/payments`,
+      this.appBaseUrl,
+    );
+
+    return this.sendEmail(to, `Refund Completed: Consultation with Dr. ${doctorName}`, htmlContent);
   }
 
   async sendRefundFailed(
@@ -477,51 +683,52 @@ export class EmailService {
   ): Promise<boolean> {
     const amountFormatted = `₹${(amountInPaise / 100).toFixed(2)}`;
 
-    const htmlContent = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
-        ${buildHeader('Refund Notice ⚠️', '#c62828')}
-        <div style="padding: 20px;">
-          <div style="background-color: #f9f9f9; padding: 20px; border-radius: 6px; margin-bottom: 4px;">
-            <p style="color: #333333; font-size: 16px; margin-top: 0;">Hello <strong>${patientName}</strong>,</p>
-            <p style="color: #555555; line-height: 1.5; font-size: 15px;">
-              An issue occurred while processing your refund of <strong>${amountFormatted}</strong> for your appointment with <strong>${doctorName}</strong>.
-            </p>
-            <div style="background-color: #ffebee; padding: 15px; border-radius: 4px; border-left: 4px solid #c62828; margin: 15px 0;">
-              <p style="margin: 5px 0; color: #c62828;"><strong>Status:</strong> Processing Issue</p>
-              ${reason ? `<p style="margin: 5px 0; color: #333333;"><strong>Details:</strong> ${reason}</p>` : ''}
-              <p style="margin: 5px 0; color: #555555; font-size: 13px;">Our finance team has been notified and is manually resolving your transaction.</p>
-            </div>
-          </div>
-          ${buildCtaButton('Contact Support', `${this.appBaseUrl}/support`, '#c62828')}
-        </div>
-        ${buildFooter()}
+    const bodyHtml = `
+      <p style="margin: 0 0 16px 0;">Dear ${patientName},</p>
+      <p style="margin: 0 0 16px 0;">An unexpected issue occurred while processing your refund of <strong>${amountFormatted}</strong> for consultation with <strong>Dr. ${doctorName}</strong>.</p>
+      <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 14px 18px; margin: 16px 0;">
+        <p style="margin: 0; font-size: 13px; color: #991b1b;">Our finance team has been notified and is manually resolving your transaction with the banking provider.</p>
       </div>
     `;
 
-    return this.sendEmail(to, `Update on your Refund for Consultation with ${doctorName}`, htmlContent);
+    const htmlContent = buildBaseEmailWrapper(
+      'REFUND NOTICE',
+      '#fef2f2',
+      '#dc2626',
+      '#fecaca',
+      'Refund Notice: Action Required',
+      bodyHtml,
+      'Contact Support',
+      `${this.appBaseUrl}/support`,
+      this.appBaseUrl,
+    );
+
+    return this.sendEmail(to, `Refund Notice for Consultation with Dr. ${doctorName}`, htmlContent);
   }
 
   async sendWelcomeEmail(to: string, name: string, role: string): Promise<void> {
-    const htmlContent = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
-        ${buildHeader('Welcome to CareUp! 🎉', '#0066cc')}
-        <div style="padding: 20px;">
-          <div style="background-color: #f9f9f9; padding: 20px; border-radius: 6px; margin-bottom: 4px;">
-            <p style="color: #333333; font-size: 16px; margin-top: 0;">Hello <strong>${name}</strong>,</p>
-            <p style="color: #555555; line-height: 1.5; font-size: 15px;">
-              Thank you for signing up on CareUp! Your account has been successfully created
-              with the role of <strong>${role.toLowerCase()}</strong>.
-            </p>
-            <p style="color: #555555; line-height: 1.5; font-size: 15px;">
-              With CareUp, you can manage appointments, connect with healthcare providers,
-              and track health details seamlessly.
-            </p>
-          </div>
-          ${buildCtaButton('Get Started', `${this.appBaseUrl}`, '#0066cc')}
-        </div>
-        ${buildFooter()}
-      </div>
+    const bodyHtml = `
+      <p style="margin: 0 0 16px 0;">Dear ${name},</p>
+      <p style="margin: 0 0 16px 0;">
+        Welcome to CareUp. Your account has been registered with the role of <strong>${role.toLowerCase()}</strong>.
+      </p>
+      <p style="margin: 0 0 16px 0;">
+        With CareUp, you can manage appointments, view clinical updates, and streamline medical appointments with ease.
+      </p>
     `;
-    await this.sendEmail(to, 'Welcome to CareUp!', htmlContent);
+
+    const htmlContent = buildBaseEmailWrapper(
+      'ACCOUNT VERIFIED',
+      '#eff6ff',
+      '#0066cc',
+      '#bae0fd',
+      'Welcome to CareUp',
+      bodyHtml,
+      'Get Started',
+      `${this.appBaseUrl}`,
+      this.appBaseUrl,
+    );
+
+    await this.sendEmail(to, 'Welcome to CareUp Healthcare', htmlContent);
   }
 }
