@@ -437,6 +437,16 @@ export function DoctorAppointmentsTable({
           </Table>
         </Card>
       )}
+
+      {/* Reschedule Modal */}
+      <DoctorRescheduleModal
+        isOpen={!!reschedulingAppt}
+        onClose={() => setReschedulingAppt(null)}
+        appointment={reschedulingAppt}
+        onRescheduled={() => {
+          router.refresh();
+        }}
+      />
     </div>
   );
 }
