@@ -15,6 +15,7 @@ import { Payment } from './payment/entities/payment.entity';
 import { Refund } from './payment/entities/refund.entity';
 import { WebhookEvent } from './payment/entities/webhook-event.entity';
 import { ReminderJob } from './reminder/entities/reminder-job.entity';
+import { Prescription } from './prescription/entities/prescription.entity';
 
 config();
 
@@ -36,8 +37,9 @@ const shared: DataSourceOptions = {
     Refund,
     WebhookEvent,
     ReminderJob,
+    Prescription,
   ],
-  migrations: ['dist/migrations/*.js'],
+  migrations: [__dirname + '/migrations/*.{js,ts}'],
   ssl:
     process.env.NODE_ENV === 'production'
       ? { rejectUnauthorized: false }

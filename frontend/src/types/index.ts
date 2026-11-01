@@ -238,3 +238,5 @@ export interface ApiResponse<T> {
     totalPages: number;
   };
 }
+
+export * from './prescription';

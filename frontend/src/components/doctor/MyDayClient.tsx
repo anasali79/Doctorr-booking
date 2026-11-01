@@ -43,6 +43,7 @@ import {
   CalendarSync,
 } from 'lucide-react';
 import { DoctorRescheduleModal } from './DoctorRescheduleModal';
+import { DoctorPrescriptionModal } from '@/components/prescription/DoctorPrescriptionModal';
 import { PatientProfileModal } from './PatientProfileModal';
 
 interface DoctorDashboardStats {
@@ -119,6 +120,8 @@ export function MyDayClient({
   const [patientModalOpen, setPatientModalOpen] = useState(false);
   const [rescheduleModalOpen, setRescheduleModalOpen] = useState(false);
   const [reschedulingAppt, setReschedulingAppt] = useState<Appointment | null>(null);
+  const [prescriptionModalOpen, setPrescriptionModalOpen] = useState(false);
+  const [prescriptionAppt, setPrescriptionAppt] = useState<Appointment | null>(null);
   const [patientHistoryLoading, setPatientHistoryLoading] = useState(false);
   const [patientHistory, setPatientHistory] = useState<
     Record<string, { appointments: any[]; notes: any[]; details: any }>
@@ -728,6 +731,21 @@ export function MyDayClient({
                                 >
                                   Check In
                                 </Button>
+                              ) : appt.status === 'COMPLETED' ? (
+                                <Button
+                                  type="button"
+                                  size="xs"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPrescriptionAppt(appt);
+                                    setPrescriptionModalOpen(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 transition-all shadow-2xs h-auto cursor-pointer"
+                                  title="Issue or View Medical Prescription (Rx)"
+                                >
+                                  <FileText className="h-3 w-3 text-emerald-600" />
+                                  <span>Rx</span>
+                                </Button>
                               ) : (
                                 <span className="text-slate-300">—</span>
                               )}
@@ -1121,6 +1139,21 @@ export function MyDayClient({
                   </Button>
                 )}
 
+                {/* Write / View Rx Prescription Button */}
+                {(currentAppt.status === 'IN_CONSULTATION' || currentAppt.status === 'COMPLETED') && (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setPrescriptionAppt(currentAppt);
+                      setPrescriptionModalOpen(true);
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-colors h-auto cursor-pointer"
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    <span>Write / Edit Prescription (Rx)</span>
+                  </Button>
+                )}
+
                 {/* Reschedule Appointment Button */}
                 <Button
                   type="button"
@@ -1246,6 +1279,20 @@ export function MyDayClient({
         appointment={reschedulingAppt || currentAppt}
         doctorId={profile.id}
         onRescheduled={() => {
+          fetchAppointmentsForDate(selectedDate);
+          router.refresh();
+        }}
+      />
+
+      {/* ── Doctor Medical Prescription Modal ── */}
+      <DoctorPrescriptionModal
+        isOpen={prescriptionModalOpen}
+        onClose={() => {
+          setPrescriptionModalOpen(false);
+          setPrescriptionAppt(null);
+        }}
+        appointment={prescriptionAppt || currentAppt}
+        onPrescriptionSaved={() => {
           fetchAppointmentsForDate(selectedDate);
           router.refresh();
         }}
