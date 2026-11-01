@@ -25,7 +25,7 @@ export class WhatsAppProvider implements INotificationProvider {
   // Vonage WhatsApp settings
   private fromNumber = '14157386170'; // Default Vonage Messages WhatsApp Sandbox number
   private useSandbox = true;
-  private testPhone: string | null = null;
+  private allowedTestPhones: Set<string> = new Set();
   private isConfigured = false;
 
   constructor(private readonly configService: ConfigService) {
@@ -46,6 +46,7 @@ export class WhatsAppProvider implements INotificationProvider {
     const rawSandbox =
       this.configService.get<string>('VONAGE_USE_SANDBOX');
     const rawTestPhone =
+      this.configService.get<string>('VONAGE_ALLOWED_TEST_NUMBERS') ||
       this.configService.get<string>('VONAGE_TEST_PHONE');
 
     if (rawKey && !rawKey.includes('placeholder')) this.apiKey = rawKey.trim();
@@ -60,9 +61,16 @@ export class WhatsAppProvider implements INotificationProvider {
     }
 
     if (rawTestPhone && rawTestPhone.trim()) {
-      this.testPhone = toVonageRecipient(rawTestPhone.trim());
-      if (this.testPhone) {
-        this.logger.log(`Vonage WhatsApp Test Mode Enabled: outbound messages will route to test phone: ${this.testPhone}`);
+      const numbers = rawTestPhone
+        .split(/[,;\s]+/)
+        .map((n) => toVonageRecipient(n.trim()))
+        .filter((n): n is string => !!n);
+      numbers.forEach((n) => this.allowedTestPhones.add(n));
+
+      if (this.allowedTestPhones.size > 0) {
+        this.logger.log(
+          `Vonage WhatsApp Whitelist Filter Enabled: outbound messages restricted to verified numbers: [${Array.from(this.allowedTestPhones).join(', ')}]`,
+        );
       }
     }
 
@@ -107,9 +115,8 @@ export class WhatsAppProvider implements INotificationProvider {
       };
     }
 
-    // Determine target recipient (honoring test phone override during development)
-    const rawTarget = this.testPhone ? this.testPhone : destination;
-    const targetDigits = toVonageRecipient(rawTarget);
+    // Determine target recipient (honoring whitelist filter during test/sandbox mode)
+    const targetDigits = toVonageRecipient(destination);
 
     if (!targetDigits) {
       return {
@@ -117,7 +124,22 @@ export class WhatsAppProvider implements INotificationProvider {
         destination: destination || '',
         status: DeliveryStatus.FAILED,
         errorCode: 'INVALID_PHONE_NUMBER',
-        errorMessage: `Destination phone number '${rawTarget}' cannot be normalized to valid digits for Vonage WhatsApp.`,
+        errorMessage: `Destination phone number '${destination}' cannot be normalized to valid digits for Vonage WhatsApp.`,
+        isTransient: false,
+      };
+    }
+
+    // In Test / Sandbox Mode: If allowedTestPhones whitelist is active, verify that recipient is whitelisted
+    if (this.allowedTestPhones.size > 0 && !this.allowedTestPhones.has(targetDigits)) {
+      this.logger.log(
+        `[WhatsAppProvider] Skipping WhatsApp message for unverified demo recipient: ${targetDigits} (not in verified test whitelist: [${Array.from(this.allowedTestPhones).join(', ')}])`,
+      );
+      return {
+        channel: this.channel,
+        destination: targetDigits,
+        status: DeliveryStatus.CANCELLED,
+        errorCode: 'UNVERIFIED_DEMO_RECIPIENT_SKIPPED',
+        errorMessage: `Outbound WhatsApp message skipped in test mode: recipient '${targetDigits}' is not in verified VONAGE_TEST_PHONE whitelist.`,
         isTransient: false,
       };
     }
@@ -128,7 +150,7 @@ export class WhatsAppProvider implements INotificationProvider {
         : 'https://api.nexmo.com/v1/messages';
 
       this.logger.log(
-        `Dispatching Vonage WhatsApp message to ${targetDigits} from ${this.fromNumber} (endpoint: ${baseUrl}, testMode: ${!!this.testPhone})`,
+        `Dispatching Vonage WhatsApp message to ${targetDigits} from ${this.fromNumber} (endpoint: ${baseUrl}, whitelistFilter: ${this.allowedTestPhones.size > 0})`,
       );
 
       const payload = {

@@ -14,7 +14,7 @@ export class SmsProvider implements INotificationProvider {
   private apiKey: string | null = null;
   private apiSecret: string | null = null;
   private fromSender = 'CareUp';
-  private testPhone: string | null = null;
+  private allowedTestPhones: Set<string> = new Set();
   private isConfigured = false;
 
   constructor(private readonly configService: ConfigService) {
@@ -28,6 +28,7 @@ export class SmsProvider implements INotificationProvider {
       this.configService.get<string>('VONAGE_SMS_FROM') ||
       this.configService.get<string>('NEXMO_FROM_NUMBER');
     const rawTestPhone =
+      this.configService.get<string>('VONAGE_ALLOWED_TEST_NUMBERS') ||
       this.configService.get<string>('VONAGE_TEST_PHONE');
 
     if (rawFrom && rawFrom.trim()) {
@@ -35,9 +36,16 @@ export class SmsProvider implements INotificationProvider {
     }
 
     if (rawTestPhone && rawTestPhone.trim()) {
-      this.testPhone = toVonageRecipient(rawTestPhone.trim());
-      if (this.testPhone) {
-        this.logger.log(`Vonage SMS Test Mode Enabled: outbound SMS will route to verified test phone: ${this.testPhone}`);
+      const numbers = rawTestPhone
+        .split(/[,;\s]+/)
+        .map((n) => toVonageRecipient(n.trim()))
+        .filter((n): n is string => !!n);
+      numbers.forEach((n) => this.allowedTestPhones.add(n));
+
+      if (this.allowedTestPhones.size > 0) {
+        this.logger.log(
+          `Vonage SMS Whitelist Filter Enabled: outbound SMS restricted to verified numbers: [${Array.from(this.allowedTestPhones).join(', ')}]`,
+        );
       }
     }
 
@@ -78,9 +86,8 @@ export class SmsProvider implements INotificationProvider {
       };
     }
 
-    // Determine target recipient (honoring test phone override during development)
-    const rawTarget = this.testPhone ? this.testPhone : destination;
-    const targetDigits = toVonageRecipient(rawTarget);
+    // Determine target recipient (honoring whitelist filter during test/sandbox mode)
+    const targetDigits = toVonageRecipient(destination);
 
     if (!targetDigits) {
       return {
@@ -88,14 +95,29 @@ export class SmsProvider implements INotificationProvider {
         destination: destination || '',
         status: DeliveryStatus.FAILED,
         errorCode: 'INVALID_PHONE_NUMBER',
-        errorMessage: `Destination phone number '${rawTarget}' cannot be normalized to valid digits for Vonage SMS.`,
+        errorMessage: `Destination phone number '${destination}' cannot be normalized to valid digits for Vonage SMS.`,
+        isTransient: false,
+      };
+    }
+
+    // In Test / Sandbox Mode: If allowedTestPhones whitelist is active, verify that recipient is whitelisted
+    if (this.allowedTestPhones.size > 0 && !this.allowedTestPhones.has(targetDigits)) {
+      this.logger.log(
+        `[SmsProvider] Skipping SMS for unverified demo recipient: ${targetDigits} (not in verified test whitelist: [${Array.from(this.allowedTestPhones).join(', ')}])`,
+      );
+      return {
+        channel: this.channel,
+        destination: targetDigits,
+        status: DeliveryStatus.CANCELLED,
+        errorCode: 'UNVERIFIED_DEMO_RECIPIENT_SKIPPED',
+        errorMessage: `Outbound SMS skipped in test mode: recipient '${targetDigits}' is not in verified VONAGE_TEST_PHONE whitelist.`,
         isTransient: false,
       };
     }
 
     try {
       this.logger.log(
-        `Dispatching Vonage SMS to ${targetDigits} from ${this.fromSender} (original recipient: ${destination}, testMode: ${!!this.testPhone})`,
+        `Dispatching Vonage SMS to ${targetDigits} from ${this.fromSender} (whitelistFilter: ${this.allowedTestPhones.size > 0})`,
       );
 
       const payload = {

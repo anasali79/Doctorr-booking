@@ -174,7 +174,7 @@ describe('PaymentConfirmation & Expiry Handling (P1 Fixes)', () => {
       expect(result.message).toContain('confirmed successfully');
       expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
       expect(testAppt.status).toBe(AppointmentStatus.CONFIRMED);
-      expect(testAppt.tokenNumber).toBe(1);
+      expect((testAppt as any).tokenNumber).toBe(1);
     });
 
     it('2. Expired reservation with slot conflict prevents confirmation and triggers 100% refund', async () => {
@@ -390,7 +390,7 @@ describe('PaymentConfirmation & Expiry Handling (P1 Fixes)', () => {
 
       expect(result.success).toBe(true);
       expect(testAppt.status).toBe(AppointmentStatus.CONFIRMED);
-      expect(testAppt.tokenNumber).toBe(1);
+      expect((testAppt as any).tokenNumber).toBe(1);
     });
   });
 

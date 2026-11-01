@@ -40,7 +40,9 @@ import {
   Phone,
   ShieldAlert,
   Droplets,
+  CalendarSync,
 } from 'lucide-react';
+import { DoctorRescheduleModal } from './DoctorRescheduleModal';
 import { PatientProfileModal } from './PatientProfileModal';
 
 interface DoctorDashboardStats {
@@ -63,154 +65,6 @@ interface MyDayClientProps {
 type QueueFilter = 'all' | 'waiting' | 'in_consultation' | 'completed' | 'no_show';
 type DetailTab = 'history' | 'previous' | 'notes';
 
-// Sample fallback appointments if backend has 0 appointments for the day
-const SAMPLE_APPOINTMENTS: Appointment[] = [
-  {
-    id: 'demo-1',
-    doctorId: 'doc-1',
-    patientId: 'p-1',
-    date: '2026-10-28',
-    startTime: '09:30',
-    endTime: '09:45',
-    status: 'CHECKED_IN',
-    tokenNumber: 1,
-    patient: {
-      id: 'p-1',
-      fullName: 'Rahul Sharma',
-      age: 28,
-      gender: 'MALE',
-      phone: '+91 98765 43210',
-      basicHealthInfo: 'Fever and cough',
-    },
-  },
-  {
-    id: 'demo-2',
-    doctorId: 'doc-1',
-    patientId: 'p-2',
-    date: '2026-10-28',
-    startTime: '09:45',
-    endTime: '10:00',
-    status: 'IN_CONSULTATION',
-    tokenNumber: 2,
-    patient: {
-      id: 'p-2',
-      fullName: 'Priya Patel',
-      age: 32,
-      gender: 'FEMALE',
-      phone: '+91 87654 32109',
-      basicHealthInfo: 'Follow-up General Consultation',
-    },
-  },
-  {
-    id: 'demo-3',
-    doctorId: 'doc-1',
-    patientId: 'p-3',
-    date: '2026-10-28',
-    startTime: '10:00',
-    endTime: '10:15',
-    status: 'CHECKED_IN',
-    tokenNumber: 3,
-    patient: {
-      id: 'p-3',
-      fullName: 'Mohammed Khan',
-      age: 45,
-      gender: 'MALE',
-      phone: '+91 76543 21098',
-      basicHealthInfo: 'High fever and fatigue',
-    },
-  },
-  {
-    id: 'demo-4',
-    doctorId: 'doc-1',
-    patientId: 'p-4',
-    date: '2026-10-28',
-    startTime: '10:15',
-    endTime: '10:30',
-    status: 'CONFIRMED',
-    tokenNumber: 4,
-    patient: {
-      id: 'p-4',
-      fullName: 'Sneha Singh',
-      age: 24,
-      gender: 'FEMALE',
-      phone: '+91 65432 10987',
-      basicHealthInfo: 'Routine health checkup',
-    },
-  },
-  {
-    id: 'demo-5',
-    doctorId: 'doc-1',
-    patientId: 'p-5',
-    date: '2026-10-28',
-    startTime: '10:30',
-    endTime: '10:45',
-    status: 'CONFIRMED',
-    tokenNumber: 5,
-    patient: {
-      id: 'p-5',
-      fullName: 'Amit Kumar',
-      age: 39,
-      gender: 'MALE',
-      phone: '+91 54321 99876',
-      basicHealthInfo: 'General health consultation',
-    },
-  },
-  {
-    id: 'demo-6',
-    doctorId: 'doc-1',
-    patientId: 'p-6',
-    date: '2026-10-28',
-    startTime: '10:45',
-    endTime: '11:00',
-    status: 'CONFIRMED',
-    tokenNumber: 6,
-    patient: {
-      id: 'p-6',
-      fullName: 'Neha Tripathi',
-      age: 29,
-      gender: 'FEMALE',
-      phone: '+91 43210 98765',
-      basicHealthInfo: 'Seasonal allergy and skin rash',
-    },
-  },
-  {
-    id: 'demo-7',
-    doctorId: 'doc-1',
-    patientId: 'p-7',
-    date: '2026-10-28',
-    startTime: '11:00',
-    endTime: '11:15',
-    status: 'CONFIRMED',
-    tokenNumber: 7,
-    patient: {
-      id: 'p-7',
-      fullName: 'Pooja Kanojiya',
-      age: 34,
-      gender: 'FEMALE',
-      phone: '+91 32109 87654',
-      basicHealthInfo: 'Migraine and headache review',
-    },
-  },
-  {
-    id: 'demo-8',
-    doctorId: 'doc-1',
-    patientId: 'p-8',
-    date: '2026-10-28',
-    startTime: '11:15',
-    endTime: '11:30',
-    status: 'CONFIRMED',
-    tokenNumber: 8,
-    patient: {
-      id: 'p-8',
-      fullName: 'Vikash Singh',
-      age: 41,
-      gender: 'MALE',
-      phone: '+91 21098 76543',
-      basicHealthInfo: 'Follow-up blood pressure check',
-    },
-  },
-];
-
 export function MyDayClient({
   profile,
   appointments: initialAppointments,
@@ -225,10 +79,11 @@ export function MyDayClient({
   const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   // Use provided appointments or populate realistic reference data if empty
+  // Real appointments only (default to empty array if no appointments exist)
   const [appointments, setAppointments] = useState<Appointment[]>(() => {
-    return initialAppointments && initialAppointments.length > 0
+    return initialAppointments && Array.isArray(initialAppointments)
       ? initialAppointments
-      : SAMPLE_APPOINTMENTS;
+      : [];
   });
 
   const [loading, setLoading] = useState(false);
@@ -256,14 +111,14 @@ export function MyDayClient({
   });
 
   // Clinical Notes state
-  const [clinicalNotes, setClinicalNotes] = useState<Record<string, string>>({
-    'demo-1': 'Patient presented with 3-day history of dry cough and mild fever. Temp: 100.2 F.',
-  });
+  const [clinicalNotes, setClinicalNotes] = useState<Record<string, string>>({});
   const [noteInput, setNoteInput] = useState('');
   const [savingNote, setSavingNote] = useState(false);
 
   // Patient Profile Modal & Historical Record
   const [patientModalOpen, setPatientModalOpen] = useState(false);
+  const [rescheduleModalOpen, setRescheduleModalOpen] = useState(false);
+  const [reschedulingAppt, setReschedulingAppt] = useState<Appointment | null>(null);
   const [patientHistoryLoading, setPatientHistoryLoading] = useState(false);
   const [patientHistory, setPatientHistory] = useState<
     Record<string, { appointments: any[]; notes: any[]; details: any }>
@@ -276,10 +131,8 @@ export function MyDayClient({
       try {
         const res = await clientAxios.get(`/api/doctor/appointments?date=${dateStr}`);
         const data = res.data?.data || res.data || [];
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setAppointments(data);
-        } else if (dateStr === todayIST) {
-          setAppointments(SAMPLE_APPOINTMENTS);
         } else {
           setAppointments([]);
         }
@@ -713,12 +566,24 @@ export function MyDayClient({
                 </TableHeader>
                 <TableBody className="divide-y divide-slate-100">
                   {filteredAppointments.length === 0 ? (
-                    <TableRow><TableCell colSpan={6} className="py-10 text-center text-slate-400">No appointments found matching this criteria.</TableCell></TableRow>
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-12 text-center text-slate-400">
+                        <div className="flex flex-col items-center justify-center space-y-2">
+                          <Clock className="h-8 w-8 text-slate-300" />
+                          <p className="text-sm font-semibold text-slate-700">No appointments scheduled for today</p>
+                          <p className="text-xs text-slate-400">
+                            {searchQuery || activeFilter !== 'all'
+                              ? 'No appointments found matching this filter.'
+                              : 'When patients book consultations or walk-in, they will appear here in real time.'}
+                          </p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
                   ) : (
                     filteredAppointments.map((appt, idx) => {
                       const tokenStr = String(appt.tokenNumber || idx + 1).padStart(2, '0');
                       const pName = appt.patient?.fullName || 'Patient';
-                      const pPhone = appt.patient?.phone || '+91 98765 00000';
+                      const pPhone = appt.patient?.phone || '—';
                       const initials = pName
                         .split(' ')
                         .map((n: string) => n[0])
@@ -895,7 +760,13 @@ export function MyDayClient({
 
             {/* Vertical Timeline */}
             <div className="space-y-4">
-              {sortedAppointments.slice(0, 6).map((item, i) => {
+              {sortedAppointments.length === 0 ? (
+                <div className="py-8 text-center text-slate-400 text-xs space-y-1">
+                  <p className="font-medium text-slate-600">No appointments scheduled for today</p>
+                  <p className="text-[11px] text-slate-400">Queue will update automatically as patients check in.</p>
+                </div>
+              ) : (
+                sortedAppointments.slice(0, 6).map((item, i) => {
                 const isSelected = currentAppt?.id === item.id;
                 const pName = item.patient?.fullName || 'Patient';
                 const reason = item.patient?.basicHealthInfo || 'General Consultation';
@@ -953,12 +824,12 @@ export function MyDayClient({
                     </div>
                   </div>
                 );
-              })}
+              }))}
             </div>
           </div>
 
           {/* Current Patient Details Card */}
-          {currentAppt && (
+          {currentAppt ? (
             <div className="rounded-2xl border border-slate-200/90 bg-white shadow-xs p-5 sm:p-6 space-y-5">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <h2 className="text-base font-bold text-slate-900">Current Patient Details</h2>
@@ -975,7 +846,7 @@ export function MyDayClient({
               {/* Patient Basic Header */}
               <div className="flex items-center gap-3.5">
                 <div className="h-12 w-12 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-sm shrink-0">
-                  {(currentAppt.patient?.fullName || 'RS')
+                  {(currentAppt.patient?.fullName || 'PT')
                     .split(' ')
                     .map((n: string) => n[0])
                     .filter(Boolean)
@@ -986,7 +857,7 @@ export function MyDayClient({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <h3 className="text-base font-bold text-slate-900 truncate">
-                      {currentAppt.patient?.fullName || 'Rahul Sharma'}
+                      {currentAppt.patient?.fullName || 'Patient'}
                     </h3>
                     {(currentAppt.patient?.bloodGroup || patientHistory[currentAppt.patientId]?.details?.bloodGroup) && (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 inline-flex items-center gap-0.5 shrink-0">
@@ -998,7 +869,7 @@ export function MyDayClient({
                   <p className="text-xs text-slate-500 mt-0.5 truncate">
                     Age {currentAppt.patient?.age || 28} •{' '}
                     {currentAppt.patient?.gender === 'FEMALE' ? 'Female' : 'Male'} •{' '}
-                    {currentAppt.patient?.phone || '+91 98765 43210'}
+                    {currentAppt.patient?.phone || '—'}
                   </p>
                 </div>
               </div>
@@ -1203,6 +1074,20 @@ export function MyDayClient({
                   </Button>
                 )}
 
+                {/* Reschedule Appointment Button */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setReschedulingAppt(currentAppt);
+                    setRescheduleModalOpen(true);
+                  }}
+                  className="w-full py-2.5 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 text-slate-700 hover:text-[#0066cc] font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors h-auto"
+                >
+                  <CalendarSync className="h-3.5 w-3.5 text-[#0066cc]" />
+                  <span>Reschedule Appointment</span>
+                </Button>
+
                 {/* View Full Patient Profile Button */}
                 <Button
                   type="button"
@@ -1213,6 +1098,18 @@ export function MyDayClient({
                   <span>View Full Patient Profile</span>
                   <ArrowRight className="h-3.5 w-3.5" />
                 </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white shadow-xs p-8 text-center space-y-3">
+              <div className="h-12 w-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                <User className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">No Patient Selected</h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  No appointments scheduled for today. Patient details and consultation controls will appear here once an appointment is active.
+                </p>
               </div>
             </div>
           )}
@@ -1293,6 +1190,19 @@ export function MyDayClient({
         </div>
       )}
       {/* ── Patient Full Medical Profile Modal ── */}
+      <DoctorRescheduleModal
+        isOpen={rescheduleModalOpen}
+        onClose={() => {
+          setRescheduleModalOpen(false);
+          setReschedulingAppt(null);
+        }}
+        appointment={reschedulingAppt || currentAppt}
+        onRescheduled={() => {
+          fetchAppointmentsForDate(selectedDate);
+          router.refresh();
+        }}
+      />
+
       {currentAppt && (
         <PatientProfileModal
           isOpen={patientModalOpen}

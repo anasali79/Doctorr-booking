@@ -17,12 +17,19 @@ export async function PATCH(
     const body = await req.json();
     const validated = rescheduleSchema.parse(body);
 
-    const res = await apiFetch(`/api/appointment/${id}/reschedule`, {
+    const endpoint =
+      user.role === 'DOCTOR'
+        ? `/api/doctor/appointments/${id}/reschedule`
+        : `/api/appointment/${id}/reschedule`;
+
+    const res = await apiFetch(endpoint, {
       method: 'PATCH',
       body: JSON.stringify({
         date: validated.date,
         startTime: validated.startTime,
         endTime: validated.endTime,
+        reason: (body as any)?.reason || (body as any)?.rescheduleReason,
+        rescheduleReason: (body as any)?.rescheduleReason || (body as any)?.reason,
       }),
       token,
     });

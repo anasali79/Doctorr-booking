@@ -185,12 +185,12 @@ describe('Vonage (Nexmo) Multi-Channel Notification System', () => {
       );
     });
 
-    it('routes outbound SMS to VONAGE_TEST_PHONE when test mode is enabled', async () => {
+    it('allows outbound SMS to verified test phone and skips unverified test phone when test mode is enabled', async () => {
       const mockConfig = {
         get: jest.fn((key: string) => {
           if (key === 'VONAGE_API_KEY') return 'vng_api_key_123';
           if (key === 'VONAGE_API_SECRET') return 'vng_secret_abc';
-          if (key === 'VONAGE_TEST_PHONE') return '917987087000'; // Override number
+          if (key === 'VONAGE_TEST_PHONE') return '917987087000'; // Whitelisted number
           return null;
         }),
       };
@@ -208,15 +208,28 @@ describe('Vonage (Nexmo) Multi-Channel Notification System', () => {
       });
 
       const provider = new SmsProvider(mockConfig as any);
-      const result = await provider.send({
+
+      // 1. Whitelisted number should be sent
+      const whitelistedResult = await provider.send({
         recipientId: 'patient_99',
         recipientRole: 'PATIENT',
-        destination: '+919999988888', // Real patient number
+        destination: '+91 7987087000',
         template: { smsText: 'Test notification' } as any,
       });
 
-      expect(result.status).toBe(DeliveryStatus.SENT);
+      expect(whitelistedResult.status).toBe(DeliveryStatus.SENT);
       expect(sentBody.to).toBe('917987087000');
+
+      // 2. Unverified demo number should be skipped with CANCELLED
+      const unverifiedResult = await provider.send({
+        recipientId: 'patient_100',
+        recipientRole: 'PATIENT',
+        destination: '1234567890',
+        template: { smsText: 'Test notification' } as any,
+      });
+
+      expect(unverifiedResult.status).toBe(DeliveryStatus.CANCELLED);
+      expect(unverifiedResult.errorCode).toBe('UNVERIFIED_DEMO_RECIPIENT_SKIPPED');
     });
 
     it('handles Vonage invalid credentials (Status 3) as non-transient failure', async () => {
@@ -336,7 +349,7 @@ describe('Vonage (Nexmo) Multi-Channel Notification System', () => {
       );
     });
 
-    it('routes outbound WhatsApp to VONAGE_TEST_PHONE when test mode is enabled', async () => {
+    it('allows outbound WhatsApp to verified test phone and skips unverified test phone when test mode is enabled', async () => {
       const mockConfig = {
         get: jest.fn((key: string) => {
           if (key === 'VONAGE_API_KEY') return 'vng_api_key_123';
@@ -357,16 +370,29 @@ describe('Vonage (Nexmo) Multi-Channel Notification System', () => {
       });
 
       const provider = new WhatsAppProvider(mockConfig as any);
-      const result = await provider.send({
+
+      // 1. Whitelisted number should be sent
+      const whitelistedResult = await provider.send({
         recipientId: 'patient_55',
         recipientRole: 'PATIENT',
-        destination: '+919999911111', // Real patient
+        destination: '+91 7987087000',
         template: { whatsAppText: 'Hello' } as any,
       });
 
-      expect(result.status).toBe(DeliveryStatus.ACCEPTED);
+      expect(whitelistedResult.status).toBe(DeliveryStatus.ACCEPTED);
       expect(sentBody.to).toBe('917987087000');
       expect(sentBody.channel).toBe('whatsapp');
+
+      // 2. Unverified demo number should be skipped with CANCELLED
+      const unverifiedResult = await provider.send({
+        recipientId: 'patient_56',
+        recipientRole: 'PATIENT',
+        destination: '1234567890',
+        template: { whatsAppText: 'Hello' } as any,
+      });
+
+      expect(unverifiedResult.status).toBe(DeliveryStatus.CANCELLED);
+      expect(unverifiedResult.errorCode).toBe('UNVERIFIED_DEMO_RECIPIENT_SKIPPED');
     });
 
     it('handles Vonage 401 Unauthorized as non-transient error', async () => {
