@@ -19,8 +19,10 @@ import {
   Layers,
   Loader2,
   CalendarSync,
+  FileText,
 } from 'lucide-react';
 import { DoctorRescheduleModal } from './DoctorRescheduleModal';
+import { DoctorPrescriptionModal } from '@/components/prescription/DoctorPrescriptionModal';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import {
   Table,
@@ -60,6 +62,7 @@ export function DoctorAppointmentsTable({
 
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [reschedulingAppt, setReschedulingAppt] = useState<Appointment | null>(null);
+  const [prescriptionAppt, setPrescriptionAppt] = useState<Appointment | null>(null);
 
   // Compute upcoming (today or future dates, not cancelled)
   const upcomingList = allList.filter(
@@ -422,8 +425,21 @@ export function DoctorAppointmentsTable({
                           </Button>
                         )}
 
-                        {(appt.status === 'COMPLETED' ||
-                          appt.status === 'CANCELLED' ||
+                        {appt.status === 'COMPLETED' && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPrescriptionAppt(appt)}
+                            className="px-2.5 py-1 rounded-full border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold text-[11px] flex items-center gap-1 transition-all cursor-pointer shadow-2xs h-auto"
+                            title="Issue or View Medical Prescription"
+                          >
+                            <FileText className="w-3 h-3 text-emerald-600" />
+                            <span>Prescription</span>
+                          </Button>
+                        )}
+
+                        {(appt.status === 'CANCELLED' ||
                           appt.status === 'NO_SHOW' ||
                           appt.status === 'RESCHEDULED') && (
                           <span className="text-[11px] text-slate-400 font-medium italic">
@@ -447,6 +463,16 @@ export function DoctorAppointmentsTable({
         appointment={reschedulingAppt}
         doctorId={doctorId}
         onRescheduled={() => {
+          router.refresh();
+        }}
+      />
+
+      {/* Doctor Prescription Modal */}
+      <DoctorPrescriptionModal
+        isOpen={!!prescriptionAppt}
+        onClose={() => setPrescriptionAppt(null)}
+        appointment={prescriptionAppt}
+        onPrescriptionSaved={() => {
           router.refresh();
         }}
       />

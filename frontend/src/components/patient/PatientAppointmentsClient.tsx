@@ -17,10 +17,14 @@ import {
   CreditCard,
   CheckCircle2,
   Clock,
+  FileText,
 } from 'lucide-react';
 import { launchRazorpayCheckout } from '@/lib/razorpay';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import { PatientLiveQueueModal } from './PatientLiveQueueModal';
+import { PrescriptionViewModal } from '@/components/prescription/PrescriptionViewModal';
+import { getPrescriptionByAppointment } from '@/lib/api/prescription';
+import { Prescription } from '@/types/prescription';
 import { DoctorAvatar } from '@/components/common/DoctorAvatar';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -67,6 +71,28 @@ export function PatientAppointmentsClient({
 
   // Live queue modal state
   const [liveQueueApptId, setLiveQueueApptId] = useState<string | null>(null);
+
+  // Prescription modal state
+  const [selectedPrescription, setSelectedPrescription] = useState<Prescription | null>(null);
+  const [loadingPrescriptionId, setLoadingPrescriptionId] = useState<string | null>(null);
+
+  const handleViewPrescription = async (appt: Appointment) => {
+    try {
+      setLoadingPrescriptionId(appt.id);
+      const rx = await getPrescriptionByAppointment(appt.id);
+      if (!rx) {
+        toast.info('Prescription is being prepared by the doctor. Please check back shortly.');
+        return;
+      }
+      setSelectedPrescription(rx);
+    } catch (err: unknown) {
+      toast.error('Could not load prescription', {
+        description: extractErrorMessage(err),
+      });
+    } finally {
+      setLoadingPrescriptionId(null);
+    }
+  };
 
   const todayStr = getTodayIST();
   const now = new Date();
@@ -590,6 +616,26 @@ export function PatientAppointmentsClient({
                     </Button>
                   </div>
                 )}
+
+                {/* Prescription button for completed consultations */}
+                {appt.status === 'COMPLETED' && (
+                  <div className="pt-2 border-t border-black/[0.06]">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => handleViewPrescription(appt)}
+                      disabled={loadingPrescriptionId === appt.id}
+                      className="w-full py-2 px-3 rounded-full border border-emerald-300 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs h-auto"
+                    >
+                      {loadingPrescriptionId === appt.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-700" />
+                      ) : (
+                        <FileText className="w-3.5 h-3.5 text-emerald-700" />
+                      )}
+                      <span>View & Download Rx Prescription</span>
+                    </Button>
+                  </div>
+                )}
               </Card>
             );
           })}
@@ -835,6 +881,13 @@ export function PatientAppointmentsClient({
           onClose={() => setLiveQueueApptId(null)}
         />
       )}
+
+      {/* Prescription View & Download Modal */}
+      <PrescriptionViewModal
+        isOpen={!!selectedPrescription}
+        onClose={() => setSelectedPrescription(null)}
+        prescription={selectedPrescription}
+      />
     </div>
   );
 }

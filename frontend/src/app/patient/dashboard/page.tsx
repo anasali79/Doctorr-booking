@@ -614,6 +614,13 @@ export default async function PatientDashboardPage() {
                           <span className="text-[10px] text-slate-400">{formatDate(item.date)}</span>
                         </div>
                         <p className="text-slate-700 whitespace-pre-line text-[11px]">{item.clinicalNotes}</p>
+                        <Link
+                          href="/patient/appointments"
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 hover:text-emerald-800 hover:underline mt-1.5"
+                        >
+                          <FileText className="h-3 w-3" />
+                          <span>View Official Rx Prescription →</span>
+                        </Link>
                       </div>
                     ))}
                 </div>
@@ -680,6 +687,16 @@ export default async function PatientDashboardPage() {
                     >
                       {item.status === 'COMPLETED' ? 'Completed' : item.status}
                     </span>
+
+                    {item.status === 'COMPLETED' && (
+                      <Link
+                        href="/patient/appointments"
+                        className="rounded-lg bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100 transition-colors flex items-center gap-1 shadow-2xs"
+                      >
+                        <FileText className="h-3 w-3 text-emerald-600" />
+                        <span>Rx Slip</span>
+                      </Link>
+                    )}
 
                     {item.doctor?.id && (
                       <Link

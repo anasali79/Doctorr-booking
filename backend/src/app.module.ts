@@ -14,6 +14,7 @@ import { getDatabaseConfig } from './config/database.config';
 import { SocketsModule } from './sockets/sockets.module';
 import { ReminderModule } from './reminder/reminder.module';
 import { PaymentModule } from './payment/payment.module';
+import { PrescriptionModule } from './prescription/prescription.module';
 
 @Module({
   controllers: [AppController],
@@ -40,6 +41,7 @@ import { PaymentModule } from './payment/payment.module';
     SocketsModule,
     ReminderModule,
     PaymentModule,
+    PrescriptionModule,
   ],
 })
 export class AppModule {}
