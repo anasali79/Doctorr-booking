@@ -1826,6 +1826,8 @@ export class AppointmentService {
   private toDoctorAppointmentResponse(appointment: Appointment) {
     return {
       id: appointment.id,
+      doctorId: appointment.doctorId,
+      patientId: appointment.patientId,
       date: appointment.date,
       startTime: appointment.startTime,
       endTime: appointment.endTime,
@@ -1833,6 +1835,8 @@ export class AppointmentService {
       paymentStatus: appointment.paymentStatus ?? 'UNPAID',
       tokenNumber: appointment.tokenNumber ?? null,
       schedulingType: appointment.tokenNumber !== null ? 'WAVE' : 'STREAM',
+      clinicalNotes: appointment.clinicalNotes ?? null,
+      reasonForVisit: appointment.reasonForVisit ?? null,
       patient: appointment.patient
         ? {
           id: appointment.patient.id,
@@ -1840,6 +1844,12 @@ export class AppointmentService {
           age: appointment.patient.age,
           gender: appointment.patient.gender,
           phone: appointment.patient.phone,
+          address: appointment.patient.address ?? null,
+          basicHealthInfo: appointment.patient.basicHealthInfo ?? null,
+          allergies: appointment.patient.allergies ?? null,
+          medicalHistory: appointment.patient.medicalHistory ?? null,
+          currentMedication: appointment.patient.currentMedication ?? null,
+          bloodGroup: appointment.patient.bloodGroup ?? null,
         }
         : null,
       checkedInAt: appointment.checkedInAt ?? null,

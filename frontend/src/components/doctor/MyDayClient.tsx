@@ -1293,18 +1293,21 @@ export function MyDayClient({
         </div>
       )}
       {/* ── Patient Full Medical Profile Modal ── */}
-      {currentAppt?.patientId && (
+      {currentAppt && (
         <PatientProfileModal
           isOpen={patientModalOpen}
           onClose={() => setPatientModalOpen(false)}
-          patientId={currentAppt.patientId}
+          patientId={currentAppt.patientId || currentAppt.patient?.id || ''}
+          initialPatient={currentAppt.patient}
+          currentAppointment={currentAppt}
           currentAppointmentId={currentAppt.id}
           onRecordUpdated={() => {
             fetchAppointmentsForDate(selectedDate);
-            if (currentAppt?.patientId) {
+            const pid = currentAppt.patientId || currentAppt.patient?.id;
+            if (pid) {
               setPatientHistory((prev) => {
                 const copy = { ...prev };
-                delete copy[currentAppt.patientId];
+                delete copy[pid];
                 return copy;
               });
             }

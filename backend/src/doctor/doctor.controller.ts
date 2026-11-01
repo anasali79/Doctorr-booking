@@ -122,15 +122,7 @@ export class DoctorController {
   @Roles(Role.DOCTOR)
   getDoctorPatientRecord(
     @CurrentUser() user: { id: string },
-    @Param(
-      'patientId',
-      new ParseUUIDPipe({
-        version: '4',
-        exceptionFactory: () =>
-          new BadRequestException('Invalid patient ID format'),
-      }),
-    )
-    patientId: string,
+    @Param('patientId') patientId: string,
   ) {
     return this.doctorService.getDoctorPatientRecord(user.id, patientId);
   }
@@ -167,15 +159,7 @@ export class DoctorController {
   @Roles(Role.DOCTOR)
   updatePatientMedicalRecord(
     @CurrentUser() user: { id: string },
-    @Param(
-      'patientId',
-      new ParseUUIDPipe({
-        version: '4',
-        exceptionFactory: () =>
-          new BadRequestException('Invalid patient ID format'),
-      }),
-    )
-    patientId: string,
+    @Param('patientId') patientId: string,
     @Body()
     body: {
       allergies?: string;

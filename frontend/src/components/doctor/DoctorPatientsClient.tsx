@@ -5,127 +5,177 @@ import { useSearchParams } from 'next/navigation';
 import {
   Users,
   Search,
-  Filter,
   Phone,
   Calendar,
   FileText,
   ShieldAlert,
   Droplets,
   Clock,
-  ArrowRight,
-  Eye,
   RefreshCw,
   UserCheck,
-  Heart,
   ChevronRight,
   Pill,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatTime } from '@/lib/utils';
 import { clientAxios } from '@/lib/api/axios';
 import { PatientProfileModal } from './PatientProfileModal';
 import { toast } from 'sonner';
 
-interface PatientRecordItem {
-  patient: {
-    id: string;
-    fullName: string;
-    age: number;
-    gender: 'MALE' | 'FEMALE' | 'OTHER';
-    phone: string;
-    address?: string;
-    bloodGroup?: string;
-    allergies?: string;
-    medicalHistory?: string;
-    currentMedication?: string;
-    basicHealthInfo?: string;
-  };
+export interface NormalizedPatientRecord {
+  id: string;
+  fullName: string;
+  age: number | null;
+  gender: string;
+  phone: string;
+  address?: string;
+  bloodGroup?: string;
+  allergies?: string;
+  medicalHistory?: string;
+  currentMedication?: string;
+  basicHealthInfo?: string;
   totalVisits: number;
+  completedVisits: number;
   lastVisitDate: string | null;
-  lastAppointmentId?: string;
-  nextAppointment?: {
-    date: string;
-    startTime: string;
-    status: string;
-  } | null;
-  clinicalNotesHistory?: Array<{
-    appointmentId: string;
-    date: string;
-    notes: string;
-  }>;
+  lastVisitTime?: string | null;
+  lastReason?: string | null;
+  latestNote?: string | null;
+  raw: any;
+}
+
+function normalizePatient(item: any): NormalizedPatientRecord {
+  if (!item) {
+    return {
+      id: '',
+      fullName: 'Patient',
+      age: null,
+      gender: 'OTHER',
+      phone: '',
+      totalVisits: 0,
+      completedVisits: 0,
+      lastVisitDate: null,
+      raw: item,
+    };
+  }
+
+  const p = item.patient || item;
+  const lastAppt = item.lastVisit || null;
+  const recentNotes = item.recentClinicalNotes || item.clinicalNotesHistory || [];
+  const latestNoteText = recentNotes[0]?.notes || lastAppt?.clinicalNotes || null;
+
+  return {
+    id: p.id || item.id || '',
+    fullName: p.fullName || item.fullName || 'Registered Patient',
+    age: p.age ?? item.age ?? null,
+    gender: p.gender || item.gender || 'MALE',
+    phone: p.phone || item.phone || '',
+    address: p.address || item.address || '',
+    bloodGroup: p.bloodGroup || item.bloodGroup || '',
+    allergies: p.allergies || item.allergies || '',
+    medicalHistory: p.medicalHistory || item.medicalHistory || '',
+    currentMedication: p.currentMedication || item.currentMedication || '',
+    basicHealthInfo: p.basicHealthInfo || item.basicHealthInfo || '',
+    totalVisits: item.totalAppointments ?? item.totalVisits ?? 1,
+    completedVisits: item.completedVisits ?? 0,
+    lastVisitDate: lastAppt?.date || item.lastVisitDate || null,
+    lastVisitTime: lastAppt?.startTime || null,
+    lastReason: lastAppt?.reasonForVisit || item.reasonForVisit || null,
+    latestNote: latestNoteText,
+    raw: item,
+  };
 }
 
 interface DoctorPatientsClientProps {
-  initialPatients: PatientRecordItem[];
+  initialPatients: any[];
 }
 
 export function DoctorPatientsClient({ initialPatients }: DoctorPatientsClientProps) {
   const searchParams = useSearchParams();
-  const deepLinkPatientId = searchParams.get('patientId');
+  const deepLinkPatientId = searchParams ? searchParams.get('patientId') : null;
 
-  const [patients, setPatients] = useState<PatientRecordItem[]>(initialPatients || []);
+  const [patients, setPatients] = useState<any[]>(() => {
+    return Array.isArray(initialPatients) ? initialPatients : [];
+  });
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'allergies' | 'returning' | 'recent'>('all');
 
-  // Modal state
-  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(deepLinkPatientId || null);
-  const [modalOpen, setModalOpen] = useState<boolean>(Boolean(deepLinkPatientId));
+  // Selected Patient for Modal
+  const [selectedPatient, setSelectedPatient] = useState<NormalizedPatientRecord | null>(null);
+  const [modalOpen, setModalOpen] = useState<boolean>(false);
+
+  const normalizedList = useMemo(() => {
+    if (!Array.isArray(patients)) return [];
+    return patients.map(normalizePatient).filter((p) => Boolean(p.id));
+  }, [patients]);
 
   const fetchPatients = async (query = '') => {
     setLoading(true);
     try {
-      const res = await clientAxios.get<{ success: boolean; data: PatientRecordItem[] }>(
+      const res = await clientAxios.get<{ success: boolean; data: any[] }>(
         '/api/doctor/patients',
         { params: query ? { search: query } : undefined },
       );
-      if (res.data?.data) {
-        setPatients(res.data.data);
+      const incoming = res.data?.data;
+      if (Array.isArray(incoming)) {
+        setPatients(incoming);
       }
     } catch {
-      toast.error('Failed to load patient records');
+      toast.error('Failed to refresh patient directory');
     } finally {
       setLoading(false);
     }
   };
 
+  // Deep linking support
   useEffect(() => {
-    if (deepLinkPatientId) {
-      setSelectedPatientId(deepLinkPatientId);
-      setModalOpen(true);
+    if (deepLinkPatientId && normalizedList.length > 0) {
+      const match = normalizedList.find((p) => p.id === deepLinkPatientId);
+      if (match) {
+        setSelectedPatient(match);
+        setModalOpen(true);
+      } else {
+        setSelectedPatient({
+          id: deepLinkPatientId,
+          fullName: 'Patient Record',
+          age: null,
+          gender: 'OTHER',
+          phone: '',
+          totalVisits: 1,
+          completedVisits: 0,
+          lastVisitDate: null,
+          raw: null,
+        });
+        setModalOpen(true);
+      }
     }
-  }, [deepLinkPatientId]);
+  }, [deepLinkPatientId, normalizedList]);
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    fetchPatients(search.trim());
-  };
-
-  const handleOpenPatient = (patientId: string) => {
-    setSelectedPatientId(patientId);
+  const handleOpenPatient = (p: NormalizedPatientRecord) => {
+    setSelectedPatient(p);
     setModalOpen(true);
   };
 
   // Filter in memory for immediate UI responsiveness
   const filteredPatients = useMemo(() => {
-    let result = [...patients];
+    let result = [...normalizedList];
 
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(
         (p) =>
-          p.patient.fullName.toLowerCase().includes(q) ||
-          p.patient.phone.includes(q) ||
-          (p.patient.allergies && p.patient.allergies.toLowerCase().includes(q)) ||
-          (p.patient.bloodGroup && p.patient.bloodGroup.toLowerCase().includes(q)) ||
-          (p.patient.medicalHistory && p.patient.medicalHistory.toLowerCase().includes(q)),
+          p.fullName.toLowerCase().includes(q) ||
+          p.phone.includes(q) ||
+          (p.allergies && p.allergies.toLowerCase().includes(q)) ||
+          (p.bloodGroup && p.bloodGroup.toLowerCase().includes(q)) ||
+          (p.medicalHistory && p.medicalHistory.toLowerCase().includes(q)),
       );
     }
 
     if (filterType === 'allergies') {
-      result = result.filter((p) => Boolean(p.patient.allergies && p.patient.allergies.trim()));
+      result = result.filter((p) => Boolean(p.allergies && p.allergies.trim()));
     } else if (filterType === 'returning') {
       result = result.filter((p) => p.totalVisits > 1);
     } else if (filterType === 'recent') {
@@ -133,14 +183,14 @@ export function DoctorPatientsClient({ initialPatients }: DoctorPatientsClientPr
     }
 
     return result;
-  }, [patients, search, filterType]);
+  }, [normalizedList, search, filterType]);
 
   const stats = useMemo(() => {
-    const total = patients.length;
-    const returning = patients.filter((p) => p.totalVisits > 1).length;
-    const withAllergies = patients.filter((p) => Boolean(p.patient.allergies && p.patient.allergies.trim())).length;
+    const total = normalizedList.length;
+    const returning = normalizedList.filter((p) => p.totalVisits > 1).length;
+    const withAllergies = normalizedList.filter((p) => Boolean(p.allergies && p.allergies.trim())).length;
     return { total, returning, withAllergies };
-  }, [patients]);
+  }, [normalizedList]);
 
   return (
     <div className="space-y-6">
@@ -212,7 +262,7 @@ export function DoctorPatientsClient({ initialPatients }: DoctorPatientsClientPr
 
       {/* ── Search & Filter Controls ── */}
       <div className="p-4 rounded-2xl border border-slate-200/90 bg-white shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
-        <form onSubmit={handleSearchSubmit} className="relative w-full sm:w-96">
+        <form onSubmit={(e) => { e.preventDefault(); fetchPatients(search.trim()); }} className="relative w-full sm:w-96">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <Input
             value={search}
@@ -263,15 +313,12 @@ export function DoctorPatientsClient({ initialPatients }: DoctorPatientsClientPr
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredPatients.map((item) => {
-                  const p = item.patient;
-                  const latestNote = item.clinicalNotesHistory?.[0];
-
+                {filteredPatients.map((p) => {
                   return (
                     <tr
                       key={p.id}
                       className="hover:bg-slate-50/80 transition-colors group cursor-pointer"
-                      onClick={() => handleOpenPatient(p.id)}
+                      onClick={() => handleOpenPatient(p)}
                     >
                       {/* Patient Avatar & Name */}
                       <td className="py-4 px-4 sm:px-6">
@@ -290,7 +337,7 @@ export function DoctorPatientsClient({ initialPatients }: DoctorPatientsClientPr
                             </span>
                             <span className="text-slate-400 text-[11px] block mt-0.5 flex items-center gap-1">
                               <Phone className="h-3 w-3 text-slate-400" />
-                              {p.phone}
+                              {p.phone || 'No phone'}
                             </span>
                           </div>
                         </div>
@@ -299,7 +346,7 @@ export function DoctorPatientsClient({ initialPatients }: DoctorPatientsClientPr
                       {/* Demographics */}
                       <td className="py-4 px-4">
                         <span className="font-semibold text-slate-700 block">
-                          {p.age} yrs • {p.gender === 'FEMALE' ? 'Female' : 'Male'}
+                          {p.age ? `${p.age} yrs` : 'Age N/A'} • {p.gender === 'FEMALE' ? 'Female' : p.gender === 'MALE' ? 'Male' : 'Other'}
                         </span>
                         {p.address && (
                           <span className="text-slate-400 text-[11px] block truncate max-w-[140px] mt-0.5">
@@ -338,18 +385,18 @@ export function DoctorPatientsClient({ initialPatients }: DoctorPatientsClientPr
                       {/* Total Visits & Last Visit */}
                       <td className="py-4 px-4">
                         <span className="font-bold text-slate-900 block">
-                          {item.totalVisits} visit{item.totalVisits > 1 ? 's' : ''}
+                          {p.totalVisits} visit{p.totalVisits > 1 ? 's' : ''}
                         </span>
                         <span className="text-slate-400 text-[11px] block mt-0.5">
-                          Last: {item.lastVisitDate ? formatDate(item.lastVisitDate) : 'Today'}
+                          Last: {p.lastVisitDate ? formatDate(p.lastVisitDate) : 'Today'}
                         </span>
                       </td>
 
                       {/* Latest Clinical Note Preview */}
                       <td className="py-4 px-4 max-w-[180px]">
-                        {latestNote ? (
+                        {p.latestNote ? (
                           <p className="text-slate-600 text-[11px] line-clamp-2 italic">
-                            &ldquo;{latestNote.notes}&rdquo;
+                            &ldquo;{p.latestNote}&rdquo;
                           </p>
                         ) : (
                           <span className="text-slate-400 text-[11px]">No notes recorded yet</span>
@@ -364,7 +411,7 @@ export function DoctorPatientsClient({ initialPatients }: DoctorPatientsClientPr
                           size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleOpenPatient(p.id);
+                            handleOpenPatient(p);
                           }}
                           className="h-8 px-3 rounded-xl border border-slate-200 bg-white hover:bg-blue-50 hover:text-[#0066cc] text-xs font-semibold"
                         >
@@ -382,14 +429,15 @@ export function DoctorPatientsClient({ initialPatients }: DoctorPatientsClientPr
       </div>
 
       {/* ── Patient Profile Modal ── */}
-      {selectedPatientId && (
+      {selectedPatient && (
         <PatientProfileModal
           isOpen={modalOpen}
           onClose={() => {
             setModalOpen(false);
-            setSelectedPatientId(null);
+            setSelectedPatient(null);
           }}
-          patientId={selectedPatientId}
+          patientId={selectedPatient.id}
+          initialPatient={selectedPatient}
           onRecordUpdated={() => fetchPatients(search.trim())}
         />
       )}
