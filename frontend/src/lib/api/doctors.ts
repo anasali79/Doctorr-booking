@@ -122,3 +122,71 @@ export async function cancelDoctorAppointment(appointmentId: string, token: stri
     },
   );
 }
+
+export async function getDoctorPatientsDirectory(search?: string, token?: string) {
+  return apiFetch<{
+    success: boolean;
+    count: number;
+    data: any[];
+  }>('/api/doctor/patients', {
+    params: search ? { search } : undefined,
+    token,
+  });
+}
+
+export async function getDoctorPatientRecord(patientId: string, token?: string) {
+  return apiFetch<{
+    success: boolean;
+    data: {
+      patient: any;
+      stats: {
+        totalVisits: number;
+        completedVisits: number;
+        lastVisitDate: string | null;
+      };
+      appointments: any[];
+      allClinicalNotes: any[];
+    };
+  }>(`/api/doctor/patients/${patientId}`, {
+    token,
+  });
+}
+
+export async function saveAppointmentClinicalNotes(
+  appointmentId: string,
+  notes: string,
+  reasonForVisit?: string,
+  token?: string,
+) {
+  return apiFetch<{
+    success: boolean;
+    message: string;
+    data: any;
+  }>(`/api/doctor/appointments/${appointmentId}/clinical-notes`, {
+    method: 'PATCH',
+    body: JSON.stringify({ notes, reasonForVisit }),
+    token,
+  });
+}
+
+export async function updatePatientMedicalRecord(
+  patientId: string,
+  data: {
+    allergies?: string;
+    medicalHistory?: string;
+    currentMedication?: string;
+    bloodGroup?: string;
+    basicHealthInfo?: string;
+  },
+  token?: string,
+) {
+  return apiFetch<{
+    success: boolean;
+    message: string;
+    data: any;
+  }>(`/api/doctor/patients/${patientId}/medical-record`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+    token,
+  });
+}

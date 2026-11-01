@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
-import { User, Phone, MapPin, Heart, AlertCircle, Loader2, Save } from 'lucide-react';
+import { User, Phone, MapPin, Heart, AlertCircle, Loader2, Save, Droplets, ShieldAlert, Pill, FileText } from 'lucide-react';
 import { patientProfileSchema, PatientProfileInput } from '@/lib/schemas';
 import { Patient } from '@/types';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
@@ -41,6 +41,10 @@ export function PatientProfileForm({
       gender: initialData?.gender || 'MALE',
       phone: initialData?.phone || initialData?.contactDetails?.phone || '',
       address: initialData?.address || initialData?.contactDetails?.address || '',
+      bloodGroup: initialData?.bloodGroup || '',
+      allergies: initialData?.allergies || '',
+      medicalHistory: initialData?.medicalHistory || '',
+      currentMedication: initialData?.currentMedication || '',
       basicHealthInfo: initialData?.basicHealthInfo || '',
     },
   });
@@ -163,18 +167,104 @@ export function PatientProfileForm({
         </div>
       </div>
 
-      <div>
-        <label className="field-label">Allergies & Medical History (Optional)</label>
-        <div className="relative">
-          <div className="absolute top-3 left-3 text-slate-400 pointer-events-none">
-            <Heart className="w-4 h-4" />
+      {/* ── Clinical & Medical Health Profile ── */}
+      <div className="pt-4 border-t border-slate-100">
+        <h3 className="text-sm font-bold text-slate-900 mb-1 flex items-center gap-2">
+          <Droplets className="h-4 w-4 text-[#0066cc]" />
+          <span>Medical Profile & Health History</span>
+        </h3>
+        <p className="text-xs text-slate-500 mb-4">
+          This information is shared with your consulting doctor to ensure safe and effective care.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Blood Group */}
+          <div>
+            <label className="field-label">Blood Group</label>
+            <Select
+              value={watch('bloodGroup') || ''}
+              onValueChange={(val) => setValue('bloodGroup', val, { shouldValidate: true })}
+            >
+              <SelectTrigger className="field-input">
+                <SelectValue placeholder="Select Blood Group (e.g. O+)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="A+">A Positive (A+)</SelectItem>
+                <SelectItem value="A-">A Negative (A-)</SelectItem>
+                <SelectItem value="B+">B Positive (B+)</SelectItem>
+                <SelectItem value="B-">B Negative (B-)</SelectItem>
+                <SelectItem value="AB+">AB Positive (AB+)</SelectItem>
+                <SelectItem value="AB-">AB Negative (AB-)</SelectItem>
+                <SelectItem value="O+">O Positive (O+)</SelectItem>
+                <SelectItem value="O-">O Negative (O-)</SelectItem>
+                <SelectItem value="UNKNOWN">Unknown / Not Tested</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-          <Textarea
-            {...register('basicHealthInfo')}
-            rows={3}
-            placeholder="Blood group (e.g. B+), medication allergies (e.g. Sulfa, Penicillin), existing conditions (e.g. Hypertension)"
-            className="field-textarea pl-10"
-          />
+
+          {/* Known Allergies */}
+          <div>
+            <label className="field-label">Known Allergies</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-rose-500">
+                <ShieldAlert className="w-4 h-4" />
+              </div>
+              <Input
+                {...register('allergies')}
+                type="text"
+                placeholder="e.g. Penicillin, Peanuts, Sulfa (or 'None')"
+                className="field-input pl-10"
+              />
+            </div>
+          </div>
+
+          {/* Chronic Conditions & Past Medical History */}
+          <div className="md:col-span-2">
+            <label className="field-label">Medical History & Chronic Conditions</label>
+            <div className="relative">
+              <div className="absolute top-3 left-3 text-slate-400 pointer-events-none">
+                <FileText className="w-4 h-4" />
+              </div>
+              <Textarea
+                {...register('medicalHistory')}
+                rows={2}
+                placeholder="e.g. Asthma (diagnosed 2019), Hypertension, Type 2 Diabetes (or 'None')"
+                className="field-textarea pl-10"
+              />
+            </div>
+          </div>
+
+          {/* Current Regular Medications */}
+          <div className="md:col-span-2">
+            <label className="field-label">Current Regular Medications</label>
+            <div className="relative">
+              <div className="absolute top-3 left-3 text-slate-400 pointer-events-none">
+                <Pill className="w-4 h-4" />
+              </div>
+              <Textarea
+                {...register('currentMedication')}
+                rows={2}
+                placeholder="e.g. Metformin 500mg (twice daily), Inhaler as needed (or 'None')"
+                className="field-textarea pl-10"
+              />
+            </div>
+          </div>
+
+          {/* Other Health Notes */}
+          <div className="md:col-span-2">
+            <label className="field-label">Additional Health Notes</label>
+            <div className="relative">
+              <div className="absolute top-3 left-3 text-slate-400 pointer-events-none">
+                <Heart className="w-4 h-4" />
+              </div>
+              <Textarea
+                {...register('basicHealthInfo')}
+                rows={2}
+                placeholder="Any dietary restrictions, past surgeries, or relevant health notes"
+                className="field-textarea pl-10"
+              />
+            </div>
+          </div>
         </div>
       </div>
 

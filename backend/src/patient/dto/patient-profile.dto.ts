@@ -36,8 +36,22 @@ export class CreatePatientProfileDto {
   @IsString()
   @IsOptional()
   basicHealthInfo?: string;
+
+  @IsString()
+  @IsOptional()
+  allergies?: string;
+
+  @IsString()
+  @IsOptional()
+  medicalHistory?: string;
+
+  @IsString()
+  @IsOptional()
+  currentMedication?: string;
+
+  @IsString()
+  @IsOptional()
+  bloodGroup?: string;
 }
 
 export class UpdatePatientProfileDto extends PartialType(CreatePatientProfileDto) {}
-
-

@@ -34,7 +34,7 @@ export class DoctorController {
     private readonly availabilityService: AvailabilityService,
     @Inject(forwardRef(() => AppointmentService))
     private readonly appointmentService: AppointmentService,
-  ) { }
+  ) {}
 
   @Get()
   findAll(@Query() query: DoctorDiscoveryQueryDto) {
@@ -103,6 +103,93 @@ export class DoctorController {
     id: string,
   ) {
     return this.appointmentService.cancelAppointmentByDoctor(user.id, id);
+  }
+
+  // ─── Doctor Patients Directory & Clinical History ─────────────────────────────
+
+  @Get('patients')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.DOCTOR)
+  getDoctorPatients(
+    @CurrentUser() user: { id: string },
+    @Query('search') search?: string,
+  ) {
+    return this.doctorService.getDoctorPatients(user.id, search);
+  }
+
+  @Get('patients/:patientId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.DOCTOR)
+  getDoctorPatientRecord(
+    @CurrentUser() user: { id: string },
+    @Param(
+      'patientId',
+      new ParseUUIDPipe({
+        version: '4',
+        exceptionFactory: () =>
+          new BadRequestException('Invalid patient ID format'),
+      }),
+    )
+    patientId: string,
+  ) {
+    return this.doctorService.getDoctorPatientRecord(user.id, patientId);
+  }
+
+  @Patch('appointments/:id/clinical-notes')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.DOCTOR)
+  saveClinicalNotes(
+    @CurrentUser() user: { id: string },
+    @Param(
+      'id',
+      new ParseUUIDPipe({
+        version: '4',
+        exceptionFactory: () =>
+          new BadRequestException('Invalid appointment ID format'),
+      }),
+    )
+    id: string,
+    @Body() body: { notes: string; reasonForVisit?: string },
+  ) {
+    if (!body || typeof body.notes !== 'string') {
+      throw new BadRequestException('Clinical notes text is required');
+    }
+    return this.doctorService.saveAppointmentClinicalNotes(
+      user.id,
+      id,
+      body.notes,
+      body.reasonForVisit,
+    );
+  }
+
+  @Patch('patients/:patientId/medical-record')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.DOCTOR)
+  updatePatientMedicalRecord(
+    @CurrentUser() user: { id: string },
+    @Param(
+      'patientId',
+      new ParseUUIDPipe({
+        version: '4',
+        exceptionFactory: () =>
+          new BadRequestException('Invalid patient ID format'),
+      }),
+    )
+    patientId: string,
+    @Body()
+    body: {
+      allergies?: string;
+      medicalHistory?: string;
+      currentMedication?: string;
+      bloodGroup?: string;
+      basicHealthInfo?: string;
+    },
+  ) {
+    return this.doctorService.updatePatientMedicalRecordByDoctor(
+      user.id,
+      patientId,
+      body,
+    );
   }
 
   // ─── Next Available Appointment (Public) ────────────────────────────────────

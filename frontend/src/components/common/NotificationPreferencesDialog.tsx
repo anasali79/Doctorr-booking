@@ -74,7 +74,18 @@ export function NotificationPreferencesDialog({
   const handleSave = async () => {
     try {
       setSaving(true);
-      await clientAxios.patch('/api/notifications/preferences', preferences);
+      // Clean payload: only send valid preference booleans, never id / userId / createdAt
+      const payload = {
+        emailEnabled: preferences.emailEnabled,
+        inAppEnabled: preferences.inAppEnabled,
+        whatsappEnabled: preferences.whatsappEnabled,
+        smsEnabled: preferences.smsEnabled,
+        remindersEnabled: preferences.remindersEnabled,
+        paymentAlertsEnabled: preferences.paymentAlertsEnabled,
+        refundAlertsEnabled: preferences.refundAlertsEnabled,
+      };
+
+      await clientAxios.patch('/api/notifications/preferences', payload);
       toast.success('Notification preferences saved successfully');
       onOpenChange(false);
     } catch (err: unknown) {
@@ -86,185 +97,212 @@ export function NotificationPreferencesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md p-6 rounded-2xl bg-white shadow-xl">
-        <DialogHeader>
-          <DialogTitle className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            <Bell className="w-5 h-5 text-blue-600" />
-            Notification Channels & Preferences
-          </DialogTitle>
-          <DialogDescription className="text-xs text-slate-500">
-            Control which channels and alerts you receive for appointments, payments, and clinic updates.
-          </DialogDescription>
+      <DialogContent className="max-w-md w-[92vw] p-5 sm:p-6 rounded-2xl bg-white shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#0066cc] flex items-center justify-center shrink-0">
+              <Bell className="w-4 h-4" />
+            </div>
+            <div>
+              <DialogTitle className="text-base font-bold text-slate-900 leading-tight">
+                Notification Preferences
+              </DialogTitle>
+              <DialogDescription className="text-xs text-slate-500 mt-0.5">
+                Choose delivery channels and alerts for your clinical appointments
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
         {loading ? (
-          <div className="py-12 flex flex-col items-center justify-center space-y-2">
-            <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
-            <span className="text-xs text-slate-500">Loading your settings...</span>
+          <div className="py-12 flex flex-col items-center justify-center space-y-2.5">
+            <Loader2 className="w-6 h-6 animate-spin text-[#0066cc]" />
+            <span className="text-xs text-slate-500 font-medium">Loading preferences...</span>
           </div>
         ) : (
-          <div className="space-y-6 pt-2">
-            {/* Delivery Channels */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                Communication Channels
-              </h4>
+          <div className="space-y-5 pt-3">
+            {/* Communication Channels */}
+            <div className="space-y-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block px-1">
+                Active Channels
+              </span>
 
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {/* Email */}
-                <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50/60 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                      <Mail className="w-4 h-4" />
+                <div
+                  onClick={() => toggleField('emailEnabled')}
+                  className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                    preferences.emailEnabled
+                      ? 'border-blue-200 bg-blue-50/40 text-slate-900 shadow-2xs'
+                      : 'border-slate-100 bg-slate-50/50 text-slate-400'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs ${
+                      preferences.emailEnabled ? 'bg-blue-100 text-[#0066cc]' : 'bg-slate-200 text-slate-400'
+                    }`}>
+                      <Mail className="w-3.5 h-3.5" />
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-slate-800">Email Notifications</p>
-                      <p className="text-[11px] text-slate-500">Official receipts, confirmations & PDF summaries</p>
+                      <p className="text-xs font-bold leading-none">Email</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Invoices & Summary</p>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => toggleField('emailEnabled')}
-                    className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${
-                      preferences.emailEnabled ? 'bg-blue-600 justify-end' : 'bg-slate-200 justify-start'
-                    }`}
-                  >
-                    <span className="w-4 h-4 rounded-full bg-white shadow-xs" />
-                  </button>
+                  <div className={`w-8 h-4 rounded-full transition-colors flex items-center p-0.5 ${
+                    preferences.emailEnabled ? 'bg-[#0066cc] justify-end' : 'bg-slate-300 justify-start'
+                  }`}>
+                    <span className="w-3 h-3 rounded-full bg-white shadow-xs" />
+                  </div>
                 </div>
 
                 {/* WhatsApp */}
-                <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50/60 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                      <MessageSquare className="w-4 h-4" />
+                <div
+                  onClick={() => toggleField('whatsappEnabled')}
+                  className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                    preferences.whatsappEnabled
+                      ? 'border-emerald-200 bg-emerald-50/40 text-slate-900 shadow-2xs'
+                      : 'border-slate-100 bg-slate-50/50 text-slate-400'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs ${
+                      preferences.whatsappEnabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-400'
+                    }`}>
+                      <MessageSquare className="w-3.5 h-3.5" />
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-slate-800">WhatsApp Alerts</p>
-                      <p className="text-[11px] text-slate-500">Instant reminders, token updates & schedule changes</p>
+                      <p className="text-xs font-bold leading-none">WhatsApp</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Instant Tokens & Times</p>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => toggleField('whatsappEnabled')}
-                    className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${
-                      preferences.whatsappEnabled ? 'bg-emerald-600 justify-end' : 'bg-slate-200 justify-start'
-                    }`}
-                  >
-                    <span className="w-4 h-4 rounded-full bg-white shadow-xs" />
-                  </button>
+                  <div className={`w-8 h-4 rounded-full transition-colors flex items-center p-0.5 ${
+                    preferences.whatsappEnabled ? 'bg-emerald-600 justify-end' : 'bg-slate-300 justify-start'
+                  }`}>
+                    <span className="w-3 h-3 rounded-full bg-white shadow-xs" />
+                  </div>
                 </div>
 
                 {/* SMS */}
-                <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50/60 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
-                      <Smartphone className="w-4 h-4" />
+                <div
+                  onClick={() => toggleField('smsEnabled')}
+                  className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                    preferences.smsEnabled
+                      ? 'border-purple-200 bg-purple-50/40 text-slate-900 shadow-2xs'
+                      : 'border-slate-100 bg-slate-50/50 text-slate-400'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs ${
+                      preferences.smsEnabled ? 'bg-purple-100 text-purple-700' : 'bg-slate-200 text-slate-400'
+                    }`}>
+                      <Smartphone className="w-3.5 h-3.5" />
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-slate-800">SMS Alerts</p>
-                      <p className="text-[11px] text-slate-500">Reliable text messages to your verified phone</p>
+                      <p className="text-xs font-bold leading-none">SMS Text</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Direct Mobile SMS</p>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => toggleField('smsEnabled')}
-                    className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${
-                      preferences.smsEnabled ? 'bg-purple-600 justify-end' : 'bg-slate-200 justify-start'
-                    }`}
-                  >
-                    <span className="w-4 h-4 rounded-full bg-white shadow-xs" />
-                  </button>
+                  <div className={`w-8 h-4 rounded-full transition-colors flex items-center p-0.5 ${
+                    preferences.smsEnabled ? 'bg-purple-600 justify-end' : 'bg-slate-300 justify-start'
+                  }`}>
+                    <span className="w-3 h-3 rounded-full bg-white shadow-xs" />
+                  </div>
                 </div>
 
                 {/* In-App */}
-                <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50/60 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
-                      <Bell className="w-4 h-4" />
+                <div
+                  onClick={() => toggleField('inAppEnabled')}
+                  className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                    preferences.inAppEnabled
+                      ? 'border-blue-200 bg-blue-50/40 text-slate-900 shadow-2xs'
+                      : 'border-slate-100 bg-slate-50/50 text-slate-400'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs ${
+                      preferences.inAppEnabled ? 'bg-blue-100 text-[#0066cc]' : 'bg-slate-200 text-slate-400'
+                    }`}>
+                      <Bell className="w-3.5 h-3.5" />
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-slate-800">In-App Notification Center</p>
-                      <p className="text-[11px] text-slate-500">Live notifications in the portal</p>
+                      <p className="text-xs font-bold leading-none">In-App</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Live Portal Inbox</p>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => toggleField('inAppEnabled')}
-                    className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${
-                      preferences.inAppEnabled ? 'bg-blue-600 justify-end' : 'bg-slate-200 justify-start'
-                    }`}
-                  >
-                    <span className="w-4 h-4 rounded-full bg-white shadow-xs" />
-                  </button>
+                  <div className={`w-8 h-4 rounded-full transition-colors flex items-center p-0.5 ${
+                    preferences.inAppEnabled ? 'bg-[#0066cc] justify-end' : 'bg-slate-300 justify-start'
+                  }`}>
+                    <span className="w-3 h-3 rounded-full bg-white shadow-xs" />
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Notification Topics */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                Alert Topics
-              </h4>
+            <div className="space-y-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block px-1">
+                Alert Categories
+              </span>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100">
+              <div className="space-y-1.5">
+                <label className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 hover:bg-slate-50/80 cursor-pointer transition-colors text-xs font-medium text-slate-800">
                   <div className="flex items-center gap-2.5">
-                    <Clock className="w-4 h-4 text-slate-500" />
-                    <span className="text-xs font-medium text-slate-800">Appointment Reminders (24h, 2h, 30m)</span>
+                    <Clock className="w-4 h-4 text-[#0066cc]" />
+                    <span>Appointment Reminders (24h, 2h, 30m)</span>
                   </div>
                   <input
                     type="checkbox"
                     checked={preferences.remindersEnabled}
                     onChange={() => toggleField('remindersEnabled')}
-                    className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                    className="rounded text-[#0066cc] focus:ring-[#0066cc] h-4 w-4 cursor-pointer"
                   />
-                </div>
+                </label>
 
-                <div className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100">
+                <label className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 hover:bg-slate-50/80 cursor-pointer transition-colors text-xs font-medium text-slate-800">
                   <div className="flex items-center gap-2.5">
-                    <CreditCard className="w-4 h-4 text-slate-500" />
-                    <span className="text-xs font-medium text-slate-800">Payment Confirmations & Receipts</span>
+                    <CreditCard className="w-4 h-4 text-[#0066cc]" />
+                    <span>Payment Receipts & Invoices</span>
                   </div>
                   <input
                     type="checkbox"
                     checked={preferences.paymentAlertsEnabled}
                     onChange={() => toggleField('paymentAlertsEnabled')}
-                    className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                    className="rounded text-[#0066cc] focus:ring-[#0066cc] h-4 w-4 cursor-pointer"
                   />
-                </div>
+                </label>
 
-                <div className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100">
+                <label className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 hover:bg-slate-50/80 cursor-pointer transition-colors text-xs font-medium text-slate-800">
                   <div className="flex items-center gap-2.5">
-                    <RotateCcw className="w-4 h-4 text-slate-500" />
-                    <span className="text-xs font-medium text-slate-800">Refund Status & Credit Updates</span>
+                    <RotateCcw className="w-4 h-4 text-[#0066cc]" />
+                    <span>Refund Updates & Bank Credits</span>
                   </div>
                   <input
                     type="checkbox"
                     checked={preferences.refundAlertsEnabled}
                     onChange={() => toggleField('refundAlertsEnabled')}
-                    className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                    className="rounded text-[#0066cc] focus:ring-[#0066cc] h-4 w-4 cursor-pointer"
                   />
-                </div>
+                </label>
               </div>
             </div>
 
-            {/* Mandatory policy note */}
-            <div className="p-3 bg-slate-50 rounded-xl flex items-start gap-2.5 border border-slate-200/60">
-              <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-              <p className="text-[11px] text-slate-600 leading-tight">
-                Mandatory transactional communications (such as cancellation notices, security alerts, and critical schedule conflicts) remain active.
+            {/* Compliance Note */}
+            <div className="p-3 bg-slate-50 rounded-xl flex items-start gap-2 border border-slate-100">
+              <ShieldCheck className="w-4 h-4 text-[#0066cc] shrink-0 mt-0.5" />
+              <p className="text-[11px] text-slate-500 leading-tight">
+                Critical transactional alerts (such as doctor cancellations, reschedule confirmations, and security notices) are always delivered.
               </p>
             </div>
 
             {/* Action Buttons */}
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => onOpenChange(false)}
                 disabled={saving}
+                className="text-xs h-9 rounded-xl px-4"
               >
                 Cancel
               </Button>
@@ -273,7 +311,7 @@ export function NotificationPreferencesDialog({
                 size="sm"
                 onClick={handleSave}
                 disabled={saving}
-                className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1.5"
+                className="bg-[#0066cc] hover:bg-[#0055b3] text-white text-xs h-9 rounded-xl px-5 font-semibold flex items-center gap-1.5 shadow-xs"
               >
                 {saving ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -289,4 +327,3 @@ export function NotificationPreferencesDialog({
     </Dialog>
   );
 }
-

@@ -69,6 +69,12 @@ export class Appointment {
   @Column({ type: 'timestamp', nullable: true, default: null })
   completedAt: Date | null;
 
+  @Column({ type: 'text', nullable: true, default: null })
+  clinicalNotes: string | null;
+
+  @Column({ type: 'text', nullable: true, default: null })
+  reasonForVisit: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

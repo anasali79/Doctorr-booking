@@ -107,9 +107,9 @@ export function DoctorSidebarLayout({
     },
     {
       label: 'Patients',
-      href: '/doctor/appointments?filter=patients',
+      href: '/doctor/patients',
       icon: Users,
-      active: pathname.includes('patients'),
+      active: pathname.startsWith('/doctor/patients'),
     },
     {
       label: 'Availability',

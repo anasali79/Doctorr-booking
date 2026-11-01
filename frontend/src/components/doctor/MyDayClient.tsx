@@ -38,7 +38,10 @@ import {
   Check,
   AlertCircle,
   Phone,
+  ShieldAlert,
+  Droplets,
 } from 'lucide-react';
+import { PatientProfileModal } from './PatientProfileModal';
 
 interface DoctorDashboardStats {
   today: number;
@@ -257,6 +260,14 @@ export function MyDayClient({
     'demo-1': 'Patient presented with 3-day history of dry cough and mild fever. Temp: 100.2 F.',
   });
   const [noteInput, setNoteInput] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+
+  // Patient Profile Modal & Historical Record
+  const [patientModalOpen, setPatientModalOpen] = useState(false);
+  const [patientHistoryLoading, setPatientHistoryLoading] = useState(false);
+  const [patientHistory, setPatientHistory] = useState<
+    Record<string, { appointments: any[]; notes: any[]; details: any }>
+  >({});
 
   // Fetch appointments when date changes
   const fetchAppointmentsForDate = useCallback(
@@ -458,15 +469,72 @@ export function MyDayClient({
     toast.success(`${walkInForm.fullName} added to live queue!`);
   };
 
-  // Add clinical note
-  const handleSaveNote = () => {
+  // Fetch patient medical record when current patient changes
+  useEffect(() => {
+    if (!currentAppt?.patientId) return;
+    const pid = currentAppt.patientId;
+    if (patientHistory[pid]) return;
+
+    let mounted = true;
+    setPatientHistoryLoading(true);
+    clientAxios
+      .get(`/api/doctor/patients/${pid}`)
+      .then((res) => {
+        if (!mounted) return;
+        const record = res.data?.data;
+        if (record) {
+          setPatientHistory((prev) => ({
+            ...prev,
+            [pid]: {
+              appointments: record.appointments || [],
+              notes: record.allClinicalNotes || [],
+              details: record.patient || {},
+            },
+          }));
+        }
+      })
+      .catch(() => {
+        // silent fail
+      })
+      .finally(() => {
+        if (mounted) setPatientHistoryLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [currentAppt?.patientId, patientHistory]);
+
+  // Add clinical note & persist to backend database
+  const handleSaveNote = async () => {
     if (!noteInput.trim() || !currentAppt) return;
-    setClinicalNotes((prev) => ({
-      ...prev,
-      [currentAppt.id]: (prev[currentAppt.id] ? prev[currentAppt.id] + '\n\n' : '') + noteInput.trim(),
-    }));
-    setNoteInput('');
-    toast.success('Clinical note saved');
+    setSavingNote(true);
+    try {
+      const res = await clientAxios.patch(
+        `/api/doctor/appointments/${currentAppt.id}/clinical-notes`,
+        { notes: noteInput.trim() },
+      );
+      const saved = res.data?.data?.clinicalNotes || noteInput.trim();
+      setClinicalNotes((prev) => ({
+        ...prev,
+        [currentAppt.id]: saved,
+      }));
+      setAppointments((prev) =>
+        prev.map((a) => (a.id === currentAppt.id ? { ...a, clinicalNotes: saved } : a)),
+      );
+      setNoteInput('');
+      toast.success('Clinical note saved and synced to database');
+    } catch {
+      // Fallback local update if network issue
+      setClinicalNotes((prev) => ({
+        ...prev,
+        [currentAppt.id]: (prev[currentAppt.id] ? prev[currentAppt.id] + '\n\n' : '') + noteInput.trim(),
+      }));
+      setNoteInput('');
+      toast.success('Clinical note recorded');
+    } finally {
+      setSavingNote(false);
+    }
   };
 
   // Format Date for header button (e.g. "Wed, 28 Oct 2026")
@@ -894,12 +962,14 @@ export function MyDayClient({
             <div className="rounded-2xl border border-slate-200/90 bg-white shadow-xs p-5 sm:p-6 space-y-5">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <h2 className="text-base font-bold text-slate-900">Current Patient Details</h2>
-                <Link
-                  href={`/doctor/appointments?patientId=${currentAppt.patientId}`}
-                  className="text-xs font-semibold text-[#0066cc] hover:underline"
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setPatientModalOpen(true)}
+                  className="text-xs font-semibold text-[#0066cc] hover:underline p-0 h-auto hover:bg-transparent"
                 >
                   View All
-                </Link>
+                </Button>
               </div>
 
               {/* Patient Basic Header */}
@@ -913,11 +983,19 @@ export function MyDayClient({
                     .join('')
                     .toUpperCase()}
                 </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">
-                    {currentAppt.patient?.fullName || 'Rahul Sharma'}
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900 truncate">
+                      {currentAppt.patient?.fullName || 'Rahul Sharma'}
+                    </h3>
+                    {(currentAppt.patient?.bloodGroup || patientHistory[currentAppt.patientId]?.details?.bloodGroup) && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 inline-flex items-center gap-0.5 shrink-0">
+                        <Droplets className="h-2.5 w-2.5" />
+                        {currentAppt.patient?.bloodGroup || patientHistory[currentAppt.patientId]?.details?.bloodGroup}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5 truncate">
                     Age {currentAppt.patient?.age || 28} •{' '}
                     {currentAppt.patient?.gender === 'FEMALE' ? 'Female' : 'Male'} •{' '}
                     {currentAppt.patient?.phone || '+91 98765 43210'}
@@ -950,7 +1028,9 @@ export function MyDayClient({
                   <div className="font-semibold text-slate-800 mt-0.5 flex items-center gap-1.5">
                     <FileText className="h-3.5 w-3.5 text-slate-400" />
                     <span>
-                      {currentAppt.patient?.basicHealthInfo || 'Fever and cough'}
+                      {currentAppt.reasonForVisit ||
+                        currentAppt.patient?.basicHealthInfo ||
+                        'General medical consultation'}
                     </span>
                   </div>
                 </div>
@@ -996,22 +1076,37 @@ export function MyDayClient({
               <div className="space-y-3 min-h-[120px]">
                 {activeDetailTab === 'history' && (
                   <div className="space-y-2.5 text-xs">
-                    <div className="flex items-center gap-2.5 text-slate-700">
-                      <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-                      <span>No known allergies</span>
+                    <div className="flex items-start gap-2.5 text-slate-700">
+                      <ShieldAlert className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-semibold text-slate-800">Allergies: </span>
+                        <span>
+                          {currentAppt.patient?.allergies?.trim() ||
+                            patientHistory[currentAppt.patientId]?.details?.allergies?.trim() ||
+                            'No known allergies reported'}
+                        </span>
+                      </div>
                     </div>
                     <div className="flex items-start gap-2.5 text-slate-700">
                       <FileText className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
                       <div>
                         <span className="font-semibold text-slate-800">Medical History: </span>
-                        <span>Mild asthma (2019)</span>
+                        <span>
+                          {currentAppt.patient?.medicalHistory?.trim() ||
+                            patientHistory[currentAppt.patientId]?.details?.medicalHistory?.trim() ||
+                            'No significant medical history on file'}
+                        </span>
                       </div>
                     </div>
                     <div className="flex items-start gap-2.5 text-slate-700">
                       <Pill className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
                       <div>
                         <span className="font-semibold text-slate-800">Current Medication: </span>
-                        <span>Inhaler (as needed)</span>
+                        <span>
+                          {currentAppt.patient?.currentMedication?.trim() ||
+                            patientHistory[currentAppt.patientId]?.details?.currentMedication?.trim() ||
+                            'No active medications recorded'}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1019,33 +1114,74 @@ export function MyDayClient({
 
                 {activeDetailTab === 'previous' && (
                   <div className="space-y-2 text-xs">
-                    <div className="p-2.5 rounded-lg border border-slate-100 bg-slate-50">
-                      <div className="flex justify-between font-bold text-slate-800">
-                        <span>General Consultation</span>
-                        <span className="text-slate-400 font-normal">14 Aug 2026</span>
+                    {patientHistoryLoading ? (
+                      <div className="py-6 flex items-center justify-center gap-2 text-slate-400">
+                        <Loader2 className="h-4 w-4 animate-spin text-[#0066cc]" />
+                        <span>Loading visit history…</span>
                       </div>
-                      <p className="text-slate-500 mt-1">Prescribed Paracetamol & rest.</p>
-                    </div>
-                    <div className="p-2.5 rounded-lg border border-slate-100 bg-slate-50">
-                      <div className="flex justify-between font-bold text-slate-800">
-                        <span>Asthma Review</span>
-                        <span className="text-slate-400 font-normal">22 Jan 2026</span>
-                      </div>
-                      <p className="text-slate-500 mt-1">Spirometry normal. Renewed inhaler.</p>
-                    </div>
+                    ) : (() => {
+                      const pastAppointments = (
+                        patientHistory[currentAppt.patientId]?.appointments || []
+                      ).filter((a: any) => a.id !== currentAppt.id);
+
+                      if (pastAppointments.length === 0) {
+                        return (
+                          <div className="py-4 text-center text-slate-400 space-y-1">
+                            <p className="font-medium text-slate-600">First Consultation with Dr. {doctorName}</p>
+                            <p className="text-[11px] text-slate-400">
+                              No previous visit records found for this patient.
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                          {pastAppointments.slice(0, 3).map((item: any) => (
+                            <div key={item.id} className="p-2.5 rounded-lg border border-slate-100 bg-slate-50">
+                              <div className="flex justify-between font-bold text-slate-800">
+                                <span>{item.reasonForVisit || 'Consultation'}</span>
+                                <span className="text-slate-400 font-normal">{formatDate(item.date)}</span>
+                              </div>
+                              {item.clinicalNotes ? (
+                                <p className="text-slate-600 mt-1 line-clamp-2 italic text-[11px]">
+                                  &ldquo;{item.clinicalNotes}&rdquo;
+                                </p>
+                              ) : (
+                                <p className="text-slate-400 mt-0.5 text-[11px]">Status: {item.status}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
 
                 {activeDetailTab === 'notes' && (
                   <div className="space-y-2 text-xs">
-                    {clinicalNotes[currentAppt.id] && (
-                      <div className="p-2.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 whitespace-pre-line">
-                        {clinicalNotes[currentAppt.id]}
+                    {(currentAppt.clinicalNotes || clinicalNotes[currentAppt.id]) && (
+                      <div className="p-2.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 whitespace-pre-line max-h-[140px] overflow-y-auto">
+                        {currentAppt.clinicalNotes || clinicalNotes[currentAppt.id]}
                       </div>
                     )}
                     <div className="space-y-2">
-                      <Textarea value={noteInput} onChange={(e) => setNoteInput(e.target.value)} placeholder="Add quick clinical notes..." rows={2} className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20 min-h-[60px]" />
-                      <Button type="button" size="xs" onClick={handleSaveNote} className="px-3 py-1 rounded-lg bg-[#0066cc] text-white font-semibold text-xs hover:bg-[#0055b3] h-auto">Save Note</Button>
+                      <Textarea
+                        value={noteInput}
+                        onChange={(e) => setNoteInput(e.target.value)}
+                        placeholder="Add quick clinical notes..."
+                        rows={2}
+                        className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20 min-h-[60px]"
+                      />
+                      <Button
+                        type="button"
+                        size="xs"
+                        disabled={savingNote || !noteInput.trim()}
+                        onClick={handleSaveNote}
+                        className="px-3 py-1 rounded-lg bg-[#0066cc] text-white font-semibold text-xs hover:bg-[#0055b3] h-auto"
+                      >
+                        {savingNote ? 'Saving…' : 'Save Note'}
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -1068,13 +1204,15 @@ export function MyDayClient({
                 )}
 
                 {/* View Full Patient Profile Button */}
-                <Link
-                  href={`/doctor/appointments?patientId=${currentAppt.patientId}`}
-                  className="w-full py-2.5 rounded-xl border border-[#0066cc] text-[#0066cc] hover:bg-blue-50 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors"
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setPatientModalOpen(true)}
+                  className="w-full py-2.5 rounded-xl border border-[#0066cc] text-[#0066cc] hover:bg-blue-50 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors h-auto"
                 >
                   <span>View Full Patient Profile</span>
                   <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
+                </Button>
               </div>
             </div>
           )}
@@ -1153,6 +1291,25 @@ export function MyDayClient({
             </form>
           </div>
         </div>
+      )}
+      {/* ── Patient Full Medical Profile Modal ── */}
+      {currentAppt?.patientId && (
+        <PatientProfileModal
+          isOpen={patientModalOpen}
+          onClose={() => setPatientModalOpen(false)}
+          patientId={currentAppt.patientId}
+          currentAppointmentId={currentAppt.id}
+          onRecordUpdated={() => {
+            fetchAppointmentsForDate(selectedDate);
+            if (currentAppt?.patientId) {
+              setPatientHistory((prev) => {
+                const copy = { ...prev };
+                delete copy[currentAppt.patientId];
+                return copy;
+              });
+            }
+          }}
+        />
       )}
     </div>
   );

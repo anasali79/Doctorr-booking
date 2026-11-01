@@ -311,10 +311,22 @@ export class NotificationService {
     if (!pref) {
       pref = this.preferenceRepo.create({
         userId,
-        ...dto,
+        emailEnabled: dto.emailEnabled ?? true,
+        inAppEnabled: dto.inAppEnabled ?? true,
+        whatsappEnabled: dto.whatsappEnabled ?? true,
+        smsEnabled: dto.smsEnabled ?? true,
+        remindersEnabled: dto.remindersEnabled ?? true,
+        paymentAlertsEnabled: dto.paymentAlertsEnabled ?? true,
+        refundAlertsEnabled: dto.refundAlertsEnabled ?? true,
       });
     } else {
-      Object.assign(pref, dto);
+      if (dto.emailEnabled !== undefined) pref.emailEnabled = dto.emailEnabled;
+      if (dto.inAppEnabled !== undefined) pref.inAppEnabled = dto.inAppEnabled;
+      if (dto.whatsappEnabled !== undefined) pref.whatsappEnabled = dto.whatsappEnabled;
+      if (dto.smsEnabled !== undefined) pref.smsEnabled = dto.smsEnabled;
+      if (dto.remindersEnabled !== undefined) pref.remindersEnabled = dto.remindersEnabled;
+      if (dto.paymentAlertsEnabled !== undefined) pref.paymentAlertsEnabled = dto.paymentAlertsEnabled;
+      if (dto.refundAlertsEnabled !== undefined) pref.refundAlertsEnabled = dto.refundAlertsEnabled;
     }
     const updated = await this.preferenceRepo.save(pref);
     return {

@@ -39,6 +39,10 @@ export interface Patient {
   phone: string;
   address?: string;
   basicHealthInfo?: string;
+  allergies?: string;
+  medicalHistory?: string;
+  currentMedication?: string;
+  bloodGroup?: string;
   contactDetails?: {
     phone: string;
     address?: string;
@@ -72,6 +76,8 @@ export interface Appointment {
   checkedInAt?: string | null;
   servedAt?: string | null;
   completedAt?: string | null;
+  clinicalNotes?: string | null;
+  reasonForVisit?: string | null;
   doctor?: Doctor;
   patient?: {
     id: string;
@@ -81,6 +87,10 @@ export interface Appointment {
     phone: string;
     address?: string;
     basicHealthInfo?: string;
+    allergies?: string;
+    medicalHistory?: string;
+    currentMedication?: string;
+    bloodGroup?: string;
   };
   schedulingType?: 'STREAM' | 'WAVE';
 }

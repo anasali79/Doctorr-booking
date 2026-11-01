@@ -26,6 +26,9 @@ import {
   Sparkles,
   HeartPulse,
   ExternalLink,
+  Droplets,
+  Pill,
+  ShieldAlert,
 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -491,6 +494,147 @@ export default async function PatientDashboardPage() {
             </h3>
             <p className="text-xs text-slate-500 mt-1">Consultation reminders & live token alerts</p>
           </Link>
+        </div>
+      </section>
+
+      {/* ═══════════════ MEDICAL HEALTH RECORD & CLINICAL NOTES ═══════════════ */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+              <HeartPulse className="h-5 w-5 text-[#0066cc]" />
+              <span>Medical Record & Health Notes</span>
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Your real clinical summary, allergies, and doctor consultation notes
+            </p>
+          </div>
+          <Link
+            href="/patient/profile"
+            className="text-xs font-semibold text-[#0066cc] hover:underline flex items-center gap-1"
+          >
+            <span>Edit Medical Profile</span>
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {/* Vitals & Demographics Card */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Health Summary</span>
+              {profile.bloodGroup && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                  <Droplets className="h-3 w-3" />
+                  {profile.bloodGroup}
+                </span>
+              )}
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <span className="text-[11px] text-slate-400 block">Registered Patient</span>
+                <span className="font-bold text-slate-900">{profile.fullName}</span>
+                <span className="text-slate-500 block text-[11px]">
+                  Age {profile.age} • {profile.gender === 'FEMALE' ? 'Female' : 'Male'}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-[11px] text-slate-400 block">Blood Group</span>
+                <span className="font-semibold text-slate-800">
+                  {profile.bloodGroup || 'Not specified'}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-[11px] text-slate-400 block">Primary Contact</span>
+                <span className="font-semibold text-slate-800">{profile.phone || 'None'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Allergies & Current Medications Card */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Allergies & Meds</span>
+              <ShieldAlert className="h-4 w-4 text-amber-500" />
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              <div>
+                <span className="text-[11px] text-slate-400 block flex items-center gap-1">
+                  <ShieldAlert className="h-3 w-3 text-rose-500" />
+                  <span>Known Allergies</span>
+                </span>
+                <p className="font-semibold text-slate-800 mt-0.5">
+                  {profile.allergies?.trim() || 'No known allergies reported'}
+                </p>
+              </div>
+
+              <div>
+                <span className="text-[11px] text-slate-400 block flex items-center gap-1">
+                  <FileText className="h-3 w-3 text-slate-400" />
+                  <span>Medical History & Conditions</span>
+                </span>
+                <p className="font-semibold text-slate-800 mt-0.5">
+                  {profile.medicalHistory?.trim() || 'No chronic conditions recorded'}
+                </p>
+              </div>
+
+              <div>
+                <span className="text-[11px] text-slate-400 block flex items-center gap-1">
+                  <Pill className="h-3 w-3 text-[#0066cc]" />
+                  <span>Current Medications</span>
+                </span>
+                <p className="font-semibold text-slate-800 mt-0.5">
+                  {profile.currentMedication?.trim() || 'No active medications recorded'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Doctor Clinical Advice & Consultation Notes */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-3 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Doctor Notes</span>
+                <Stethoscope className="h-4 w-4 text-[#0066cc]" />
+              </div>
+
+              {past.some((a: any) => Boolean(a.clinicalNotes && a.clinicalNotes.trim())) ? (
+                <div className="space-y-3">
+                  {past
+                    .filter((a: any) => Boolean(a.clinicalNotes && a.clinicalNotes.trim()))
+                    .slice(0, 2)
+                    .map((item: any) => (
+                      <div key={item.id} className="p-3 rounded-xl bg-blue-50/60 border border-blue-100 text-xs">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="font-bold text-slate-900">Dr. {item.doctor?.fullName || 'Physician'}</span>
+                          <span className="text-[10px] text-slate-400">{formatDate(item.date)}</span>
+                        </div>
+                        <p className="text-slate-700 whitespace-pre-line text-[11px]">{item.clinicalNotes}</p>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <div className="py-6 text-center text-slate-400 space-y-1">
+                  <FileText className="h-7 w-7 mx-auto text-slate-300" />
+                  <p className="text-xs font-medium text-slate-600">No clinical notes recorded yet</p>
+                  <p className="text-[11px] text-slate-400">
+                    Clinical advice recorded by your doctor during visits will appear here.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <Link
+              href="/patient/profile"
+              className="w-full py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold text-xs text-center transition-colors block"
+            >
+              Update Medical Information
+            </Link>
+          </div>
         </div>
       </section>
 

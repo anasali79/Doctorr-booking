@@ -31,9 +31,27 @@ export async function PATCH(req: NextRequest) {
 
     const body = await req.json();
 
+    // Sanitize payload: explicitly extract only valid boolean preference fields
+    const sanitizedBody: Record<string, boolean> = {};
+    const allowedKeys = [
+      'emailEnabled',
+      'inAppEnabled',
+      'whatsappEnabled',
+      'smsEnabled',
+      'remindersEnabled',
+      'paymentAlertsEnabled',
+      'refundAlertsEnabled',
+    ];
+
+    for (const key of allowedKeys) {
+      if (typeof body[key] === 'boolean') {
+        sanitizedBody[key] = body[key];
+      }
+    }
+
     const res = await apiFetch('/api/notifications/preferences', {
       method: 'PATCH',
-      body: JSON.stringify(body),
+      body: JSON.stringify(sanitizedBody),
       token,
     });
 

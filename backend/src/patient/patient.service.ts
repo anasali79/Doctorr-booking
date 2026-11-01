@@ -63,6 +63,10 @@ export class PatientService {
         address: profile.address,
       },
       basicHealthInfo: profile.basicHealthInfo,
+      allergies: profile.allergies,
+      medicalHistory: profile.medicalHistory,
+      currentMedication: profile.currentMedication,
+      bloodGroup: profile.bloodGroup,
       createdAt: profile.createdAt,
       updatedAt: profile.updatedAt,
     };

@@ -9,6 +9,7 @@ import { Repository, SelectQueryBuilder, In } from 'typeorm';
 import { Doctor } from './entities/doctor.entity';
 import { RecurringAvailability } from './entities/recurring-availability.entity';
 import { Appointment } from '../appointment/entities/appointment.entity';
+import { Patient } from '../patient/entities/patient.entity';
 import { AppointmentStatus } from '../common/enums/appointment-status.enum';
 import { getTodayIST } from '../common/utils/appointment.utils';
 import {
@@ -46,6 +47,8 @@ export class DoctorService {
     private readonly recurringRepository: Repository<RecurringAvailability>,
     @InjectRepository(Appointment)
     private readonly appointmentRepository: Repository<Appointment>,
+    @InjectRepository(Patient)
+    private readonly patientRepository: Repository<Patient>,
   ) {}
 
   async createProfile(userId: string, dto: CreateDoctorProfileDto) {
@@ -333,6 +336,316 @@ export class DoctorService {
       maxFutureBookingDays: profile.maxFutureBookingDays,
       createdAt: profile.createdAt,
       updatedAt: profile.updatedAt,
+    };
+  }
+
+  // ─── DOCTOR PATIENTS & MEDICAL RECORD MANAGEMENT ──────────────────────────
+
+  /**
+   * Retrieves all unique patients who have booked consultations with this doctor.
+   * Includes complete patient demographics, medical history tags, and consultation statistics.
+   */
+  async getDoctorPatients(userId: string, search?: string) {
+    const doctor = await this.findByUserIdOrFail(userId);
+
+    const appointments = await this.appointmentRepository.find({
+      where: { doctorId: doctor.id },
+      order: { date: 'DESC', startTime: 'DESC' },
+      relations: { patient: true },
+    });
+
+    // Group appointments by unique patientId
+    const patientMap = new Map<string, {
+      patient: Patient;
+      appointments: Appointment[];
+    }>();
+
+    for (const appt of appointments) {
+      if (!appt.patient || !appt.patientId) continue;
+      if (!patientMap.has(appt.patientId)) {
+        patientMap.set(appt.patientId, {
+          patient: appt.patient,
+          appointments: [],
+        });
+      }
+      patientMap.get(appt.patientId)!.appointments.push(appt);
+    }
+
+    const today = getTodayIST();
+    const result: Array<{
+      id: string;
+      fullName: string;
+      age: number;
+      gender: string;
+      phone: string;
+      address: string | null;
+      basicHealthInfo: string | null;
+      allergies: string | null;
+      medicalHistory: string | null;
+      currentMedication: string | null;
+      bloodGroup: string | null;
+      createdAt: Date;
+      totalAppointments: number;
+      completedVisits: number;
+      cancelledVisits: number;
+      lastVisit: {
+        id: string;
+        date: string;
+        startTime: string;
+        status: string;
+        clinicalNotes: string | null;
+        tokenNumber: number | null;
+        reasonForVisit: string | null;
+      } | null;
+      nextAppointment: {
+        id: string;
+        date: string;
+        startTime: string;
+        tokenNumber: number | null;
+      } | null;
+      recentClinicalNotes: Array<{
+        appointmentId: string;
+        date: string;
+        notes: string;
+      }>;
+    }> = [];
+
+    for (const [_, data] of patientMap.entries()) {
+      const p = data.patient;
+      const appts = data.appointments;
+
+      const completed = appts.filter((a) => a.status === AppointmentStatus.COMPLETED).length;
+      const cancelled = appts.filter((a) => a.status === AppointmentStatus.CANCELLED).length;
+      const lastAppt = appts[0] || null;
+
+      // Find earliest future confirmed appointment
+      const upcoming = appts
+        .filter((a) => a.date >= today && [AppointmentStatus.CONFIRMED, AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_CONSULTATION].includes(a.status))
+        .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))[0] || null;
+
+      // Collect clinical notes written by this doctor
+      const notesHistory = appts
+        .filter((a) => !!a.clinicalNotes && a.clinicalNotes.trim().length > 0)
+        .map((a) => ({
+          appointmentId: a.id,
+          date: a.date,
+          notes: a.clinicalNotes!,
+        }));
+
+      result.push({
+        id: p.id,
+        fullName: p.fullName,
+        age: p.age,
+        gender: p.gender,
+        phone: p.phone,
+        address: p.address,
+        basicHealthInfo: p.basicHealthInfo,
+        allergies: p.allergies,
+        medicalHistory: p.medicalHistory,
+        currentMedication: p.currentMedication,
+        bloodGroup: p.bloodGroup,
+        createdAt: p.createdAt,
+        totalAppointments: appts.length,
+        completedVisits: completed,
+        cancelledVisits: cancelled,
+        lastVisit: lastAppt ? {
+          id: lastAppt.id,
+          date: lastAppt.date,
+          startTime: lastAppt.startTime,
+          status: lastAppt.status,
+          clinicalNotes: lastAppt.clinicalNotes || null,
+          tokenNumber: lastAppt.tokenNumber,
+          reasonForVisit: lastAppt.reasonForVisit || null,
+        } : null,
+        nextAppointment: upcoming ? {
+          id: upcoming.id,
+          date: upcoming.date,
+          startTime: upcoming.startTime,
+          tokenNumber: upcoming.tokenNumber,
+        } : null,
+        recentClinicalNotes: notesHistory.slice(0, 5),
+      });
+    }
+
+    // Filter by search query if provided
+    let filtered = result;
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
+      filtered = result.filter((item) =>
+        item.fullName.toLowerCase().includes(q) ||
+        item.phone.includes(q) ||
+        (item.allergies && item.allergies.toLowerCase().includes(q)) ||
+        (item.medicalHistory && item.medicalHistory.toLowerCase().includes(q)) ||
+        (item.basicHealthInfo && item.basicHealthInfo.toLowerCase().includes(q)) ||
+        (item.bloodGroup && item.bloodGroup.toLowerCase().includes(q))
+      );
+    }
+
+    // Sort by last visit date descending
+    filtered.sort((a, b) => {
+      const dateA = a.lastVisit?.date || '';
+      const dateB = b.lastVisit?.date || '';
+      return dateB.localeCompare(dateA);
+    });
+
+    return {
+      success: true,
+      count: filtered.length,
+      data: filtered,
+    };
+  }
+
+  /**
+   * Retrieves full medical record & complete consultation history of a specific patient for this doctor.
+   */
+  async getDoctorPatientRecord(userId: string, patientId: string) {
+    const doctor = await this.findByUserIdOrFail(userId);
+
+    const patient = await this.patientRepository.findOne({
+      where: { id: patientId },
+    });
+    if (!patient) {
+      throw new NotFoundException('Patient record not found');
+    }
+
+    const appointments = await this.appointmentRepository.find({
+      where: { doctorId: doctor.id, patientId: patient.id },
+      order: { date: 'DESC', startTime: 'DESC' },
+    });
+
+    const completedVisits = appointments.filter(
+      (a) => a.status === AppointmentStatus.COMPLETED,
+    ).length;
+
+    const allClinicalNotes = appointments
+      .filter((a) => !!a.clinicalNotes && a.clinicalNotes.trim().length > 0)
+      .map((a) => ({
+        appointmentId: a.id,
+        date: a.date,
+        time: a.startTime,
+        tokenNumber: a.tokenNumber,
+        notes: a.clinicalNotes,
+        reasonForVisit: a.reasonForVisit || null,
+      }));
+
+    return {
+      success: true,
+      data: {
+        patient: {
+          id: patient.id,
+          fullName: patient.fullName,
+          age: patient.age,
+          gender: patient.gender,
+          phone: patient.phone,
+          address: patient.address,
+          basicHealthInfo: patient.basicHealthInfo,
+          allergies: patient.allergies,
+          medicalHistory: patient.medicalHistory,
+          currentMedication: patient.currentMedication,
+          bloodGroup: patient.bloodGroup,
+          registeredAt: patient.createdAt,
+        },
+        stats: {
+          totalVisits: appointments.length,
+          completedVisits,
+          lastVisitDate: appointments[0]?.date || null,
+        },
+        appointments: appointments.map((a) => ({
+          id: a.id,
+          date: a.date,
+          startTime: a.startTime,
+          endTime: a.endTime,
+          status: a.status,
+          tokenNumber: a.tokenNumber,
+          paymentStatus: a.paymentStatus,
+          clinicalNotes: a.clinicalNotes || null,
+          reasonForVisit: a.reasonForVisit || null,
+          checkedInAt: a.checkedInAt,
+          completedAt: a.completedAt,
+        })),
+        allClinicalNotes,
+      },
+    };
+  }
+
+  /**
+   * Saves or appends clinical consultation notes for a specific appointment.
+   */
+  async saveAppointmentClinicalNotes(
+    userId: string,
+    appointmentId: string,
+    notes: string,
+    reasonForVisit?: string,
+  ) {
+    const doctor = await this.findByUserIdOrFail(userId);
+
+    const appointment = await this.appointmentRepository.findOne({
+      where: { id: appointmentId },
+      relations: { patient: true },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException('Appointment not found');
+    }
+
+    if (appointment.doctorId !== doctor.id) {
+      throw new BadRequestException('Unauthorized: You are not the consulting doctor for this appointment');
+    }
+
+    appointment.clinicalNotes = notes;
+    if (reasonForVisit !== undefined) {
+      appointment.reasonForVisit = reasonForVisit;
+    }
+
+    const saved = await this.appointmentRepository.save(appointment);
+
+    return {
+      success: true,
+      message: 'Clinical notes saved successfully',
+      data: {
+        id: saved.id,
+        clinicalNotes: saved.clinicalNotes,
+        reasonForVisit: saved.reasonForVisit,
+        updatedAt: saved.updatedAt,
+      },
+    };
+  }
+
+  /**
+   * Updates patient clinical profile / allergies / conditions from the doctor consultation view.
+   */
+  async updatePatientMedicalRecordByDoctor(
+    userId: string,
+    patientId: string,
+    dto: {
+      allergies?: string;
+      medicalHistory?: string;
+      currentMedication?: string;
+      bloodGroup?: string;
+      basicHealthInfo?: string;
+    },
+  ) {
+    await this.findByUserIdOrFail(userId);
+
+    const patient = await this.patientRepository.findOne({
+      where: { id: patientId },
+    });
+    if (!patient) {
+      throw new NotFoundException('Patient record not found');
+    }
+
+    if (dto.allergies !== undefined) patient.allergies = dto.allergies;
+    if (dto.medicalHistory !== undefined) patient.medicalHistory = dto.medicalHistory;
+    if (dto.currentMedication !== undefined) patient.currentMedication = dto.currentMedication;
+    if (dto.bloodGroup !== undefined) patient.bloodGroup = dto.bloodGroup;
+    if (dto.basicHealthInfo !== undefined) patient.basicHealthInfo = dto.basicHealthInfo;
+
+    const saved = await this.patientRepository.save(patient);
+
+    return {
+      success: true,
+      message: 'Patient medical record updated successfully',
+      data: saved,
     };
   }
 }

@@ -28,5 +28,17 @@ export class UpdateNotificationPreferenceDto {
   @IsBoolean()
   @IsOptional()
   refundAlertsEnabled?: boolean;
-}
 
+  // Tolerant optional fields so clients that pass metadata never 400
+  @IsOptional()
+  id?: string;
+
+  @IsOptional()
+  userId?: string;
+
+  @IsOptional()
+  createdAt?: any;
+
+  @IsOptional()
+  updatedAt?: any;
+}

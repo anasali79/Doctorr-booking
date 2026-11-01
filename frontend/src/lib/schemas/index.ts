@@ -23,6 +23,10 @@ export const patientProfileSchema = z.object({
   phone: z.string().trim().regex(/^[0-9]{10}$/, 'Phone number must be a valid 10-digit number'),
   address: z.string().trim().optional(),
   basicHealthInfo: z.string().trim().optional(),
+  allergies: z.string().trim().optional(),
+  medicalHistory: z.string().trim().optional(),
+  currentMedication: z.string().trim().optional(),
+  bloodGroup: z.string().trim().optional(),
 });
 
 export interface PatientProfileInput {
@@ -32,6 +36,10 @@ export interface PatientProfileInput {
   phone: string;
   address?: string;
   basicHealthInfo?: string;
+  allergies?: string;
+  medicalHistory?: string;
+  currentMedication?: string;
+  bloodGroup?: string;
 }
 
 export const doctorProfileSchema = z.object({

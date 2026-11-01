@@ -39,6 +39,18 @@ export class Patient {
   @Column({ type: 'text', nullable: true })
   basicHealthInfo: string | null;
 
+  @Column({ type: 'text', nullable: true, default: null })
+  allergies: string | null;
+
+  @Column({ type: 'text', nullable: true, default: null })
+  medicalHistory: string | null;
+
+  @Column({ type: 'text', nullable: true, default: null })
+  currentMedication: string | null;
+
+  @Column({ type: 'varchar', length: 10, nullable: true, default: null })
+  bloodGroup: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
