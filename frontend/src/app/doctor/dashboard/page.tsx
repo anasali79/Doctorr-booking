@@ -186,6 +186,7 @@ export default async function DoctorDashboardPage() {
           appointments={todayAppointments}
           allAppointments={allAppointments}
           isTodayOnly={false}
+          doctorId={profile?.id}
         />
       </section>
     </div>

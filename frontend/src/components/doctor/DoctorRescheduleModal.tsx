@@ -99,6 +99,17 @@ export function DoctorRescheduleModal({
     return Array.isArray(d) ? d : [];
   };
 
+  const isSlotBookable = (status?: string): boolean => {
+    if (!status) return false;
+    const s = status.toLowerCase().trim();
+    return (
+      s === 'available' ||
+      s === 'cancel and available for booking' ||
+      s === 'cancel_and_available' ||
+      s === 'open'
+    );
+  };
+
   // 1. Fetch smart 3-day slot suggestions when modal opens
   const fetchSmartSuggestions = useCallback(async () => {
     if (!appointment || !resolvedDoctorId) return;
@@ -130,26 +141,23 @@ export function DoctorRescheduleModal({
       const slots2: RawSlot[] = parseSlotData(res2);
       const slots3: RawSlot[] = parseSlotData(res3);
 
-      const availableStatuses = ['AVAILABLE', 'CANCEL_AND_AVAILABLE'];
-
       const now = new Date();
       const currentHoursMin = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
+      const filterValidSlots = (slots: RawSlot[], dateStr: string): RawSlot[] => {
+        return slots.filter((s) => {
+          if (!isSlotBookable(s.status)) return false;
+          if (dateStr === appointment.date && s.startTime === appointment.startTime) return false;
+          if (dateStr === todayStr && s.startTime <= currentHoursMin) return false;
+          return true;
+        });
+      };
+
+      const validDay1 = filterValidSlots(slots1, day1);
+      const validDay2 = filterValidSlots(slots2, day2);
+      const validDay3 = filterValidSlots(slots3, day3);
+
       const suggestions: SmartSlotOption[] = [];
-
-      // Filter Day 1 (exclude current slot, and if today exclude elapsed times)
-      const validDay1 = slots1.filter((s) => {
-        if (!availableStatuses.includes(s.status)) return false;
-        if (day1 === appointment.date && s.startTime === appointment.startTime) return false;
-        if (day1 === todayStr && s.startTime <= currentHoursMin) return false;
-        return true;
-      });
-
-      // Filter Day 2
-      const validDay2 = slots2.filter((s) => availableStatuses.includes(s.status));
-
-      // Filter Day 3
-      const validDay3 = slots3.filter((s) => availableStatuses.includes(s.status));
 
       // Day 1 Slots (Same-day best slots)
       if (validDay1.length > 0) {
@@ -158,7 +166,7 @@ export function DoctorRescheduleModal({
           date: day1,
           startTime: validDay1[0].startTime,
           endTime: validDay1[0].endTime,
-          tag: day1 === todayStr ? 'Today (Earliest)' : 'Same Day (Later)',
+          tag: day1 === todayStr ? 'Today (Earliest)' : 'Same Day (Earliest)',
           isToday: day1 === todayStr,
           isTomorrow: day1 === addDays(todayStr, 1),
         });
@@ -187,16 +195,33 @@ export function DoctorRescheduleModal({
           isTomorrow: day2 === addDays(todayStr, 1),
         });
 
-        if (suggestions.length < 4 && validDay2.length > 2) {
+        if (suggestions.length < 4 && validDay2.length > 1) {
           const midSlot = validDay2[Math.floor(validDay2.length / 2)];
-          suggestions.push({
-            date: day2,
-            startTime: midSlot.startTime,
-            endTime: midSlot.endTime,
-            tag: day2 === addDays(todayStr, 1) ? 'Tomorrow (Midday)' : `${getRelativeDayLabel(day2, todayStr)} (Midday)`,
-            isToday: false,
-            isTomorrow: day2 === addDays(todayStr, 1),
-          });
+          if (midSlot.startTime !== validDay2[0].startTime) {
+            suggestions.push({
+              date: day2,
+              startTime: midSlot.startTime,
+              endTime: midSlot.endTime,
+              tag: day2 === addDays(todayStr, 1) ? 'Tomorrow (Midday)' : `${getRelativeDayLabel(day2, todayStr)} (Midday)`,
+              isToday: false,
+              isTomorrow: day2 === addDays(todayStr, 1),
+            });
+          }
+        }
+
+        // If suggestions still < 3 and Day 2 has more slots, add an evening slot from Day 2
+        if (suggestions.length < 3 && validDay2.length > 2) {
+          const lastSlot = validDay2[validDay2.length - 1];
+          if (!suggestions.some((s) => s.date === day2 && s.startTime === lastSlot.startTime)) {
+            suggestions.push({
+              date: day2,
+              startTime: lastSlot.startTime,
+              endTime: lastSlot.endTime,
+              tag: day2 === addDays(todayStr, 1) ? 'Tomorrow (Evening)' : `${getRelativeDayLabel(day2, todayStr)} (Evening)`,
+              isToday: false,
+              isTomorrow: day2 === addDays(todayStr, 1),
+            });
+          }
         }
       }
 
@@ -206,10 +231,22 @@ export function DoctorRescheduleModal({
           date: day3,
           startTime: validDay3[0].startTime,
           endTime: validDay3[0].endTime,
-          tag: `${getRelativeDayLabel(day3, todayStr)} (Earliest)`,
+          tag: `${getRelativeDayLabel(day3, todayStr)} (Morning)`,
           isToday: false,
           isTomorrow: false,
         });
+
+        if (suggestions.length < 4 && validDay3.length > 2) {
+          const midSlot = validDay3[Math.floor(validDay3.length / 2)];
+          suggestions.push({
+            date: day3,
+            startTime: midSlot.startTime,
+            endTime: midSlot.endTime,
+            tag: `${getRelativeDayLabel(day3, todayStr)} (Afternoon)`,
+            isToday: false,
+            isTomorrow: false,
+          });
+        }
       }
 
       setSmartSlots(suggestions.slice(0, 4));
@@ -249,13 +286,12 @@ export function DoctorRescheduleModal({
           `/api/doctor/${resolvedDoctorId}/slots-proxy?date=${dateStr}`,
         );
         const slots: RawSlot[] = parseSlotData(res);
-        const availableStatuses = ['AVAILABLE', 'CANCEL_AND_AVAILABLE'];
         const todayStr = getTodayIST();
         const now = new Date();
         const currentHoursMin = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
         const filtered = slots.filter((s) => {
-          if (!availableStatuses.includes(s.status)) return false;
+          if (!isSlotBookable(s.status)) return false;
           if (dateStr === appointment?.date && s.startTime === appointment?.startTime) return false;
           if (dateStr === todayStr && s.startTime <= currentHoursMin) return false;
           return true;
