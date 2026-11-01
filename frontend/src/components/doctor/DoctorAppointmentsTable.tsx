@@ -37,12 +37,14 @@ interface DoctorAppointmentsTableProps {
   appointments: Appointment[];
   allAppointments?: Appointment[];
   isTodayOnly?: boolean;
+  doctorId?: string;
 }
 
 export function DoctorAppointmentsTable({
   appointments: initialAppointments,
   allAppointments: initialAllAppointments,
   isTodayOnly = false,
+  doctorId,
 }: DoctorAppointmentsTableProps) {
   const router = useRouter();
   const todayStr = getTodayIST();
@@ -443,6 +445,7 @@ export function DoctorAppointmentsTable({
         isOpen={!!reschedulingAppt}
         onClose={() => setReschedulingAppt(null)}
         appointment={reschedulingAppt}
+        doctorId={doctorId}
         onRescheduled={() => {
           router.refresh();
         }}
