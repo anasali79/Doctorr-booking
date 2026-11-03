@@ -1116,6 +1116,10 @@ export class PaymentService {
       throw new NotFoundException(`Appointment with ID ${dto.appointmentId} not found`);
     }
 
+    if (appointment.status === AppointmentStatus.COMPLETED) {
+      throw new BadRequestException('Cannot refund an appointment that has already been completed.');
+    }
+
     // Role check & ownership validation
     if (userRole === 'PATIENT') {
       const patient = await this.getPatientByUserId(userId);
