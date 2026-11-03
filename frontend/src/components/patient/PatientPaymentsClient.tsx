@@ -103,6 +103,12 @@ export function PatientPaymentsClient() {
   const handleConfirmRefund = async () => {
     if (!refundTarget || !refundTarget.appointment) return;
 
+    if (refundTarget.appointment.status === 'COMPLETED') {
+      toast.error('Completed appointments cannot be cancelled or refunded.');
+      setRefundTarget(null);
+      return;
+    }
+
     try {
       setRefunding(true);
       await clientAxios.post('/api/payment/refund', {
@@ -166,7 +172,15 @@ export function PatientPaymentsClient() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, apptStatus?: string) => {
+    if (apptStatus === 'COMPLETED' && status === 'COMPLETED') {
+      return (
+        <Badge className="bg-emerald-50 text-emerald-800 border-emerald-300 font-bold flex items-center gap-1 shadow-2xs">
+          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+          Paid & Completed
+        </Badge>
+      );
+    }
     switch (status) {
       case 'COMPLETED':
         return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">Paid</Badge>;
@@ -218,10 +232,17 @@ export function PatientPaymentsClient() {
           {payments.map((p) => {
             const amountInRupees = p.amount / 100;
             const remainingBalance = (p.amount - (p.amountRefunded || 0)) / 100;
+            const isAppointmentCompleted = p.appointment?.status === 'COMPLETED';
+            const isAppointmentCancelled = p.appointment?.status === 'CANCELLED';
+            const isAppointmentNoShow = p.appointment?.status === 'NO_SHOW';
+
+            // Only active/upcoming confirmed appointments that are NOT completed/cancelled/no-show can be cancelled for refund
             const isEligibleForRefund =
               p.status === 'COMPLETED' &&
               remainingBalance > 0 &&
-              p.appointment?.status !== 'CANCELLED';
+              !isAppointmentCompleted &&
+              !isAppointmentCancelled &&
+              !isAppointmentNoShow;
 
             return (
               <Card key={p.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs hover:border-slate-300 transition-all">
@@ -231,7 +252,7 @@ export function PatientPaymentsClient() {
                       <span className="text-sm font-bold text-slate-900">
                         {p.appointment?.doctor?.fullName ? `Dr. ${p.appointment.doctor.fullName}` : 'Consultation Booking'}
                       </span>
-                      {getStatusBadge(p.status)}
+                      {getStatusBadge(p.status, p.appointment?.status)}
                     </div>
 
                     <p className="text-xs text-slate-500 flex items-center gap-2">
@@ -270,11 +291,27 @@ export function PatientPaymentsClient() {
                         type="button"
                         variant="ghost"
                         onClick={() => handleOpenRefund(p)}
-                        className="mt-2 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-8 px-3 rounded-lg border border-rose-200"
+                        className="mt-2 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-8 px-3 rounded-lg border border-rose-200 cursor-pointer"
                       >
                         <RotateCcw className="w-3 h-3 mr-1" />
                         Cancel & Refund
                       </Button>
+                    )}
+
+                    {isAppointmentCompleted && p.status === 'COMPLETED' && (
+                      <div className="mt-2 flex flex-col items-end gap-1">
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold shadow-2xs">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Paid & Completed</span>
+                        </div>
+                        <a
+                          href="/patient/appointments"
+                          className="text-[11px] font-semibold text-[#0066cc] hover:underline flex items-center gap-1"
+                        >
+                          <span>View Visit & Rx</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </a>
+                      </div>
                     )}
 
                     {p.status === 'PENDING' && p.appointment && (
