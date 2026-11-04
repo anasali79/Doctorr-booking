@@ -8,6 +8,7 @@ export function middleware(request: NextRequest) {
   const token =
     request.cookies.get('token')?.value ||
     request.cookies.get('jwt')?.value ||
+    request.cookies.get('admin_token')?.value ||
     request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
   let session: SessionUser | null = null;
@@ -30,12 +31,32 @@ export function middleware(request: NextRequest) {
     }
   }
 
+  const isAdminAuthPage = pathname === '/admin/login';
+  const isAdminRoute = pathname.startsWith('/admin') && !isAdminAuthPage;
   const isAuthPage = pathname === '/login' || pathname === '/signup';
   const isDoctorRoute = pathname.startsWith('/doctor');
   const isPatientRoute = pathname.startsWith('/patient');
 
-  // If logged in and visiting login or signup, redirect to respective dashboard
+  // Admin login page: if already logged in as ADMIN, redirect to admin dashboard
+  if (isAdminAuthPage && session?.role === 'ADMIN') {
+    return NextResponse.redirect(new URL('/admin/dashboard', request.url));
+  }
+
+  // Protected Admin Routes: require session with role === 'ADMIN'
+  if (isAdminRoute) {
+    if (!session || session.role !== 'ADMIN') {
+      const adminLoginUrl = new URL('/admin/login', request.url);
+      adminLoginUrl.searchParams.set('next', pathname);
+      return NextResponse.redirect(adminLoginUrl);
+    }
+    return NextResponse.next();
+  }
+
+  // If logged in and visiting user login or signup, redirect to respective dashboard
   if (isAuthPage && session) {
+    if (session.role === 'ADMIN') {
+      return NextResponse.redirect(new URL('/admin/dashboard', request.url));
+    }
     const dest = session.role === 'DOCTOR' ? '/doctor/dashboard' : '/patient/dashboard';
     return NextResponse.redirect(new URL(dest, request.url));
   }
@@ -50,10 +71,12 @@ export function middleware(request: NextRequest) {
   // Role mismatch checks
   if (session) {
     if (isDoctorRoute && session.role !== 'DOCTOR') {
-      return NextResponse.redirect(new URL('/patient/dashboard', request.url));
+      const dest = session.role === 'ADMIN' ? '/admin/dashboard' : '/patient/dashboard';
+      return NextResponse.redirect(new URL(dest, request.url));
     }
     if (isPatientRoute && session.role !== 'PATIENT') {
-      return NextResponse.redirect(new URL('/doctor/dashboard', request.url));
+      const dest = session.role === 'ADMIN' ? '/admin/dashboard' : '/doctor/dashboard';
+      return NextResponse.redirect(new URL(dest, request.url));
     }
   }
 
@@ -61,5 +84,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/patient/:path*', '/doctor/:path*', '/login', '/signup'],
+  matcher: ['/patient/:path*', '/doctor/:path*', '/admin/:path*', '/login', '/signup'],
 };

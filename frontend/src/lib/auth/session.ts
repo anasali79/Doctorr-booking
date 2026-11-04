@@ -18,6 +18,7 @@ export const getSession = cache(async function getSession(): Promise<SessionResu
   const token =
     cookieStore.get('token')?.value ||
     cookieStore.get('jwt')?.value ||
+    cookieStore.get('admin_token')?.value ||
     cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
   if (!token) {
