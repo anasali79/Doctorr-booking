@@ -15,6 +15,7 @@ import { SocketsModule } from './sockets/sockets.module';
 import { ReminderModule } from './reminder/reminder.module';
 import { PaymentModule } from './payment/payment.module';
 import { PrescriptionModule } from './prescription/prescription.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   controllers: [AppController],
@@ -42,6 +43,7 @@ import { PrescriptionModule } from './prescription/prescription.module';
     ReminderModule,
     PaymentModule,
     PrescriptionModule,
+    AdminModule,
   ],
 })
 export class AppModule {}
