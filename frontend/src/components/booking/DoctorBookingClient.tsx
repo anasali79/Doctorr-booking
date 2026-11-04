@@ -468,7 +468,20 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
               <div className="flex items-center gap-3.5 rounded-xl bg-slate-50 p-4 border border-slate-100">
                 <DoctorAvatar name={doctor.fullName} size="md" className="rounded-xl border border-slate-200 shadow-2xs" />
                 <div>
-                  <h4 className="text-sm font-bold text-slate-900">{doctor.fullName}</h4>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-slate-900">{doctor.fullName}</h4>
+                    {doctor.isVerified ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[9px] font-bold text-emerald-700 shadow-2xs">
+                        <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                        <span>Verified</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[9px] font-bold text-amber-700 shadow-2xs">
+                        <AlertCircle className="w-2.5 h-2.5 text-amber-600" />
+                        <span>Unverified</span>
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs font-semibold text-slate-600 capitalize">
                     {doctor.specialization} • {doctor.qualification}
                   </p>

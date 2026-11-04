@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
 import { getDoctorProfile, getDoctorDashboard, getDoctorAppointments } from '@/lib/api/doctors';
+import { getDoctorVerificationStatus } from '@/lib/api/admin';
 import { DoctorAppointmentsTable } from '@/components/doctor/DoctorAppointmentsTable';
 import {
   CalendarDays,
@@ -36,6 +37,11 @@ export default async function DoctorDashboardPage() {
 
   if (!profile) {
     redirect('/doctor/profile-setup');
+  }
+
+  const verificationRes = await getDoctorVerificationStatus(token).catch(() => null);
+  if (verificationRes?.data?.status !== 'APPROVED') {
+    redirect('/doctor/verification');
   }
 
   const res: any = dashboardResult.status === 'fulfilled' ? dashboardResult.value : null;
@@ -102,9 +108,15 @@ export default async function DoctorDashboardPage() {
       <div className="relative rounded-2xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-xs overflow-hidden">
         <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
           <div>
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#0066cc]" />
-              <span>CAREUP CLINICIAN CONSOLE</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#0066cc]" />
+                <span>CAREUP CLINICIAN CONSOLE</span>
+              </div>
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-xs font-bold text-emerald-700 shadow-2xs">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Verified Practitioner</span>
+              </span>
             </div>
             <h1 className="mt-2 text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
               {profile.fullName}
