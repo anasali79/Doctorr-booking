@@ -75,7 +75,7 @@ export class NotificationController {
 
   // ─── Admin Delivery Monitoring & Manual Retry ────────────────────────────────
   @Get('admin/logs')
-  @Roles(Role.DOCTOR) // Doctor / Staff authorized for monitoring
+  @Roles(Role.ADMIN) // Restricted strictly to ADMIN
   getAdminLogs(
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '20',
@@ -91,13 +91,13 @@ export class NotificationController {
   }
 
   @Get('admin/stats')
-  @Roles(Role.DOCTOR)
+  @Roles(Role.ADMIN) // Restricted strictly to ADMIN
   getAdminStats() {
     return this.notificationService.getAdminDeliveryStats();
   }
 
   @Post('admin/:id/retry')
-  @Roles(Role.DOCTOR)
+  @Roles(Role.ADMIN) // Restricted strictly to ADMIN
   async retryDelivery(
     @Param(
       'id',
