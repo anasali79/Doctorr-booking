@@ -99,18 +99,6 @@ export function PatientAppointmentsClient({
   const nowIST = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
   const currentMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
 
-  // Helper to determine if an un-attended appointment slot has already ended
-  const isAppointmentExpired = (a: Appointment) => {
-    if (!a || !a.date) return false;
-    if (a.date < todayStr) return true;
-    if (a.date === todayStr && a.status === 'CONFIRMED') {
-      const [endH, endM] = (a.endTime || a.startTime || '00:00').split(':').map(Number);
-      const slotEndMinutes = (endH || 0) * 60 + (endM || 0);
-      return currentMinutes > slotEndMinutes;
-    }
-    return false;
-  };
-
   const pendingList = appointments.filter(
     (a) =>
       a.status === 'PENDING_PAYMENT' &&
@@ -121,13 +109,13 @@ export function PatientAppointmentsClient({
   const upcomingList = appointments.filter(
     (a) =>
       ['CONFIRMED', 'CHECKED_IN', 'IN_CONSULTATION'].includes(a.status) &&
-      !isAppointmentExpired(a),
+      a.date >= todayStr,
   );
 
   const pastList = appointments.filter(
     (a) =>
       ['COMPLETED', 'NO_SHOW'].includes(a.status) ||
-      isAppointmentExpired(a),
+      (['CONFIRMED', 'CHECKED_IN', 'IN_CONSULTATION'].includes(a.status) && a.date < todayStr),
   );
 
   const cancelledList = appointments.filter(
@@ -474,8 +462,7 @@ export function PatientAppointmentsClient({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {currentList.map((appt, index) => {
-            const isExpired = isAppointmentExpired(appt);
-            const displayStatus = isExpired ? 'NO_SHOW' : appt.status;
+            const displayStatus = appt.status;
             const isConfirmed = displayStatus === 'CONFIRMED';
             const displayToken = String(appt.tokenNumber || index + 1).padStart(2, '0');
             return (
@@ -582,7 +569,7 @@ export function PatientAppointmentsClient({
                 )}
 
                 {/* Live Queue Tracker button */}
-                {!isExpired && (appt.status === 'CONFIRMED' || appt.status === 'CHECKED_IN' || appt.status === 'IN_CONSULTATION') && (
+                {(appt.status === 'CONFIRMED' || appt.status === 'CHECKED_IN' || appt.status === 'IN_CONSULTATION') && appt.date >= todayStr && (
                   <Button
                     type="button"
                     variant="black"
@@ -617,8 +604,8 @@ export function PatientAppointmentsClient({
                   </div>
                 )}
 
-                {/* Prescription button for completed consultations */}
-                {appt.status === 'COMPLETED' && (
+                {/* Prescription button for completed consultations (only if prescription issued) */}
+                {appt.status === 'COMPLETED' && appt.hasPrescription && (
                   <div className="pt-2 border-t border-black/[0.06]">
                     <Button
                       type="button"
