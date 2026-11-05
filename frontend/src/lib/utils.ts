@@ -52,8 +52,10 @@ export function formatCurrency(amount: number | string | undefined | null): stri
 
 /** Returns today's date in IST (YYYY-MM-DD) */
 export function getTodayIST(): string {
-  const now = new Date();
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  const istDate = new Date(now.getTime() + istOffset);
-  return istDate.toISOString().split('T')[0];
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
 }
