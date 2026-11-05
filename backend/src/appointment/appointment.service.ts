@@ -522,7 +522,7 @@ export class AppointmentService {
         const prescriptions = apptIds.length > 0
           ? await this.prescriptionRepo.find({
               where: { appointmentId: In(apptIds) },
-              select: ['id', 'appointmentId'],
+              select: { id: true, appointmentId: true },
             })
           : [];
         const rxMap = new Map<string, string>();
@@ -1293,7 +1293,7 @@ export class AppointmentService {
     const prescriptions = apptIds.length > 0
       ? await this.prescriptionRepo.find({
           where: { appointmentId: In(apptIds) },
-          select: ['id', 'appointmentId'],
+          select: { id: true, appointmentId: true },
         })
       : [];
     const rxMap = new Map<string, string>();
@@ -1772,7 +1772,7 @@ export class AppointmentService {
     const prescriptions = apptIds.length > 0
       ? await this.prescriptionRepo.find({
           where: { appointmentId: In(apptIds) },
-          select: ['id', 'appointmentId'],
+          select: { id: true, appointmentId: true },
         })
       : [];
     const rxMap = new Map<string, string>();

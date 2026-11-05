@@ -604,7 +604,7 @@ export default async function PatientDashboardPage() {
                         <p className="text-slate-700 whitespace-pre-line text-[11px]">{item.clinicalNotes}</p>
                         {item.hasPrescription && (
                           <Link
-                            href="/patient/appointments"
+                            href="/patient/appointments?tab=PAST"
                             className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 hover:text-emerald-800 hover:underline mt-1.5"
                           >
                             <FileText className="h-3 w-3" />

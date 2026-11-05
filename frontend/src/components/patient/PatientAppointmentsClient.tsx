@@ -39,16 +39,24 @@ import {
 
 interface PatientAppointmentsClientProps {
   initialAppointments: Appointment[];
+  initialTab?: 'UPCOMING' | 'PAST' | 'CANCELLED' | 'PENDING';
 }
 
 export function PatientAppointmentsClient({
   initialAppointments,
+  initialTab = 'UPCOMING',
 }: PatientAppointmentsClientProps) {
   const router = useRouter();
   const [appointments, setAppointments] = useState(initialAppointments);
-  const [activeTab, setActiveTab] = useState<'UPCOMING' | 'PAST' | 'CANCELLED' | 'PENDING'>('UPCOMING');
+  const [activeTab, setActiveTab] = useState<'UPCOMING' | 'PAST' | 'CANCELLED' | 'PENDING'>(initialTab);
   const [retryingPaymentId, setRetryingPaymentId] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(Date.now());
+
+  React.useEffect(() => {
+    if (initialTab && initialTab !== activeTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   React.useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), 1000);
@@ -604,8 +612,8 @@ export function PatientAppointmentsClient({
                   </div>
                 )}
 
-                {/* Prescription button for completed consultations (only if prescription issued) */}
-                {appt.status === 'COMPLETED' && appt.hasPrescription && (
+                {/* Prescription button (whenever prescription issued) */}
+                {Boolean(appt.hasPrescription) && (
                   <div className="pt-2 border-t border-black/[0.06]">
                     <Button
                       type="button"

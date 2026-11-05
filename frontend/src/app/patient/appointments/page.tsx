@@ -8,12 +8,20 @@ import { Calendar, Search, Sparkles } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
-export default async function PatientAppointmentsPage() {
+export default async function PatientAppointmentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const { user, token } = await getSession();
 
   if (!user || user.role !== 'PATIENT' || !token) {
     redirect('/login');
   }
+
+  const resolvedParams = await searchParams;
+  const initialTab =
+    resolvedParams?.tab?.toUpperCase() === 'PAST' ? 'PAST' : 'UPCOMING';
 
   let appointments: any[] = [];
   try {
@@ -42,7 +50,10 @@ export default async function PatientAppointmentsPage() {
         </Link>
       </div>
 
-      <PatientAppointmentsClient initialAppointments={appointments} />
+      <PatientAppointmentsClient
+        initialAppointments={appointments}
+        initialTab={initialTab}
+      />
     </div>
   );
 }

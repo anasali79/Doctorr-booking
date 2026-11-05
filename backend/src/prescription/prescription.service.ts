@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -13,6 +14,7 @@ import { Patient } from '../patient/entities/patient.entity';
 import { Appointment } from '../appointment/entities/appointment.entity';
 import { AppointmentStatus } from '../common/enums/appointment-status.enum';
 import { Role } from '../common/enums/role.enum';
+import { AppointmentGateway, SOCKET_EVENTS } from '../sockets/appointment.gateway';
 
 @Injectable()
 export class PrescriptionService {
@@ -25,6 +27,8 @@ export class PrescriptionService {
     private readonly doctorRepo: Repository<Doctor>,
     @InjectRepository(Patient)
     private readonly patientRepo: Repository<Patient>,
+    @Optional()
+    private readonly appointmentGateway?: AppointmentGateway,
   ) {}
 
   private async getDoctorByUserId(userId: string): Promise<Doctor> {
@@ -122,6 +126,14 @@ export class PrescriptionService {
     }
 
     await this.appointmentRepo.save(appointment);
+
+    this.appointmentGateway?.emitAppointmentEvent(SOCKET_EVENTS.COMPLETED, {
+      appointmentId: appointment.id,
+      patientId: appointment.patientId,
+      doctorId: appointment.doctorId,
+      status: appointment.status,
+      updatedAt: new Date().toISOString(),
+    });
 
     return this.getPrescriptionById(savedPrescription.id, userId, Role.DOCTOR);
   }
