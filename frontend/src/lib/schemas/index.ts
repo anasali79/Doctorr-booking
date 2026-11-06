@@ -1,20 +1,6 @@
 import { z } from 'zod';
 
-export const loginSchema = z.object({
-  email: z.string().trim().email('Please enter a valid email address'),
-  password: z.string().min(1, 'Password is required'),
-});
-
-export type LoginInput = z.infer<typeof loginSchema>;
-
-export const signupSchema = z.object({
-  name: z.string().trim().min(2, 'Name must be at least 2 characters').max(100, 'Name is too long'),
-  email: z.string().trim().email('Please enter a valid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  role: z.enum(['DOCTOR', 'PATIENT']),
-});
-
-export type SignupInput = z.infer<typeof signupSchema>;
+export * from './auth';
 
 export const patientProfileSchema = z.object({
   fullName: z.string().trim().min(2, 'Full name must be at least 2 characters'),

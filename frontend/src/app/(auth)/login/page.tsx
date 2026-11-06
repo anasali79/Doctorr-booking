@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Loader2, Eye, EyeOff, ArrowRight, AlertCircle, Stethoscope, User, Sparkles } from 'lucide-react';
+import { Loader2, Eye, EyeOff, ArrowRight, AlertCircle, Stethoscope, User, Sparkles, MailCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { loginSchema, LoginInput } from '@/lib/schemas';
 import { BrandMark } from '@/components/ui/BrandMark';
@@ -20,6 +20,8 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  const [resendingVerification, setResendingVerification] = useState(false);
 
   const {
     register,
@@ -35,6 +37,7 @@ function LoginForm() {
     try {
       setLoading(true);
       setErrorMessage(null);
+      setUnverifiedEmail(null);
 
       const res = await clientAxios.post<{
         success: boolean;
@@ -58,12 +61,35 @@ function LoginForm() {
         router.push('/patient/dashboard');
       }
       router.refresh();
-    } catch (err: unknown) {
-      const msg = extractErrorMessage(err);
-      setErrorMessage(msg);
-      toast.error(msg);
+    } catch (err: any) {
+      const respData = err?.response?.data || err?.data;
+      const isUnverified = respData?.code === 'EMAIL_NOT_VERIFIED' || respData?.error?.includes('verify your email');
+
+      if (isUnverified) {
+        setUnverifiedEmail(respData?.email || data.email);
+        setErrorMessage(null);
+      } else {
+        const msg = extractErrorMessage(err);
+        setErrorMessage(msg);
+        toast.error(msg);
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!unverifiedEmail) return;
+    try {
+      setResendingVerification(true);
+      const res = await clientAxios.post<{ message: string }>('/api/auth/resend-verification', {
+        email: unverifiedEmail,
+      });
+      toast.success(res.data.message || 'Verification link sent! Please check your email.');
+    } catch (err: unknown) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setResendingVerification(false);
     }
   };
 
@@ -77,6 +103,7 @@ function LoginForm() {
       setValue('password', 'Patient@1234');
     }
     setErrorMessage(null);
+    setUnverifiedEmail(null);
   };
 
   return (
@@ -129,13 +156,45 @@ function LoginForm() {
           </div>
         </div>
 
-        {/* Error Banner */}
-        {errorMessage && (
+        {/* Unverified Email Alert Banner */}
+        {unverifiedEmail ? (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/90 p-3.5 text-xs text-amber-900">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+              <div className="flex-1 space-y-2">
+                <p className="font-semibold text-amber-950">Email verification required</p>
+                <p className="text-amber-800 leading-relaxed text-[11px]">
+                  Your email (<span className="font-medium text-amber-950">{unverifiedEmail}</span>) has not been verified yet. Please check your inbox for the verification link.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={resendingVerification}
+                  onClick={handleResendVerification}
+                  className="rounded-lg border-amber-300 bg-white text-xs font-semibold text-amber-900 hover:bg-amber-100/70 h-8 gap-1.5"
+                >
+                  {resendingVerification ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Sending link…
+                    </>
+                  ) : (
+                    <>
+                      <MailCheck className="h-3.5 w-3.5 text-amber-700" />
+                      Resend verification email
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : errorMessage ? (
           <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
             <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 mt-0.5" />
             <div className="flex-1 leading-relaxed">{errorMessage}</div>
           </div>
-        )}
+        ) : null}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>
@@ -155,6 +214,12 @@ function LoginForm() {
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-xs font-medium text-slate-700">Password</label>
+              <Link
+                href="/forgot-password"
+                className="text-xs font-semibold text-[#0066cc] hover:underline underline-offset-4"
+              >
+                Forgot password?
+              </Link>
             </div>
             <div className="relative">
               <Input

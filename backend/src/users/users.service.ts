@@ -18,13 +18,20 @@ export class UsersService {
     return this.usersRepository.findOne({ where: { id } });
   }
 
-  async create(data: {
-    name: string;
-    email: string;
-    password: string;
-    role: Role | string;
-  }): Promise<User> {
-    const user = this.usersRepository.create(data as Partial<User>);
+  async findByEmailVerificationToken(token: string): Promise<User | null> {
+    return this.usersRepository.findOne({ where: { emailVerificationToken: token } });
+  }
+
+  async findByResetPasswordToken(token: string): Promise<User | null> {
+    return this.usersRepository.findOne({ where: { resetPasswordToken: token } });
+  }
+
+  async save(user: User): Promise<User> {
+    return this.usersRepository.save(user);
+  }
+
+  async create(data: Partial<User>): Promise<User> {
+    const user = this.usersRepository.create(data);
     return this.usersRepository.save(user);
   }
 }

@@ -59,7 +59,11 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     if (error instanceof ApiError) {
       return NextResponse.json(
-        { error: error.message },
+        {
+          error: error.message,
+          code: (error.data as any)?.code,
+          email: (error.data as any)?.email,
+        },
         { status: error.status },
       );
     }

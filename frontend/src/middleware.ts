@@ -33,7 +33,11 @@ export function middleware(request: NextRequest) {
 
   const isAdminAuthPage = pathname === '/admin/login';
   const isAdminRoute = pathname.startsWith('/admin') && !isAdminAuthPage;
-  const isAuthPage = pathname === '/login' || pathname === '/signup';
+  const isAuthPage =
+    pathname === '/login' ||
+    pathname === '/signup' ||
+    pathname === '/forgot-password' ||
+    pathname === '/reset-password';
   const isDoctorRoute = pathname.startsWith('/doctor');
   const isPatientRoute = pathname.startsWith('/patient');
 

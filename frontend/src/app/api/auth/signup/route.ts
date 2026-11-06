@@ -10,8 +10,9 @@ export async function POST(req: NextRequest) {
 
     const backendRes = await apiFetch<{
       message: string;
+      requiresVerification?: boolean;
       user: { id: string; name: string; email: string; role: 'DOCTOR' | 'PATIENT' };
-      token: string;
+      token?: string;
     }>('/api/auth/signup', {
       method: 'POST',
       body: JSON.stringify(validated),
@@ -20,46 +21,50 @@ export async function POST(req: NextRequest) {
     const response = NextResponse.json({
       success: true,
       user: backendRes.user,
-      token: backendRes.token,
+      requiresVerification: backendRes.requiresVerification ?? true,
       message: backendRes.message,
     });
 
-    const cookieOptions = {
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
-      sameSite: 'lax' as const,
-      secure: process.env.NODE_ENV === 'production',
-    };
+    // If backend returns a token (e.g. if email verification is bypassed/turned off), set cookies
+    if (backendRes.token) {
+      const cookieOptions = {
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
+        sameSite: 'lax' as const,
+        secure: process.env.NODE_ENV === 'production',
+      };
 
-    // 1. Store as 'jwt' cookie
-    response.cookies.set({
-      ...cookieOptions,
-      name: 'jwt',
-      value: backendRes.token,
-      httpOnly: false,
-    });
+      response.cookies.set({
+        ...cookieOptions,
+        name: 'jwt',
+        value: backendRes.token,
+        httpOnly: false,
+      });
 
-    // 2. Store as 'token' cookie
-    response.cookies.set({
-      ...cookieOptions,
-      name: 'token',
-      value: backendRes.token,
-      httpOnly: false,
-    });
+      response.cookies.set({
+        ...cookieOptions,
+        name: 'token',
+        value: backendRes.token,
+        httpOnly: false,
+      });
 
-    // 3. Store as 'access_token' (httpOnly Next.js session)
-    response.cookies.set({
-      ...cookieOptions,
-      name: SESSION_COOKIE_NAME,
-      value: backendRes.token,
-      httpOnly: true,
-    });
+      response.cookies.set({
+        ...cookieOptions,
+        name: SESSION_COOKIE_NAME,
+        value: backendRes.token,
+        httpOnly: true,
+      });
+    }
 
     return response;
   } catch (error: any) {
     if (error instanceof ApiError) {
       return NextResponse.json(
-        { error: error.message },
+        {
+          error: error.message,
+          code: (error.data as any)?.code,
+          email: (error.data as any)?.email,
+        },
         { status: error.status },
       );
     }

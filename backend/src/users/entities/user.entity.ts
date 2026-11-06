@@ -24,6 +24,21 @@ export class User {
   @Column({ type: 'enum', enum: Role })
   role: Role;
 
+  @Column({ type: 'boolean', default: false })
+  isEmailVerified: boolean;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  emailVerificationToken: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  emailVerificationExpires: Date | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  resetPasswordToken: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  resetPasswordExpires: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

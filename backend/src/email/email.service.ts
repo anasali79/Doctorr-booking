@@ -157,17 +157,32 @@ export class EmailService {
       'schedula.sh@gmail.com';
     this.fromName =
       this.configService.get<string>('BREVO_FROM_NAME') || 'CareUp';
-    const configuredBase = this.configService.get<string>('APP_BASE_URL');
-    if (configuredBase) {
-      this.appBaseUrl = configuredBase.trim().replace(/\/+$/, '');
+    const configuredFrontend =
+      this.configService.get<string>('FRONTEND_URL') ||
+      this.configService.get<string>('CLIENT_BASE_URL');
+    const rawAppBase = (
+      this.configService.get<string>('APP_BASE_URL') || ''
+    ).trim().replace(/\/+$/, '');
+    const clientUrls = (
+      this.configService.get<string>('CLIENT_URL') || ''
+    )
+      .split(',')
+      .map((u) => u.trim().replace(/\/+$/, ''))
+      .filter(Boolean);
+
+    const isProd = this.configService.get<string>('NODE_ENV') === 'production';
+    const vercelUrl = clientUrls.find((u) => u.includes('vercel.app'));
+    const localUrl =
+      clientUrls.find((u) => u.includes('3000')) || 'http://localhost:3000';
+
+    if (configuredFrontend) {
+      this.appBaseUrl = configuredFrontend.trim().replace(/\/+$/, '');
+    } else if (rawAppBase && !rawAppBase.includes('onrender.com') && !rawAppBase.includes(':3001')) {
+      this.appBaseUrl = rawAppBase;
+    } else if (isProd && vercelUrl) {
+      this.appBaseUrl = vercelUrl;
     } else {
-      const clientUrls = (
-        this.configService.get<string>('CLIENT_URL') || ''
-      ).split(',');
-      const vercelUrl = clientUrls.find((u) => u.includes('vercel.app'));
-      const localUrl =
-        clientUrls.find((u) => u.includes('3000')) || 'http://localhost:3000';
-      this.appBaseUrl = (vercelUrl || localUrl).trim().replace(/\/+$/, '');
+      this.appBaseUrl = localUrl || vercelUrl || 'https://doctorbook-five.vercel.app';
     }
 
     if (this.apiKey && this.apiKey !== 'your_brevo_api_key_here') {
@@ -938,5 +953,130 @@ export class EmailService {
     };
 
     await this.sendEmail(to, subjects[status], htmlContent);
+  }
+
+  async sendVerificationEmail(
+    to: string,
+    name: string,
+    token: string,
+    clientOrigin?: string,
+  ): Promise<void> {
+    const baseUrl =
+      clientOrigin && !clientOrigin.includes('onrender.com') && !clientOrigin.includes(':3001')
+        ? clientOrigin.trim().replace(/\/+$/, '')
+        : this.appBaseUrl;
+    const verificationUrl = `${baseUrl}/verify-email?token=${token}`;
+    const bodyHtml = `
+      <p style="margin: 0 0 16px 0;">Hello ${name},</p>
+      <p style="margin: 0 0 16px 0;">
+        Thank you for registering with CareUp. To activate your account and start booking appointments or managing your clinical practice, please verify your email address.
+      </p>
+      <div style="background-color: #f8fafc; border-left: 4px solid #0066cc; padding: 12px 16px; margin: 20px 0; border-radius: 4px;">
+        <p style="margin: 0; font-size: 13px; color: #475569;">
+          <strong>Security Note:</strong> This verification link is valid for <strong>24 hours</strong>. If you did not create a CareUp account, you can safely ignore this email.
+        </p>
+      </div>
+      <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b;">
+        Or paste this link into your browser:
+      </p>
+      <p style="margin: 0; font-size: 12px; word-break: break-all; color: #0066cc;">
+        ${verificationUrl}
+      </p>
+    `;
+
+    const htmlContent = buildBaseEmailWrapper(
+      'EMAIL VERIFICATION',
+      '#eff6ff',
+      '#0066cc',
+      '#bae0fd',
+      'Verify your CareUp account',
+      bodyHtml,
+      'Verify Email Address',
+      verificationUrl,
+      baseUrl,
+    );
+
+    await this.sendEmail(to, 'Verify your email address - CareUp', htmlContent);
+  }
+
+  async sendPasswordResetEmail(
+    to: string,
+    name: string,
+    token: string,
+    clientOrigin?: string,
+  ): Promise<void> {
+    const baseUrl =
+      clientOrigin && !clientOrigin.includes('onrender.com') && !clientOrigin.includes(':3001')
+        ? clientOrigin.trim().replace(/\/+$/, '')
+        : this.appBaseUrl;
+    const resetUrl = `${baseUrl}/reset-password?token=${token}`;
+    const bodyHtml = `
+      <p style="margin: 0 0 16px 0;">Hello ${name},</p>
+      <p style="margin: 0 0 16px 0;">
+        We received a request to reset the password for your CareUp account. Click the button below to choose a new password.
+      </p>
+      <div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 12px 16px; margin: 20px 0; border-radius: 4px;">
+        <p style="margin: 0; font-size: 13px; color: #991b1b;">
+          <strong>Security Notice:</strong> This password reset link is valid for <strong>1 hour</strong> only. If you did not request this, please disregard this email — your password will remain secure and unchanged.
+        </p>
+      </div>
+      <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b;">
+        Or paste this link into your browser:
+      </p>
+      <p style="margin: 0; font-size: 12px; word-break: break-all; color: #0066cc;">
+        ${resetUrl}
+      </p>
+    `;
+
+    const htmlContent = buildBaseEmailWrapper(
+      'PASSWORD RESET',
+      '#fef2f2',
+      '#dc2626',
+      '#fecaca',
+      'Reset your CareUp password',
+      bodyHtml,
+      'Reset Password',
+      resetUrl,
+      baseUrl,
+    );
+
+    await this.sendEmail(to, 'Reset your password - CareUp', htmlContent);
+  }
+
+  async sendPasswordResetSuccessEmail(
+    to: string,
+    name: string,
+    clientOrigin?: string,
+  ): Promise<void> {
+    const baseUrl =
+      clientOrigin && !clientOrigin.includes('onrender.com') && !clientOrigin.includes(':3001')
+        ? clientOrigin.trim().replace(/\/+$/, '')
+        : this.appBaseUrl;
+    const loginUrl = `${baseUrl}/login`;
+    const bodyHtml = `
+      <p style="margin: 0 0 16px 0;">Hello ${name},</p>
+      <p style="margin: 0 0 16px 0;">
+        Your CareUp account password has been successfully updated. You can now log in using your new credentials.
+      </p>
+      <div style="background-color: #f0fdf4; border-left: 4px solid #16a34a; padding: 12px 16px; margin: 20px 0; border-radius: 4px;">
+        <p style="margin: 0; font-size: 13px; color: #166534;">
+          <strong>Security Notice:</strong> If you did not perform this password change, please contact our support team immediately.
+        </p>
+      </div>
+    `;
+
+    const htmlContent = buildBaseEmailWrapper(
+      'SECURITY NOTICE',
+      '#f0fdf4',
+      '#16a34a',
+      '#bbf7d0',
+      'Your password was changed',
+      bodyHtml,
+      'Sign In',
+      loginUrl,
+      baseUrl,
+    );
+
+    await this.sendEmail(to, 'Your CareUp password was updated', htmlContent);
   }
 }
