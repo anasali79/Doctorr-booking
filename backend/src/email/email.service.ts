@@ -104,13 +104,17 @@ function buildBaseEmailWrapper(
                 <td style="padding: 0 32px 28px 32px; color: #334155; font-size: 14px; line-height: 1.6;">
                   ${bodyHtml}
 
-                  ${ctaLabel && ctaUrl ? `
+                  ${
+                    ctaLabel && ctaUrl
+                      ? `
                     <div style="margin: 28px 0 8px 0; text-align: left;">
                       <a href="${ctaUrl}" target="_blank" style="display: inline-block; background-color: #0066cc; color: #ffffff; font-size: 14px; font-weight: 600; text-decoration: none; padding: 12px 28px; border-radius: 8px; letter-spacing: 0.2px;">
                         ${ctaLabel} &rarr;
                       </a>
                     </div>
-                  ` : ''}
+                  `
+                      : ''
+                  }
                 </td>
               </tr>
 
@@ -149,15 +153,20 @@ export class EmailService {
   constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.get<string>('BREVO_API_KEY') || null;
     this.fromEmail =
-      this.configService.get<string>('BREVO_FROM_EMAIL') || 'schedula.sh@gmail.com';
-    this.fromName = this.configService.get<string>('BREVO_FROM_NAME') || 'CareUp';
+      this.configService.get<string>('BREVO_FROM_EMAIL') ||
+      'schedula.sh@gmail.com';
+    this.fromName =
+      this.configService.get<string>('BREVO_FROM_NAME') || 'CareUp';
     const configuredBase = this.configService.get<string>('APP_BASE_URL');
     if (configuredBase) {
       this.appBaseUrl = configuredBase.trim().replace(/\/+$/, '');
     } else {
-      const clientUrls = (this.configService.get<string>('CLIENT_URL') || '').split(',');
+      const clientUrls = (
+        this.configService.get<string>('CLIENT_URL') || ''
+      ).split(',');
       const vercelUrl = clientUrls.find((u) => u.includes('vercel.app'));
-      const localUrl = clientUrls.find((u) => u.includes('3000')) || 'http://localhost:3000';
+      const localUrl =
+        clientUrls.find((u) => u.includes('3000')) || 'http://localhost:3000';
       this.appBaseUrl = (vercelUrl || localUrl).trim().replace(/\/+$/, '');
     }
 
@@ -170,16 +179,24 @@ export class EmailService {
     }
   }
 
-  async sendEmail(to: string, subject: string, htmlContent: string): Promise<boolean> {
+  async sendEmail(
+    to: string,
+    subject: string,
+    htmlContent: string,
+  ): Promise<boolean> {
     const textContent = htmlToPlainText(htmlContent);
 
     if (!this.apiKey || this.apiKey === 'your_brevo_api_key_here') {
-      this.logger.log(`[Mock Email Send]\nTo: ${to}\nSubject: ${subject}\nContent: ${textContent}`);
+      this.logger.log(
+        `[Mock Email Send]\nTo: ${to}\nSubject: ${subject}\nContent: ${textContent}`,
+      );
       return true;
     }
 
     try {
-      this.logger.log(`Sending email to ${to} with subject "${subject}" via Brevo...`);
+      this.logger.log(
+        `Sending email to ${to} with subject "${subject}" via Brevo...`,
+      );
 
       const response = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
@@ -294,12 +311,16 @@ export class EmailService {
                 <td style="padding: 5px 0; font-size: 13px; color: #64748b;">Time:</td>
                 <td style="padding: 5px 0; font-size: 14px; font-weight: 600; color: #0f172a;">${SVG_ICONS.clock} ${formattedTime}</td>
               </tr>
-              ${contactnumber ? `
+              ${
+                contactnumber
+                  ? `
                 <tr>
                   <td style="padding: 5px 0; font-size: 13px; color: #64748b;">Clinic Contact:</td>
                   <td style="padding: 5px 0; font-size: 13px; color: #334155;">${contactnumber}</td>
                 </tr>
-              ` : ''}
+              `
+                  : ''
+              }
             </table>
           </td>
         </tr>
@@ -321,7 +342,11 @@ export class EmailService {
       this.appBaseUrl,
     );
 
-    return this.sendEmail(to, `Appointment Confirmed: Dr. ${doctorName}`, htmlContent);
+    return this.sendEmail(
+      to,
+      `Appointment Confirmed: Dr. ${doctorName}`,
+      htmlContent,
+    );
   }
 
   async sendCancellationNotification(
@@ -355,7 +380,11 @@ export class EmailService {
       this.appBaseUrl,
     );
 
-    return this.sendEmail(to, `Appointment Cancelled: Dr. ${doctorName}`, htmlContent);
+    return this.sendEmail(
+      to,
+      `Appointment Cancelled: Dr. ${doctorName}`,
+      htmlContent,
+    );
   }
 
   async sendRescheduleNotification(
@@ -371,8 +400,12 @@ export class EmailService {
   ): Promise<boolean> {
     const formattedDate = formatDate(date);
     const formattedTime = formatTime(startTime);
-    const formattedPreviousDate = previousDate ? formatDate(previousDate) : null;
-    const formattedPreviousTime = previousTime ? formatTime(previousTime) : null;
+    const formattedPreviousDate = previousDate
+      ? formatDate(previousDate)
+      : null;
+    const formattedPreviousTime = previousTime
+      ? formatTime(previousTime)
+      : null;
 
     const bodyHtml = `
       <p style="margin: 0 0 16px 0;">Dear ${patientName},</p>
@@ -409,11 +442,15 @@ export class EmailService {
         </tr>
       </table>
 
-      ${formattedPreviousDate ? `
+      ${
+        formattedPreviousDate
+          ? `
         <div style="background-color: #f1f5f9; border-left: 3px solid #64748b; padding: 10px 14px; border-radius: 4px; margin-bottom: 16px;">
           <span style="font-size: 12px; color: #475569;"><strong>Previous Slot:</strong> <del>${formattedPreviousDate} at ${formattedPreviousTime}</del></span>
         </div>
-      ` : ''}
+      `
+          : ''
+      }
 
       <p style="margin: 16px 0 0 0;">Please arrive <strong>10 minutes prior</strong> to your rescheduled slot for check-in.</p>
     `;
@@ -499,7 +536,11 @@ export class EmailService {
       this.appBaseUrl,
     );
 
-    return this.sendEmail(to, `Reminder: Appointment ${leadTimeLabel} with Dr. ${doctorName}`, htmlContent);
+    return this.sendEmail(
+      to,
+      `Reminder: Appointment ${leadTimeLabel} with Dr. ${doctorName}`,
+      htmlContent,
+    );
   }
 
   async sendPaymentSuccess(
@@ -570,7 +611,11 @@ export class EmailService {
       this.appBaseUrl,
     );
 
-    return this.sendEmail(to, `Payment Successful: Consultation with Dr. ${doctorName}`, htmlContent);
+    return this.sendEmail(
+      to,
+      `Payment Successful: Consultation with Dr. ${doctorName}`,
+      htmlContent,
+    );
   }
 
   async sendRefundInitiated(
@@ -609,12 +654,16 @@ export class EmailService {
                 <td style="padding: 5px 0; font-size: 13px; color: #64748b;">Refund ID:</td>
                 <td style="padding: 5px 0; font-size: 13px; font-family: monospace; color: #334155;">${refundId}</td>
               </tr>
-              ${reason ? `
+              ${
+                reason
+                  ? `
                 <tr>
                   <td style="padding: 5px 0; font-size: 13px; color: #64748b;">Reason:</td>
                   <td style="padding: 5px 0; font-size: 13px; color: #334155;">${reason}</td>
                 </tr>
-              ` : ''}
+              `
+                  : ''
+              }
               <tr>
                 <td style="padding: 5px 0; font-size: 13px; color: #64748b;">Processing Window:</td>
                 <td style="padding: 5px 0; font-size: 13px; color: #64748b;">5 to 7 business days to original payment method</td>
@@ -637,7 +686,11 @@ export class EmailService {
       this.appBaseUrl,
     );
 
-    return this.sendEmail(to, `Refund Initiated: Consultation with Dr. ${doctorName}`, htmlContent);
+    return this.sendEmail(
+      to,
+      `Refund Initiated: Consultation with Dr. ${doctorName}`,
+      htmlContent,
+    );
   }
 
   async sendRefundCompleted(
@@ -671,7 +724,11 @@ export class EmailService {
       this.appBaseUrl,
     );
 
-    return this.sendEmail(to, `Refund Completed: Consultation with Dr. ${doctorName}`, htmlContent);
+    return this.sendEmail(
+      to,
+      `Refund Completed: Consultation with Dr. ${doctorName}`,
+      htmlContent,
+    );
   }
 
   async sendRefundFailed(
@@ -703,10 +760,18 @@ export class EmailService {
       this.appBaseUrl,
     );
 
-    return this.sendEmail(to, `Refund Notice for Consultation with Dr. ${doctorName}`, htmlContent);
+    return this.sendEmail(
+      to,
+      `Refund Notice for Consultation with Dr. ${doctorName}`,
+      htmlContent,
+    );
   }
 
-  async sendWelcomeEmail(to: string, name: string, role: string): Promise<void> {
+  async sendWelcomeEmail(
+    to: string,
+    name: string,
+    role: string,
+  ): Promise<void> {
     const bodyHtml = `
       <p style="margin: 0 0 16px 0;">Dear ${name},</p>
       <p style="margin: 0 0 16px 0;">
@@ -730,5 +795,148 @@ export class EmailService {
     );
 
     await this.sendEmail(to, 'Welcome to CareUp Healthcare', htmlContent);
+  }
+
+  async sendDoctorVerificationStatusEmail(
+    to: string,
+    doctorName: string,
+    status: 'approved' | 'rejected' | 'suspended' | 'resubmission_required',
+    reason?: string,
+  ): Promise<void> {
+    let badge: string;
+    let badgeBg: string;
+    let badgeColor: string;
+    let badgeBorder: string;
+    let title: string;
+    let ctaLabel: string;
+    let bodyHtml: string;
+
+    switch (status) {
+      case 'approved':
+        badge = 'APPROVED';
+        badgeBg = '#f0fdf4';
+        badgeColor = '#16a34a';
+        badgeBorder = '#86efac';
+        title = 'Your CareUp Doctor Account Has Been Approved';
+        ctaLabel = 'Go to Dashboard';
+        bodyHtml = `
+          <p style="margin: 0 0 16px 0;">Dear Dr. ${doctorName},</p>
+          <p style="margin: 0 0 16px 0;">
+            Congratulations! Your professional credentials have been reviewed and your CareUp doctor account has been <strong style="color: #16a34a;">approved</strong>.
+          </p>
+          <p style="margin: 0 0 16px 0;">
+            You can now access all doctor features including appointment management, patient records, and prescription tools.
+          </p>
+        `;
+        break;
+
+      case 'rejected':
+        badge = 'NOT APPROVED';
+        badgeBg = '#fff1f2';
+        badgeColor = '#be123c';
+        badgeBorder = '#fca5a5';
+        title = 'Your Verification Application Was Not Approved';
+        ctaLabel = 'Resubmit Application';
+        bodyHtml = `
+          <p style="margin: 0 0 16px 0;">Dear Dr. ${doctorName},</p>
+          <p style="margin: 0 0 16px 0;">
+            After reviewing your submitted credentials, we were unable to approve your doctor account at this time.
+          </p>
+          ${
+            reason
+              ? `
+          <div style="background-color: #fff1f2; border-left: 4px solid #be123c; padding: 14px 16px; border-radius: 6px; margin: 16px 0;">
+            <p style="margin: 0; font-size: 13px; color: #9f1239; font-weight: 600;">Reason for rejection:</p>
+            <p style="margin: 8px 0 0 0; font-size: 14px; color: #1e293b;">${reason}</p>
+          </div>
+          `
+              : ''
+          }
+          <p style="margin: 0 0 16px 0;">
+            Please correct the issues mentioned above and resubmit your application from the CareUp portal.
+          </p>
+        `;
+        break;
+
+      case 'suspended':
+        badge = 'SUSPENDED';
+        badgeBg = '#fff7ed';
+        badgeColor = '#c2410c';
+        badgeBorder = '#fed7aa';
+        title = 'Your CareUp Doctor Account Has Been Suspended';
+        ctaLabel = 'Contact Support';
+        bodyHtml = `
+          <p style="margin: 0 0 16px 0;">Dear Dr. ${doctorName},</p>
+          <p style="margin: 0 0 16px 0;">
+            Your CareUp doctor account has been <strong style="color: #c2410c;">suspended</strong> pending a review.
+          </p>
+          ${
+            reason
+              ? `
+          <div style="background-color: #fff7ed; border-left: 4px solid #c2410c; padding: 14px 16px; border-radius: 6px; margin: 16px 0;">
+            <p style="margin: 0; font-size: 13px; color: #9a3412; font-weight: 600;">Reason:</p>
+            <p style="margin: 8px 0 0 0; font-size: 14px; color: #1e293b;">${reason}</p>
+          </div>
+          `
+              : ''
+          }
+          <p style="margin: 0 0 16px 0;">
+            If you believe this is an error, please contact our support team. Your appointment history remains preserved.
+          </p>
+        `;
+        break;
+
+      case 'resubmission_required':
+        badge = 'ACTION REQUIRED';
+        badgeBg = '#fffbeb';
+        badgeColor = '#d97706';
+        badgeBorder = '#fcd34d';
+        title = 'Additional Documents Required for Verification';
+        ctaLabel = 'Resubmit Documents';
+        bodyHtml = `
+          <p style="margin: 0 0 16px 0;">Dear Dr. ${doctorName},</p>
+          <p style="margin: 0 0 16px 0;">
+            Our team has reviewed your verification submission and requires additional information or documents before we can proceed.
+          </p>
+          ${
+            reason
+              ? `
+          <div style="background-color: #fffbeb; border-left: 4px solid #d97706; padding: 14px 16px; border-radius: 6px; margin: 16px 0;">
+            <p style="margin: 0; font-size: 13px; color: #92400e; font-weight: 600;">What is needed:</p>
+            <p style="margin: 8px 0 0 0; font-size: 14px; color: #1e293b;">${reason}</p>
+          </div>
+          `
+              : ''
+          }
+          <p style="margin: 0 0 16px 0;">
+            Please log in to the CareUp portal, correct the requested items and resubmit your application.
+          </p>
+        `;
+        break;
+
+      default:
+        return;
+    }
+
+    const htmlContent = buildBaseEmailWrapper(
+      badge,
+      badgeBg,
+      badgeColor,
+      badgeBorder,
+      title,
+      bodyHtml,
+      ctaLabel,
+      `${this.appBaseUrl}/doctor/verification`,
+      this.appBaseUrl,
+    );
+
+    const subjects: Record<string, string> = {
+      approved: 'Your CareUp Doctor Account is Approved!',
+      rejected: 'CareUp Verification Update — Action Required',
+      suspended: 'Important: Your CareUp Account Has Been Suspended',
+      resubmission_required: 'CareUp: Additional Documents Required',
+    };
+
+    await this.sendEmail(to, subjects[status], htmlContent);
   }
 }

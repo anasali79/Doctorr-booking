@@ -1,4 +1,46 @@
-export type Role = 'DOCTOR' | 'PATIENT';
+export type Role = 'DOCTOR' | 'PATIENT' | 'ADMIN';
+
+export type VerificationStatus =
+  | 'NOT_SUBMITTED'
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'RESUBMISSION_REQUIRED'
+  | 'SUSPENDED';
+
+export interface DoctorVerification {
+  id?: string;
+  doctorId: string;
+  status: VerificationStatus;
+  fullName?: string | null;
+  degree?: string | null;
+  specialization?: string | null;
+  medicalRegistrationNumber?: string | null;
+  registrationAuthority?: string | null;
+  experience?: number | null;
+  clinicName?: string | null;
+  practiceAddress?: string | null;
+  consultationType?: string | null;
+  hasProfilePhoto?: boolean;
+  hasRegistrationCert?: boolean;
+  hasDegreeCert?: boolean;
+  hasSpecializationCert?: boolean;
+  rejectionReason?: string | null;
+  submittedAt?: string | null;
+  reviewedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AdminDashboardStats {
+  totalDoctors: number;
+  pendingVerifications: number;
+  approvedDoctors: number;
+  rejectedDoctors: number;
+  suspendedDoctors: number;
+  totalPatients: number;
+  totalAppointments: number;
+}
 
 export interface User {
   id: string;
@@ -27,6 +69,8 @@ export interface Doctor {
   allowFutureBooking: boolean;
   maxFutureBookingDays?: number | null;
   availabilityStatus?: string;
+  isVerified?: boolean;
+  verificationStatus?: string;
   user?: User;
 }
 

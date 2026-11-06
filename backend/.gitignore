@@ -6,3 +6,4 @@ dist/
 *.pem
 private.key
 /etc/secrets/
+uploads/

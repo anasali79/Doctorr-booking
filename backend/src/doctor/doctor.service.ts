@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder, In } from 'typeorm';
 import { Doctor } from './entities/doctor.entity';
 import { RecurringAvailability } from './entities/recurring-availability.entity';
+import { DoctorVerification } from './entities/doctor-verification.entity';
 import { Appointment } from '../appointment/entities/appointment.entity';
 import { Patient } from '../patient/entities/patient.entity';
 import { AppointmentStatus } from '../common/enums/appointment-status.enum';
@@ -23,7 +24,9 @@ import {
   VALID_SPECIALIZATIONS,
 } from './constants/specializations';
 
-function mapRecurringToConsultationHours(recurring: RecurringAvailability[]): Record<string, { start: string; end: string }[]> {
+function mapRecurringToConsultationHours(
+  recurring: RecurringAvailability[],
+): Record<string, { start: string; end: string }[]> {
   const hours: Record<string, { start: string; end: string }[]> = {};
   for (const slot of recurring) {
     const day = slot.dayOfWeek.toLowerCase();
@@ -49,6 +52,8 @@ export class DoctorService {
     private readonly appointmentRepository: Repository<Appointment>,
     @InjectRepository(Patient)
     private readonly patientRepository: Repository<Patient>,
+    @InjectRepository(DoctorVerification)
+    private readonly verificationRepository: Repository<DoctorVerification>,
   ) {}
 
   async createProfile(userId: string, dto: CreateDoctorProfileDto) {
@@ -64,16 +69,22 @@ export class DoctorService {
 
   async getProfile(userId: string) {
     const profile = await this.findByUserIdOrFail(userId);
-    const recurring = await this.recurringRepository.find({ where: { doctorId: profile.id } });
-    return this.toResponse(profile, recurring);
+    const [recurring, verification] = await Promise.all([
+      this.recurringRepository.find({ where: { doctorId: profile.id } }),
+      this.verificationRepository.findOne({ where: { doctorId: profile.id } }),
+    ]);
+    return this.toResponse(profile, recurring, verification?.status);
   }
 
   async updateProfile(userId: string, dto: UpdateDoctorProfileDto) {
     const profile = await this.findByUserIdOrFail(userId);
     Object.assign(profile, dto);
     const saved = await this.doctorRepository.save(profile);
-    const recurring = await this.recurringRepository.find({ where: { doctorId: profile.id } });
-    return this.toResponse(profile, recurring);
+    const [recurring, verification] = await Promise.all([
+      this.recurringRepository.find({ where: { doctorId: profile.id } }),
+      this.verificationRepository.findOne({ where: { doctorId: profile.id } }),
+    ]);
+    return this.toResponse(saved, recurring, verification?.status);
   }
 
   /**
@@ -101,7 +112,9 @@ export class DoctorService {
       return String(val).split('T')[0];
     };
 
-    const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const nowIST = new Date(
+      new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
+    );
     const currentMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
 
     // Check each appointment: if CONFIRMED and slot end time has elapsed on todayStr (or past date), auto-mark NO_SHOW
@@ -110,41 +123,63 @@ export class DoctorService {
       if (a.status === AppointmentStatus.CONFIRMED) {
         let isPastTime = false;
         if (aDate === todayStr) {
-          const [endH, endM] = (a.endTime || a.startTime).split(':').map(Number);
+          const [endH, endM] = (a.endTime || a.startTime)
+            .split(':')
+            .map(Number);
           const endMinutes = (endH || 0) * 60 + (endM || 0);
           isPastTime = currentMinutes > endMinutes;
         }
         if (aDate < todayStr || isPastTime) {
           a.status = AppointmentStatus.NO_SHOW;
-          this.appointmentRepository.update(a.id, { status: AppointmentStatus.NO_SHOW }).catch(() => {});
+          this.appointmentRepository
+            .update(a.id, { status: AppointmentStatus.NO_SHOW })
+            .catch(() => {});
         }
       }
     }
 
     const todayAppointments = allAppointments.filter(
-      a => getDateStr(a.date) === todayStr && a.status !== AppointmentStatus.RESCHEDULED,
+      (a) =>
+        getDateStr(a.date) === todayStr &&
+        a.status !== AppointmentStatus.RESCHEDULED,
     );
 
     // Ensure sequential real tokens for today's appointments
-    const sortedToday = todayAppointments.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    const sortedToday = todayAppointments.sort((a, b) =>
+      a.startTime.localeCompare(b.startTime),
+    );
     sortedToday.forEach((appt, idx) => {
       if (!appt.tokenNumber || appt.tokenNumber <= 0) {
         appt.tokenNumber = idx + 1;
-        this.appointmentRepository.update(appt.id, { tokenNumber: idx + 1 }).catch(() => {});
+        this.appointmentRepository
+          .update(appt.id, { tokenNumber: idx + 1 })
+          .catch(() => {});
       }
     });
 
     const upcoming = allAppointments.filter(
-      a =>
+      (a) =>
         getDateStr(a.date) >= todayStr &&
-        [AppointmentStatus.CONFIRMED, AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_CONSULTATION].includes(a.status),
+        [
+          AppointmentStatus.CONFIRMED,
+          AppointmentStatus.CHECKED_IN,
+          AppointmentStatus.IN_CONSULTATION,
+        ].includes(a.status),
     );
-    const completed = allAppointments.filter(a => a.status === AppointmentStatus.COMPLETED);
-    const cancelled = allAppointments.filter(a => a.status === AppointmentStatus.CANCELLED);
-    const noShow = allAppointments.filter(a => a.status === AppointmentStatus.NO_SHOW);
+    const completed = allAppointments.filter(
+      (a) => a.status === AppointmentStatus.COMPLETED,
+    );
+    const cancelled = allAppointments.filter(
+      (a) => a.status === AppointmentStatus.CANCELLED,
+    );
+    const noShow = allAppointments.filter(
+      (a) => a.status === AppointmentStatus.NO_SHOW,
+    );
 
     // Unique patient IDs
-    const uniquePatients = new Set(allAppointments.map(a => a.patientId).filter(Boolean));
+    const uniquePatients = new Set(
+      allAppointments.map((a) => a.patientId).filter(Boolean),
+    );
 
     return {
       message: 'Doctor dashboard retrieved successfully',
@@ -160,7 +195,7 @@ export class DoctorService {
         },
         todayAppointments: todayAppointments
           .sort((a, b) => a.startTime.localeCompare(b.startTime))
-          .map(appt => ({
+          .map((appt) => ({
             id: appt.id,
             date: appt.date,
             startTime: appt.startTime,
@@ -170,13 +205,15 @@ export class DoctorService {
             queuePosition: appt.queuePosition,
             estimatedWaitTime: appt.estimatedWaitTime,
             checkedInAt: appt.checkedInAt,
-            patient: appt.patient ? {
-              id: appt.patient.id,
-              fullName: appt.patient.fullName,
-              age: appt.patient.age,
-              gender: appt.patient.gender,
-              phone: appt.patient.phone,
-            } : null,
+            patient: appt.patient
+              ? {
+                  id: appt.patient.id,
+                  fullName: appt.patient.fullName,
+                  age: appt.patient.age,
+                  gender: appt.patient.gender,
+                  phone: appt.patient.phone,
+                }
+              : null,
           })),
       },
     };
@@ -236,13 +273,28 @@ export class DoctorService {
     const offset = (page - 1) * limit;
     const paginated = filtered.slice(offset, offset + limit);
 
+    const paginatedDoctorIds = paginated.map((d) => d.id);
+    const verificationsByDoctor: Record<string, string> = {};
+    if (paginatedDoctorIds.length > 0) {
+      const verifications = await this.verificationRepository.find({
+        where: { doctorId: In(paginatedDoctorIds) },
+      });
+      for (const v of verifications) {
+        verificationsByDoctor[v.doctorId] = v.status;
+      }
+    }
+
     return {
       message:
         total === 0
           ? 'No doctors found matching your criteria'
           : 'Doctors retrieved successfully',
       data: paginated.map((doctor) =>
-        this.toDiscoverySummary(doctor, slotsByDoctor[doctor.id] || []),
+        this.toDiscoverySummary(
+          doctor,
+          slotsByDoctor[doctor.id] || [],
+          verificationsByDoctor[doctor.id],
+        ),
       ),
       meta: {
         page,
@@ -259,11 +311,14 @@ export class DoctorService {
       throw new NotFoundException(`Doctor with ID ${id} not found`);
     }
 
-    const recurring = await this.recurringRepository.find({ where: { doctorId: doctor.id } });
+    const [recurring, verification] = await Promise.all([
+      this.recurringRepository.find({ where: { doctorId: doctor.id } }),
+      this.verificationRepository.findOne({ where: { doctorId: doctor.id } }),
+    ]);
 
     return {
       message: 'Doctor details retrieved successfully',
-      data: this.toDiscoveryDetail(doctor, recurring),
+      data: this.toDiscoveryDetail(doctor, recurring, verification?.status),
     };
   }
 
@@ -289,7 +344,12 @@ export class DoctorService {
     return value.replace(/[%_\\]/g, '\\$&');
   }
 
-  private toDiscoverySummary(doctor: Doctor, recurring: RecurringAvailability[]) {
+  private toDiscoverySummary(
+    doctor: Doctor,
+    recurring: RecurringAvailability[],
+    verificationStatus?: string | null,
+  ) {
+    const isVerified = verificationStatus === 'APPROVED';
     return {
       id: doctor.id,
       fullName: doctor.fullName,
@@ -297,12 +357,18 @@ export class DoctorService {
       experience: doctor.experience,
       consultationFee: Number(doctor.consultationFee),
       availabilityStatus: recurring.length > 0 ? 'available' : 'unavailable',
+      isVerified,
+      verificationStatus: verificationStatus || 'NOT_SUBMITTED',
     };
   }
 
-  private toDiscoveryDetail(doctor: Doctor, recurring: RecurringAvailability[]) {
+  private toDiscoveryDetail(
+    doctor: Doctor,
+    recurring: RecurringAvailability[],
+    verificationStatus?: string | null,
+  ) {
     return {
-      ...this.toDiscoverySummary(doctor, recurring),
+      ...this.toDiscoverySummary(doctor, recurring, verificationStatus),
       qualification: doctor.qualification,
       consultationHours: mapRecurringToConsultationHours(recurring),
       profileDetails: doctor.profileDetails,
@@ -321,7 +387,12 @@ export class DoctorService {
     return profile;
   }
 
-  private toResponse(profile: Doctor, recurring: RecurringAvailability[]) {
+  private toResponse(
+    profile: Doctor,
+    recurring: RecurringAvailability[],
+    verificationStatus?: string | null,
+  ) {
+    const isVerified = verificationStatus === 'APPROVED';
     return {
       id: profile.id,
       userId: profile.userId,
@@ -334,6 +405,8 @@ export class DoctorService {
       profileDetails: profile.profileDetails,
       allowFutureBooking: profile.allowFutureBooking,
       maxFutureBookingDays: profile.maxFutureBookingDays,
+      isVerified,
+      verificationStatus: verificationStatus || 'NOT_SUBMITTED',
       createdAt: profile.createdAt,
       updatedAt: profile.updatedAt,
     };
@@ -355,10 +428,13 @@ export class DoctorService {
     });
 
     // Group appointments by unique patientId
-    const patientMap = new Map<string, {
-      patient: Patient;
-      appointments: Appointment[];
-    }>();
+    const patientMap = new Map<
+      string,
+      {
+        patient: Patient;
+        appointments: Appointment[];
+      }
+    >();
 
     for (const appt of appointments) {
       if (!appt.patient || !appt.patientId) continue;
@@ -414,14 +490,31 @@ export class DoctorService {
       const p = data.patient;
       const appts = data.appointments;
 
-      const completed = appts.filter((a) => a.status === AppointmentStatus.COMPLETED).length;
-      const cancelled = appts.filter((a) => a.status === AppointmentStatus.CANCELLED).length;
+      const completed = appts.filter(
+        (a) => a.status === AppointmentStatus.COMPLETED,
+      ).length;
+      const cancelled = appts.filter(
+        (a) => a.status === AppointmentStatus.CANCELLED,
+      ).length;
       const lastAppt = appts[0] || null;
 
       // Find earliest future confirmed appointment
-      const upcoming = appts
-        .filter((a) => a.date >= today && [AppointmentStatus.CONFIRMED, AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_CONSULTATION].includes(a.status))
-        .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))[0] || null;
+      const upcoming =
+        appts
+          .filter(
+            (a) =>
+              a.date >= today &&
+              [
+                AppointmentStatus.CONFIRMED,
+                AppointmentStatus.CHECKED_IN,
+                AppointmentStatus.IN_CONSULTATION,
+              ].includes(a.status),
+          )
+          .sort(
+            (a, b) =>
+              a.date.localeCompare(b.date) ||
+              a.startTime.localeCompare(b.startTime),
+          )[0] || null;
 
       // Collect clinical notes written by this doctor
       const notesHistory = appts
@@ -448,21 +541,25 @@ export class DoctorService {
         totalAppointments: appts.length,
         completedVisits: completed,
         cancelledVisits: cancelled,
-        lastVisit: lastAppt ? {
-          id: lastAppt.id,
-          date: lastAppt.date,
-          startTime: lastAppt.startTime,
-          status: lastAppt.status,
-          clinicalNotes: lastAppt.clinicalNotes || null,
-          tokenNumber: lastAppt.tokenNumber,
-          reasonForVisit: lastAppt.reasonForVisit || null,
-        } : null,
-        nextAppointment: upcoming ? {
-          id: upcoming.id,
-          date: upcoming.date,
-          startTime: upcoming.startTime,
-          tokenNumber: upcoming.tokenNumber,
-        } : null,
+        lastVisit: lastAppt
+          ? {
+              id: lastAppt.id,
+              date: lastAppt.date,
+              startTime: lastAppt.startTime,
+              status: lastAppt.status,
+              clinicalNotes: lastAppt.clinicalNotes || null,
+              tokenNumber: lastAppt.tokenNumber,
+              reasonForVisit: lastAppt.reasonForVisit || null,
+            }
+          : null,
+        nextAppointment: upcoming
+          ? {
+              id: upcoming.id,
+              date: upcoming.date,
+              startTime: upcoming.startTime,
+              tokenNumber: upcoming.tokenNumber,
+            }
+          : null,
         recentClinicalNotes: notesHistory.slice(0, 5),
       });
     }
@@ -471,13 +568,16 @@ export class DoctorService {
     let filtered = result;
     if (search && search.trim()) {
       const q = search.trim().toLowerCase();
-      filtered = result.filter((item) =>
-        item.fullName.toLowerCase().includes(q) ||
-        item.phone.includes(q) ||
-        (item.allergies && item.allergies.toLowerCase().includes(q)) ||
-        (item.medicalHistory && item.medicalHistory.toLowerCase().includes(q)) ||
-        (item.basicHealthInfo && item.basicHealthInfo.toLowerCase().includes(q)) ||
-        (item.bloodGroup && item.bloodGroup.toLowerCase().includes(q))
+      filtered = result.filter(
+        (item) =>
+          item.fullName.toLowerCase().includes(q) ||
+          item.phone.includes(q) ||
+          (item.allergies && item.allergies.toLowerCase().includes(q)) ||
+          (item.medicalHistory &&
+            item.medicalHistory.toLowerCase().includes(q)) ||
+          (item.basicHealthInfo &&
+            item.basicHealthInfo.toLowerCase().includes(q)) ||
+          (item.bloodGroup && item.bloodGroup.toLowerCase().includes(q)),
       );
     }
 
@@ -589,7 +689,9 @@ export class DoctorService {
     }
 
     if (appointment.doctorId !== doctor.id) {
-      throw new BadRequestException('Unauthorized: You are not the consulting doctor for this appointment');
+      throw new BadRequestException(
+        'Unauthorized: You are not the consulting doctor for this appointment',
+      );
     }
 
     appointment.clinicalNotes = notes;
@@ -635,10 +737,13 @@ export class DoctorService {
     }
 
     if (dto.allergies !== undefined) patient.allergies = dto.allergies;
-    if (dto.medicalHistory !== undefined) patient.medicalHistory = dto.medicalHistory;
-    if (dto.currentMedication !== undefined) patient.currentMedication = dto.currentMedication;
+    if (dto.medicalHistory !== undefined)
+      patient.medicalHistory = dto.medicalHistory;
+    if (dto.currentMedication !== undefined)
+      patient.currentMedication = dto.currentMedication;
     if (dto.bloodGroup !== undefined) patient.bloodGroup = dto.bloodGroup;
-    if (dto.basicHealthInfo !== undefined) patient.basicHealthInfo = dto.basicHealthInfo;
+    if (dto.basicHealthInfo !== undefined)
+      patient.basicHealthInfo = dto.basicHealthInfo;
 
     const saved = await this.patientRepository.save(patient);
 
