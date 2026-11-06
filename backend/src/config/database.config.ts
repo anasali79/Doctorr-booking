@@ -16,6 +16,8 @@ import { Refund } from '../payment/entities/refund.entity';
 import { WebhookEvent } from '../payment/entities/webhook-event.entity';
 import { ReminderJob } from '../reminder/entities/reminder-job.entity';
 import { Prescription } from '../prescription/entities/prescription.entity';
+import { DoctorVerification } from '../doctor/entities/doctor-verification.entity';
+import { AdminAuditLog } from '../admin/entities/admin-audit-log.entity';
 
 export function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
   const databaseUrl = config.get<string>('DATABASE_URL');
@@ -40,6 +42,8 @@ export function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
       WebhookEvent,
       ReminderJob,
       Prescription,
+      DoctorVerification,
+      AdminAuditLog,
     ],
     synchronize: false,
     migrations: [__dirname + '/../migrations/*.{js,ts}'],

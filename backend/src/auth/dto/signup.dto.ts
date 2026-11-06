@@ -8,6 +8,11 @@ import {
 } from 'class-validator';
 import { Role } from '../../common/enums/role.enum';
 
+// Only DOCTOR and PATIENT are allowed for public self-registration.
+// ADMIN accounts are created exclusively via the secure seed script.
+const PUBLIC_ROLES = [Role.DOCTOR, Role.PATIENT] as const;
+type PublicRole = (typeof PUBLIC_ROLES)[number];
+
 export class SignupDto {
   @IsString()
   @IsNotEmpty()
@@ -21,6 +26,6 @@ export class SignupDto {
   @MinLength(6)
   password: string;
 
-  @IsEnum(Role, { message: 'role must be DOCTOR or PATIENT' })
-  role: Role;
+  @IsEnum(PUBLIC_ROLES, { message: 'role must be DOCTOR or PATIENT' })
+  role: PublicRole;
 }

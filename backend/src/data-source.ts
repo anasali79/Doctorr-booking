@@ -16,6 +16,8 @@ import { Refund } from './payment/entities/refund.entity';
 import { WebhookEvent } from './payment/entities/webhook-event.entity';
 import { ReminderJob } from './reminder/entities/reminder-job.entity';
 import { Prescription } from './prescription/entities/prescription.entity';
+import { DoctorVerification } from './doctor/entities/doctor-verification.entity';
+import { AdminAuditLog } from './admin/entities/admin-audit-log.entity';
 
 config();
 
@@ -38,6 +40,8 @@ const shared: DataSourceOptions = {
     WebhookEvent,
     ReminderJob,
     Prescription,
+    DoctorVerification,
+    AdminAuditLog,
   ],
   migrations: [__dirname + '/migrations/*.{js,ts}'],
   ssl:
@@ -50,11 +54,11 @@ export default new DataSource(
   process.env.DATABASE_URL
     ? { ...shared, url: process.env.DATABASE_URL }
     : {
-      ...shared,
-      host: process.env.DB_HOST,
-      port: Number(process.env.DB_PORT),
-      username: process.env.DB_USERNAME,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME,
-    },
+        ...shared,
+        host: process.env.DB_HOST,
+        port: Number(process.env.DB_PORT),
+        username: process.env.DB_USERNAME,
+        password: process.env.DB_PASSWORD,
+        database: process.env.DB_NAME,
+      },
 );
