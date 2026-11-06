@@ -115,6 +115,8 @@ export interface Appointment {
   paymentStatus?: string;
   pendingExpiresAt?: string | null;
   tokenNumber?: number | null;
+  hasPrescription?: boolean;
+  prescriptionId?: string | null;
   queuePosition?: number | null;
   estimatedWaitTime?: number | null;
   checkedInAt?: string | null;

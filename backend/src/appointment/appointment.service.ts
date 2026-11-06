@@ -15,6 +15,7 @@ import { Appointment } from './entities/appointment.entity';
 import { Doctor } from '../doctor/entities/doctor.entity';
 import { Patient } from '../patient/entities/patient.entity';
 import { DoctorLeave } from '../doctor/entities/leave.entity';
+import { Prescription } from '../prescription/entities/prescription.entity';
 import { BookAppointmentDto } from './dto/book-appointment.dto';
 import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
 import { AppointmentStatus } from '../common/enums/appointment-status.enum';
@@ -110,6 +111,9 @@ export class AppointmentService {
 
     @InjectRepository(DoctorLeave)
     private readonly leaveRepo: Repository<DoctorLeave>,
+
+    @InjectRepository(Prescription)
+    private readonly prescriptionRepo: Repository<Prescription>,
 
     @Inject(forwardRef(() => AvailabilityService))
     private readonly availabilityService: AvailabilityService,
@@ -513,7 +517,20 @@ export class AppointmentService {
 
     return {
       message: appointments.length === 0 ? 'No appointments found' : 'Appointments retrieved successfully',
-      data: appointments.map((appt) => this.toPatientAppointmentResponse(appt)),
+      data: await (async () => {
+        const apptIds = appointments.map((a) => a.id);
+        const prescriptions = apptIds.length > 0
+          ? await this.prescriptionRepo.find({
+              where: { appointmentId: In(apptIds) },
+              select: { id: true, appointmentId: true },
+            })
+          : [];
+        const rxMap = new Map<string, string>();
+        for (const rx of prescriptions) {
+          rxMap.set(rx.appointmentId, rx.id);
+        }
+        return appointments.map((appt) => this.toPatientAppointmentResponse(appt, rxMap.get(appt.id)));
+      })(),
     };
   }
 
@@ -1255,25 +1272,11 @@ export class AppointmentService {
     const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
     const currentMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
 
-    // Check for expired CONFIRMED appointments & guarantee sequential tokens
+    // Guarantee sequential tokens
     const byDate = new Map<string, Appointment[]>();
     for (const appt of appointments) {
       if (!byDate.has(appt.date)) byDate.set(appt.date, []);
       byDate.get(appt.date)!.push(appt);
-
-      if (appt.status === AppointmentStatus.CONFIRMED) {
-        const isPastDate = appt.date < todayStr;
-        let isPastTime = false;
-        if (appt.date === todayStr) {
-          const [endH, endM] = (appt.endTime || appt.startTime).split(':').map(Number);
-          const endMinutes = (endH || 0) * 60 + (endM || 0);
-          isPastTime = currentMinutes > endMinutes;
-        }
-        if (isPastDate || isPastTime) {
-          appt.status = AppointmentStatus.NO_SHOW;
-          this.appointmentRepo.update(appt.id, { status: AppointmentStatus.NO_SHOW }).catch(() => { });
-        }
-      }
     }
 
     byDate.forEach((dayAppts) => {
@@ -1286,9 +1289,21 @@ export class AppointmentService {
       });
     });
 
+    const apptIds = appointments.map((a) => a.id);
+    const prescriptions = apptIds.length > 0
+      ? await this.prescriptionRepo.find({
+          where: { appointmentId: In(apptIds) },
+          select: { id: true, appointmentId: true },
+        })
+      : [];
+    const rxMap = new Map<string, string>();
+    for (const rx of prescriptions) {
+      rxMap.set(rx.appointmentId, rx.id);
+    }
+
     return {
       message: appointments.length === 0 ? 'No appointments found' : 'Appointments retrieved successfully',
-      data: appointments.map((appt) => this.toDoctorAppointmentResponse(appt)),
+      data: appointments.map((appt) => this.toDoctorAppointmentResponse(appt, rxMap.get(appt.id))),
     };
   }
 
@@ -1753,24 +1768,16 @@ export class AppointmentService {
       order: { date: 'DESC', startTime: 'DESC' },
     });
 
-    const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-    const currentMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
-
-    // Check each appointment: if CONFIRMED and slot end time has elapsed on todayStr (or past date)
-    for (const appt of allPatientAppts) {
-      if (appt.status === AppointmentStatus.CONFIRMED) {
-        const isPastDate = appt.date < todayStr;
-        let isPastTime = false;
-        if (appt.date === todayStr) {
-          const [endH, endM] = (appt.endTime || appt.startTime).split(':').map(Number);
-          const endMinutes = (endH || 0) * 60 + (endM || 0);
-          isPastTime = currentMinutes > endMinutes;
-        }
-        if (isPastDate || isPastTime) {
-          appt.status = AppointmentStatus.NO_SHOW;
-          this.appointmentRepo.update(appt.id, { status: AppointmentStatus.NO_SHOW }).catch(() => { });
-        }
-      }
+    const apptIds = allPatientAppts.map((a) => a.id);
+    const prescriptions = apptIds.length > 0
+      ? await this.prescriptionRepo.find({
+          where: { appointmentId: In(apptIds) },
+          select: { id: true, appointmentId: true },
+        })
+      : [];
+    const rxMap = new Map<string, string>();
+    for (const rx of prescriptions) {
+      rxMap.set(rx.appointmentId, rx.id);
     }
 
     const upcoming = allPatientAppts
@@ -1796,8 +1803,8 @@ export class AppointmentService {
       data: {
         upcomingAppointments: upcoming.length,
         pastAppointments: past.length,
-        upcoming: upcoming.map((a) => this.toPatientAppointmentResponse(a)),
-        past: past.map((a) => this.toPatientAppointmentResponse(a)),
+        upcoming: upcoming.map((a) => this.toPatientAppointmentResponse(a, rxMap.get(a.id))),
+        past: past.map((a) => this.toPatientAppointmentResponse(a, rxMap.get(a.id))),
       },
     };
   }
@@ -2035,7 +2042,7 @@ export class AppointmentService {
     return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
   }
 
-  private toPatientAppointmentResponse(appointment: Appointment) {
+  private toPatientAppointmentResponse(appointment: Appointment, prescriptionId?: string | null) {
     return {
       id: appointment.id,
       doctorId: appointment.doctorId,
@@ -2046,6 +2053,8 @@ export class AppointmentService {
       paymentStatus: appointment.paymentStatus ?? 'UNPAID',
       pendingExpiresAt: appointment.pendingExpiresAt ?? null,
       tokenNumber: appointment.tokenNumber ?? null,
+      hasPrescription: Boolean(prescriptionId),
+      prescriptionId: prescriptionId ?? null,
       doctor: appointment.doctor
         ? {
           id: appointment.doctor.id,
@@ -2064,7 +2073,7 @@ export class AppointmentService {
     };
   }
 
-  private toDoctorAppointmentResponse(appointment: Appointment) {
+  private toDoctorAppointmentResponse(appointment: Appointment, prescriptionId?: string | null) {
     return {
       id: appointment.id,
       doctorId: appointment.doctorId,
@@ -2075,6 +2084,8 @@ export class AppointmentService {
       status: appointment.status,
       paymentStatus: appointment.paymentStatus ?? 'UNPAID',
       tokenNumber: appointment.tokenNumber ?? null,
+      hasPrescription: Boolean(prescriptionId),
+      prescriptionId: prescriptionId ?? null,
       schedulingType: appointment.tokenNumber !== null ? 'WAVE' : 'STREAM',
       clinicalNotes: appointment.clinicalNotes ?? null,
       reasonForVisit: appointment.reasonForVisit ?? null,

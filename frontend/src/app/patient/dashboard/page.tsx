@@ -77,18 +77,6 @@ export default async function PatientDashboardPage() {
   const nowIST = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
   const currentMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
 
-  // Helper to determine if an un-attended appointment slot has already ended
-  const isAppointmentExpired = (a: any) => {
-    if (!a || !a.date) return false;
-    if (a.date < todayIST) return true;
-    if (a.date === todayIST && a.status === 'CONFIRMED') {
-      const [endH, endM] = (a.endTime || a.startTime || '00:00').split(':').map(Number);
-      const slotEndMinutes = (endH || 0) * 60 + (endM || 0);
-      return currentMinutes > slotEndMinutes;
-    }
-    return false;
-  };
-
   // Pending reservations (held for 15 minutes)
   const pendingReservations = allAppointments.filter(
     (a: any) =>
@@ -97,12 +85,12 @@ export default async function PatientDashboardPage() {
       new Date(a.pendingExpiresAt).getTime() > Date.now(),
   );
 
-  // Upcoming / Active Appointments (must not be expired!)
+  // Upcoming / Active Appointments
   const upcoming = allAppointments
     .filter(
       (a: any) =>
         ['CONFIRMED', 'CHECKED_IN', 'IN_CONSULTATION'].includes(a.status) &&
-        !isAppointmentExpired(a),
+        a.date >= todayIST,
     )
     .sort((a: any, b: any) => {
       const dComp = a.date.localeCompare(b.date);
@@ -110,12 +98,12 @@ export default async function PatientDashboardPage() {
       return (a.startTime || '').localeCompare(b.startTime || '');
     });
 
-  // Past / Completed / Missed Appointments
+  // Past / Completed / Cancelled Appointments
   const past = allAppointments
     .filter(
       (a: any) =>
         ['COMPLETED', 'CANCELLED', 'NO_SHOW'].includes(a.status) ||
-        isAppointmentExpired(a),
+        (['CONFIRMED', 'CHECKED_IN', 'IN_CONSULTATION'].includes(a.status) && a.date < todayIST),
     )
     .sort((a: any, b: any) => {
       const dComp = b.date.localeCompare(a.date);
@@ -123,7 +111,7 @@ export default async function PatientDashboardPage() {
       return (b.startTime || '').localeCompare(a.startTime || '');
     });
 
-  // Check if there is a truly active (unexpired) appointment today
+  // Check if there is an active appointment today
   const activeToday = upcoming.find((a: any) => a.date === todayIST);
   const nextVisit = activeToday || upcoming[0];
 
@@ -614,13 +602,15 @@ export default async function PatientDashboardPage() {
                           <span className="text-[10px] text-slate-400">{formatDate(item.date)}</span>
                         </div>
                         <p className="text-slate-700 whitespace-pre-line text-[11px]">{item.clinicalNotes}</p>
-                        <Link
-                          href="/patient/appointments"
-                          className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 hover:text-emerald-800 hover:underline mt-1.5"
-                        >
-                          <FileText className="h-3 w-3" />
-                          <span>View Official Rx Prescription →</span>
-                        </Link>
+                        {item.hasPrescription && (
+                          <Link
+                            href="/patient/appointments?tab=PAST"
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 hover:text-emerald-800 hover:underline mt-1.5"
+                          >
+                            <FileText className="h-3 w-3" />
+                            <span>View Official Rx Prescription →</span>
+                          </Link>
+                        )}
                       </div>
                     ))}
                 </div>
