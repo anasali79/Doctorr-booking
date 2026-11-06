@@ -17,6 +17,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Role } from '../common/enums/role.enum';
+import { DoctorVerificationGuard } from '../common/guards/doctor-verification.guard';
 import { DoctorService } from './doctor.service';
 import {
   CreateDoctorProfileDto,
@@ -24,7 +25,10 @@ import {
 } from './dto/doctor-profile.dto';
 import { DoctorDiscoveryQueryDto } from './dto/doctor-discovery-query.dto';
 import { AvailabilityService } from './availability.service';
-import { GetSlotsQueryDto, NextAvailableQueryDto } from './dto/availability.dto';
+import {
+  GetSlotsQueryDto,
+  NextAvailableQueryDto,
+} from './dto/availability.dto';
 import { AppointmentService } from '../appointment/appointment.service';
 import { RescheduleAppointmentDto } from '../appointment/dto/reschedule-appointment.dto';
 
@@ -70,7 +74,7 @@ export class DoctorController {
   }
 
   @Get('dashboard')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, DoctorVerificationGuard)
   @Roles(Role.DOCTOR)
   async getDashboard(
     @CurrentUser() user: { id: string; email: string; role: string },
@@ -79,7 +83,7 @@ export class DoctorController {
   }
 
   @Get('appointments')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, DoctorVerificationGuard)
   @Roles(Role.DOCTOR)
   getDoctorAppointments(
     @CurrentUser() user: { id: string },
@@ -89,7 +93,7 @@ export class DoctorController {
   }
 
   @Patch('appointments/:id/cancel')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, DoctorVerificationGuard)
   @Roles(Role.DOCTOR)
   cancelAppointmentByDoctor(
     @CurrentUser() user: { id: string },
@@ -107,7 +111,7 @@ export class DoctorController {
   }
 
   @Patch('appointments/:id/reschedule')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, DoctorVerificationGuard)
   @Roles(Role.DOCTOR)
   rescheduleAppointmentByDoctor(
     @CurrentUser() user: { id: string },
@@ -122,13 +126,17 @@ export class DoctorController {
     id: string,
     @Body() dto: RescheduleAppointmentDto,
   ) {
-    return this.appointmentService.rescheduleAppointmentByDoctor(user.id, id, dto);
+    return this.appointmentService.rescheduleAppointmentByDoctor(
+      user.id,
+      id,
+      dto,
+    );
   }
 
   // ─── Doctor Patients Directory & Clinical History ─────────────────────────────
 
   @Get('patients')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, DoctorVerificationGuard)
   @Roles(Role.DOCTOR)
   getDoctorPatients(
     @CurrentUser() user: { id: string },
@@ -138,7 +146,7 @@ export class DoctorController {
   }
 
   @Get('patients/:patientId')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, DoctorVerificationGuard)
   @Roles(Role.DOCTOR)
   getDoctorPatientRecord(
     @CurrentUser() user: { id: string },
@@ -148,7 +156,7 @@ export class DoctorController {
   }
 
   @Patch('appointments/:id/clinical-notes')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, DoctorVerificationGuard)
   @Roles(Role.DOCTOR)
   saveClinicalNotes(
     @CurrentUser() user: { id: string },
@@ -175,7 +183,7 @@ export class DoctorController {
   }
 
   @Patch('patients/:patientId/medical-record')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, DoctorVerificationGuard)
   @Roles(Role.DOCTOR)
   updatePatientMedicalRecord(
     @CurrentUser() user: { id: string },
@@ -213,11 +221,10 @@ export class DoctorController {
     doctorId: string,
     @Query() query: NextAvailableQueryDto,
   ) {
-    const result =
-      await this.availabilityService.getNextAvailableAppointment(
-        doctorId,
-        query.searchWindow,
-      );
+    const result = await this.availabilityService.getNextAvailableAppointment(
+      doctorId,
+      query.searchWindow,
+    );
     return {
       message: result.message,
       data: result,
@@ -246,7 +253,8 @@ export class DoctorController {
     );
     if ((slots as any).onLeave) {
       return {
-        message: (slots as any).message || `Doctor is on leave on ${query.date}`,
+        message:
+          (slots as any).message || `Doctor is on leave on ${query.date}`,
         onLeave: true,
         data: [],
       };

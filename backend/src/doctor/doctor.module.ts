@@ -14,6 +14,10 @@ import { Patient } from '../patient/entities/patient.entity';
 import { DoctorLeave } from './entities/leave.entity';
 import { LeaveService } from './leave.service';
 import { LeaveController } from './leave.controller';
+import { DoctorVerification } from './entities/doctor-verification.entity';
+import { DoctorVerificationService } from './doctor-verification.service';
+import { DoctorVerificationController } from './doctor-verification.controller';
+import { DoctorVerificationGuard } from '../common/guards/doctor-verification.guard';
 
 @Module({
   imports: [
@@ -25,11 +29,29 @@ import { LeaveController } from './leave.controller';
       User,
       Patient,
       DoctorLeave,
+      DoctorVerification,
     ]),
     forwardRef(() => AppointmentModule),
   ],
-  controllers: [AvailabilityController, LeaveController, DoctorController],
-  providers: [DoctorService, AvailabilityService, LeaveService],
-  exports: [DoctorService, AvailabilityService, LeaveService],
+  controllers: [
+    AvailabilityController,
+    LeaveController,
+    DoctorController,
+    DoctorVerificationController,
+  ],
+  providers: [
+    DoctorService,
+    AvailabilityService,
+    LeaveService,
+    DoctorVerificationService,
+    DoctorVerificationGuard,
+  ],
+  exports: [
+    DoctorService,
+    AvailabilityService,
+    LeaveService,
+    DoctorVerificationService,
+    DoctorVerificationGuard,
+  ],
 })
-export class DoctorModule { }
+export class DoctorModule {}
