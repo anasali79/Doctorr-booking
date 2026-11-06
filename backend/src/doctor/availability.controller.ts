@@ -129,6 +129,28 @@ export class AvailabilityController {
     };
   }
 
+  @Delete('override/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.DOCTOR)
+  @HttpCode(HttpStatus.OK)
+  async deleteCustomOverride(
+    @CurrentUser() user: { id: string },
+    @Param(
+      'id',
+      new ParseUUIDPipe({
+        version: '4',
+        exceptionFactory: () =>
+          new BadRequestException(
+            'Invalid override ID format. Expected a valid UUID.',
+          ),
+      }),
+    )
+    id: string,
+  ) {
+    await this.availabilityService.deleteCustomOverride(user.id, id);
+    return { message: 'Custom availability override deleted successfully' };
+  }
+
   @Post('cancel')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.DOCTOR)

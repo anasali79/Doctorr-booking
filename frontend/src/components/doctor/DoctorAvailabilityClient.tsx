@@ -120,7 +120,7 @@ export function DoctorAvailabilityClient({
         slotDuration,
         schedulingType,
         bufferTime,
-        maxPatients: schedulingType === 'WAVE' ? maxPatients : undefined,
+        maxPatients: Number(maxPatients),
       });
 
       toast.success('Availability Schedule Saved!');
@@ -260,50 +260,50 @@ export function DoctorAvailabilityClient({
               <Button
                 type="button"
                 variant="ghost"
-                onClick={() => setSchedulingType('STREAM')}
-                className={`p-3 rounded-2xl border text-left transition-all cursor-pointer h-auto flex flex-col items-start ${
-                  schedulingType === 'STREAM'
-                    ? 'border-blue-700 bg-blue-50/80 text-blue-900 shadow-2xs hover:bg-blue-50/80'
-                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <span className="font-bold text-xs block">STREAM</span>
-                <span className="text-[10px] text-slate-400 mt-0.5 block">
-                  1 patient per slot (Linear)
-                </span>
-              </Button>
-
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setSchedulingType('WAVE')}
+                onClick={() => { setSchedulingType('WAVE'); if (maxPatients === 15) setMaxPatients(3); }}
                 className={`p-3 rounded-2xl border text-left transition-all cursor-pointer h-auto flex flex-col items-start ${
                   schedulingType === 'WAVE'
                     ? 'border-blue-700 bg-blue-50/80 text-blue-900 shadow-2xs hover:bg-blue-50/80'
                     : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                <span className="font-bold text-xs block">WAVE</span>
+                <span className="font-bold text-xs block">WAVE Scheduling</span>
                 <span className="text-[10px] text-slate-400 mt-0.5 block">
-                  Multiple patients grouped
+                  Time slots with slot capacity
+                </span>
+              </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => { setSchedulingType('STREAM'); if (maxPatients === 3) setMaxPatients(15); }}
+                className={`p-3 rounded-2xl border text-left transition-all cursor-pointer h-auto flex flex-col items-start ${
+                  schedulingType === 'STREAM'
+                    ? 'border-blue-700 bg-blue-50/80 text-blue-900 shadow-2xs hover:bg-blue-50/80'
+                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <span className="font-bold text-xs block">STREAM Scheduling</span>
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  Continuous session with queue tokens
                 </span>
               </Button>
             </div>
           </div>
 
-          {schedulingType === 'WAVE' && (
-            <div>
-              <label className="field-label">Max Patients per Wave</label>
-              <Input
-                type="number"
-                min={2}
-                max={10}
-                value={maxPatients}
-                onChange={(e) => setMaxPatients(Number(e.target.value))}
-                className="field-input text-xs font-semibold"
-              />
-            </div>
-          )}
+          <div>
+            <label className="field-label">
+              {schedulingType === 'WAVE' ? 'Capacity per Slot (Patients per Slot)' : 'Total Session Capacity (Patients for Window)'}
+            </label>
+            <Input
+              type="number"
+              min={1}
+              max={schedulingType === 'WAVE' ? 20 : 100}
+              value={maxPatients}
+              onChange={(e) => setMaxPatients(Math.max(1, Number(e.target.value)))}
+              className="field-input text-xs font-semibold"
+            />
+          </div>
 
           {/* Slot Count Preview Box */}
           <div className="p-4 bg-blue-50/70 rounded-2xl border border-blue-200/60 flex items-center justify-between">

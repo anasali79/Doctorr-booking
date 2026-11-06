@@ -341,34 +341,22 @@ export class AppointmentService {
 
       await this.assertNoDuplicateBookingOnDay(queryRunner.manager, patient.id, dto.doctorId, dto.date);
 
-      if (slotInfo.schedulingType === 'WAVE') {
-        await queryRunner.manager.find(Appointment, {
-          where: { doctorId: dto.doctorId, date: dto.date, startTime: dto.startTime, endTime: dto.endTime },
-          lock: { mode: 'pessimistic_write' },
-          loadEagerRelations: false,
-        });
-        await this.assertWaveCapacityAvailable(
-          queryRunner.manager,
-          dto.doctorId,
-          dto.date,
-          dto.startTime,
-          dto.endTime,
-          slotInfo.maxPatients ?? 0,
-        );
-      } else {
-        const existingBooking = await queryRunner.manager.findOne(Appointment, {
-          where: {
-            doctorId: dto.doctorId,
-            date: dto.date,
-            startTime: dto.startTime,
-            endTime: dto.endTime,
-            status: AppointmentStatus.CONFIRMED,
-          },
-          lock: { mode: 'pessimistic_write' },
-          loadEagerRelations: false,
-        });
-        if (existingBooking) throw new ConflictException('This slot is already booked');
-      }
+      await queryRunner.manager.find(Appointment, {
+        where: { doctorId: dto.doctorId, date: dto.date, startTime: dto.startTime, endTime: dto.endTime },
+        lock: { mode: 'pessimistic_write' },
+        loadEagerRelations: false,
+      });
+      const effectiveCapacity = (slotInfo.maxPatients && slotInfo.maxPatients > 0)
+        ? slotInfo.maxPatients
+        : (slotInfo.schedulingType === 'WAVE' ? 3 : 10);
+      await this.assertWaveCapacityAvailable(
+        queryRunner.manager,
+        dto.doctorId,
+        dto.date,
+        dto.startTime,
+        dto.endTime,
+        effectiveCapacity,
+      );
 
       // Always assign a real sequential token number per doctor per day
       const tokenNumber = await this.assignTokenNumber(
@@ -1020,37 +1008,17 @@ export class AppointmentService {
       throw error;
     }
 
-    if (slotInfo.schedulingType === 'WAVE') {
-      if ((slotInfo.bookedCount ?? 0) >= (slotInfo.maxPatients ?? 0)) {
-        const suggestion = await this.availabilityService.findNextAvailableSlot(
-          appointment.doctorId, dto.date, dto.startTime, dto.endTime,
-        );
-        throw new ConflictException({
-          message: suggestion ? 'Requested wave is full. Here is the next available slot.' : 'Requested wave is full',
-          ...(suggestion && { suggestedSlot: suggestion }),
-        });
-      }
-    } else {
-      const existingBooking = await this.appointmentRepo.findOne({
-        where: {
-          doctorId: appointment.doctorId,
-          date: dto.date,
-          startTime: dto.startTime,
-          endTime: dto.endTime,
-          status: AppointmentStatus.CONFIRMED,
-        },
+    const maxReschedCap = (slotInfo.maxPatients && slotInfo.maxPatients > 0)
+      ? slotInfo.maxPatients
+      : (slotInfo.schedulingType === 'WAVE' ? 3 : 10);
+    if ((slotInfo.bookedCount ?? 0) >= maxReschedCap) {
+      const suggestion = await this.availabilityService.findNextAvailableSlot(
+        appointment.doctorId, dto.date, dto.startTime, dto.endTime,
+      );
+      throw new ConflictException({
+        message: suggestion ? 'Requested slot is full. Here is the next available slot.' : 'Requested slot is full',
+        ...(suggestion && { suggestedSlot: suggestion }),
       });
-      if (existingBooking) {
-        const suggestion = await this.availabilityService.findNextAvailableSlot(
-          appointment.doctorId, dto.date, dto.startTime, dto.endTime,
-        );
-        throw new ConflictException({
-          message: suggestion
-            ? 'Requested slot is already booked. Here is the next available slot.'
-            : 'Requested slot is already booked',
-          ...(suggestion && { suggestedSlot: suggestion }),
-        });
-      }
     }
 
     const patientHasBookingOnDay = await this.appointmentRepo.findOne({
@@ -1095,34 +1063,22 @@ export class AppointmentService {
         appointment.id,
       );
 
-      if (slotInfo.schedulingType === 'WAVE') {
-        await queryRunner.manager.find(Appointment, {
-          where: { doctorId: appointment.doctorId, date: dto.date, startTime: dto.startTime, endTime: dto.endTime },
-          lock: { mode: 'pessimistic_write' },
-          loadEagerRelations: false,
-        });
-        await this.assertWaveCapacityAvailable(
-          queryRunner.manager,
-          appointment.doctorId,
-          dto.date,
-          dto.startTime,
-          dto.endTime,
-          slotInfo.maxPatients ?? 0,
-        );
-      } else {
-        const existingBooking = await queryRunner.manager.findOne(Appointment, {
-          where: {
-            doctorId: appointment.doctorId,
-            date: dto.date,
-            startTime: dto.startTime,
-            endTime: dto.endTime,
-            status: AppointmentStatus.CONFIRMED,
-          },
-          lock: { mode: 'pessimistic_write' },
-          loadEagerRelations: false,
-        });
-        if (existingBooking) throw new ConflictException('Requested slot is already booked');
-      }
+      await queryRunner.manager.find(Appointment, {
+        where: { doctorId: appointment.doctorId, date: dto.date, startTime: dto.startTime, endTime: dto.endTime },
+        lock: { mode: 'pessimistic_write' },
+        loadEagerRelations: false,
+      });
+      const effectiveReschedCap = (slotInfo.maxPatients && slotInfo.maxPatients > 0)
+        ? slotInfo.maxPatients
+        : (slotInfo.schedulingType === 'WAVE' ? 3 : 10);
+      await this.assertWaveCapacityAvailable(
+        queryRunner.manager,
+        appointment.doctorId,
+        dto.date,
+        dto.startTime,
+        dto.endTime,
+        effectiveReschedCap,
+      );
 
       appToLock.status = AppointmentStatus.RESCHEDULED;
       await queryRunner.manager.save(appToLock);
@@ -1587,37 +1543,17 @@ export class AppointmentService {
       throw error;
     }
 
-    if (slotInfo.schedulingType === 'WAVE') {
-      if ((slotInfo.bookedCount ?? 0) >= (slotInfo.maxPatients ?? 0)) {
-        const suggestion = await this.availabilityService.findNextAvailableSlot(
-          doctor.id, dto.date, dto.startTime, dto.endTime,
-        );
-        throw new ConflictException({
-          message: suggestion ? 'Requested wave is full. Here is the next available slot.' : 'Requested wave is full',
-          ...(suggestion && { suggestedSlot: suggestion }),
-        });
-      }
-    } else {
-      const existingBooking = await this.appointmentRepo.findOne({
-        where: {
-          doctorId: doctor.id,
-          date: dto.date,
-          startTime: dto.startTime,
-          endTime: dto.endTime,
-          status: AppointmentStatus.CONFIRMED,
-        },
+    const maxDocReschedCap = (slotInfo.maxPatients && slotInfo.maxPatients > 0)
+      ? slotInfo.maxPatients
+      : (slotInfo.schedulingType === 'WAVE' ? 3 : 10);
+    if ((slotInfo.bookedCount ?? 0) >= maxDocReschedCap) {
+      const suggestion = await this.availabilityService.findNextAvailableSlot(
+        doctor.id, dto.date, dto.startTime, dto.endTime,
+      );
+      throw new ConflictException({
+        message: suggestion ? 'Requested slot is full. Here is the next available slot.' : 'Requested slot is full',
+        ...(suggestion && { suggestedSlot: suggestion }),
       });
-      if (existingBooking) {
-        const suggestion = await this.availabilityService.findNextAvailableSlot(
-          doctor.id, dto.date, dto.startTime, dto.endTime,
-        );
-        throw new ConflictException({
-          message: suggestion
-            ? 'Requested slot is already booked. Here is the next available slot.'
-            : 'Requested slot is already booked',
-          ...(suggestion && { suggestedSlot: suggestion }),
-        });
-      }
     }
 
     const previousDate = appointment.date;
@@ -1648,34 +1584,22 @@ export class AppointmentService {
         appointment.id,
       );
 
-      if (slotInfo.schedulingType === 'WAVE') {
-        await queryRunner.manager.find(Appointment, {
-          where: { doctorId: doctor.id, date: dto.date, startTime: dto.startTime, endTime: dto.endTime },
-          lock: { mode: 'pessimistic_write' },
-          loadEagerRelations: false,
-        });
-        await this.assertWaveCapacityAvailable(
-          queryRunner.manager,
-          doctor.id,
-          dto.date,
-          dto.startTime,
-          dto.endTime,
-          slotInfo.maxPatients ?? 0,
-        );
-      } else {
-        const existingBooking = await queryRunner.manager.findOne(Appointment, {
-          where: {
-            doctorId: doctor.id,
-            date: dto.date,
-            startTime: dto.startTime,
-            endTime: dto.endTime,
-            status: AppointmentStatus.CONFIRMED,
-          },
-          lock: { mode: 'pessimistic_write' },
-          loadEagerRelations: false,
-        });
-        if (existingBooking) throw new ConflictException('Requested slot is already booked');
-      }
+      await queryRunner.manager.find(Appointment, {
+        where: { doctorId: doctor.id, date: dto.date, startTime: dto.startTime, endTime: dto.endTime },
+        lock: { mode: 'pessimistic_write' },
+        loadEagerRelations: false,
+      });
+      const effectiveDocReschedCap = (slotInfo.maxPatients && slotInfo.maxPatients > 0)
+        ? slotInfo.maxPatients
+        : (slotInfo.schedulingType === 'WAVE' ? 3 : 10);
+      await this.assertWaveCapacityAvailable(
+        queryRunner.manager,
+        doctor.id,
+        dto.date,
+        dto.startTime,
+        dto.endTime,
+        effectiveDocReschedCap,
+      );
 
       appToLock.status = AppointmentStatus.RESCHEDULED;
       await queryRunner.manager.save(appToLock);
