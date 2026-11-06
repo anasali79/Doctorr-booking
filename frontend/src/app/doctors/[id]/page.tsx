@@ -15,6 +15,8 @@ import {
   GraduationCap,
   Clock,
   Sparkles,
+  ShieldCheck,
+  AlertCircle,
 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -71,9 +73,22 @@ export default async function DoctorProfilePage({ params }: DoctorProfilePagePro
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <span className="inline-block rounded-full bg-[#e8f2fe] px-2.5 py-0.5 text-[11px] font-semibold text-[#0066cc] mb-1.5">
-                    {specLabel}
-                  </span>
+                  <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                    <span className="inline-block rounded-full bg-[#e8f2fe] px-2.5 py-0.5 text-[11px] font-semibold text-[#0066cc]">
+                      {specLabel}
+                    </span>
+                    {doctor.isVerified ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 shadow-2xs">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Verified Practitioner</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-[11px] font-bold text-amber-700 shadow-2xs">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Unverified Doctor</span>
+                      </span>
+                    )}
+                  </div>
                   <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
                     {doctor.fullName}
                   </h1>

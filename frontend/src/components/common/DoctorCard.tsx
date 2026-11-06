@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Doctor } from '@/types';
 import { DoctorAvatar } from '@/components/common/DoctorAvatar';
 import { SPECIALIZATION_LABELS } from '@/lib/constants';
@@ -36,9 +36,22 @@ export function DoctorCard({ doctor, index = 0 }: DoctorCardProps) {
           />
 
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-bold text-slate-900 group-hover:text-[#0066cc] transition-colors truncate">
-              {doctor.fullName}
-            </h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-base font-bold text-slate-900 group-hover:text-[#0066cc] transition-colors truncate">
+                {doctor.fullName}
+              </h3>
+              {doctor.isVerified ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700 shadow-2xs">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                  <span>Verified</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-700 shadow-2xs">
+                  <AlertCircle className="w-3 h-3 text-amber-600" />
+                  <span>Unverified</span>
+                </span>
+              )}
+            </div>
 
             {/* Specialty Pill Tag */}
             <div className="mt-1">
