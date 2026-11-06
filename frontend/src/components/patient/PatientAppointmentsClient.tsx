@@ -834,6 +834,10 @@ export function PatientAppointmentsClient({
                           <span className={`text-[9px] font-bold ${isSelected ? 'text-blue-200' : 'text-[#0066cc]'}`}>
                             Wave ({slot.availableCount ?? 1} left)
                           </span>
+                        ) : slot.schedulingType === 'STREAM' ? (
+                          <span className={`text-[9px] font-bold ${isSelected ? 'text-indigo-200' : 'text-indigo-600'}`}>
+                            Stream ({slot.availableCount ?? 1} left)
+                          </span>
                         ) : (
                           <span className="text-[9px] font-medium opacity-75">
                             {isBookable ? 'Available' : 'Booked'}

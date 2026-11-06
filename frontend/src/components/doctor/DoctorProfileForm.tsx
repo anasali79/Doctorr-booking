@@ -66,7 +66,7 @@ export function DoctorProfileForm({
       await clientAxios[method]('/api/doctor/profile-proxy', data);
 
       toast.success(isSetup ? 'Doctor Profile Registered!' : 'Profile Saved Successfully');
-      router.push('/doctor/dashboard');
+      router.push(isSetup ? '/doctor/verification' : '/doctor/dashboard');
       router.refresh();
     } catch (err: unknown) {
       const msg = extractErrorMessage(err);

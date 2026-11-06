@@ -20,7 +20,7 @@ export default async function DoctorAvailabilityPage({ searchParams }: DoctorAva
   }
 
   const params = await searchParams;
-  const initialTab = (params.tab === 'leaves' || params.tab === 'overrides' || params.tab === 'unavailable')
+  const initialTab = (params.tab === 'leaves' || params.tab === 'overrides' || params.tab === 'unavailable' || params.tab === 'occupancy')
     ? params.tab
     : 'recurring';
 

@@ -41,15 +41,17 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
   const todayIST = getTodayIST();
   const maxDays = doctor.maxFutureBookingDays ?? 14;
 
-  // Generate available dates from todayIST
+  // Generate available dates strictly from todayIST (Asia/Kolkata date) without UTC drift
   const availableDates: { dateStr: string; label: string; dayName: string; dayNum: string }[] = [];
-  const baseDate = new Date();
   const totalDays = doctor.allowFutureBooking ? Math.max(1, maxDays) : 1;
+  const [baseYear, baseMonth, baseDay] = todayIST.split('-').map(Number);
 
   for (let i = 0; i < totalDays; i++) {
-    const d = new Date();
-    d.setDate(baseDate.getDate() + i);
-    const dateStr = d.toISOString().split('T')[0];
+    const d = new Date(baseYear, baseMonth - 1, baseDay + i);
+    const yStr = d.getFullYear();
+    const mStr = String(d.getMonth() + 1).padStart(2, '0');
+    const dayStr = String(d.getDate()).padStart(2, '0');
+    const dateStr = [yStr, mStr, dayStr].join('-');
     const isToday = i === 0;
     const isTomorrow = i === 1;
     const label = isToday ? 'Today' : isTomorrow ? 'Tomorrow' : d.toLocaleDateString('en-IN', { month: 'short' });
@@ -268,17 +270,18 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
     }
   };
 
-  // Separate WAVE slots and STREAM slots
+  // Separate STREAM session slots and time slots (which include WAVE slots)
+  const streamSlots = slots.filter((s) => s.schedulingType === 'STREAM');
+  const timeSlots = slots.filter((s) => s.schedulingType !== 'STREAM');
   const waveSlots = slots.filter((s) => s.schedulingType === 'WAVE');
-  const streamSlots = slots.filter((s) => s.schedulingType !== 'WAVE');
 
-  // Group stream slots by time period
-  const morningSlots = streamSlots.filter((s) => parseInt(s.startTime.split(':')[0], 10) < 12);
-  const afternoonSlots = streamSlots.filter((s) => {
+  // Group time slots (Wave slots) by time period
+  const morningSlots = timeSlots.filter((s) => parseInt(s.startTime.split(':')[0], 10) < 12);
+  const afternoonSlots = timeSlots.filter((s) => {
     const h = parseInt(s.startTime.split(':')[0], 10);
     return h >= 12 && h < 17;
   });
-  const eveningSlots = streamSlots.filter((s) => parseInt(s.startTime.split(':')[0], 10) >= 17);
+  const eveningSlots = timeSlots.filter((s) => parseInt(s.startTime.split(':')[0], 10) >= 17);
 
   // Total available booking count across stream & wave
   const availableCount = slots.reduce((acc, s) => {
@@ -287,8 +290,8 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
       s.status === 'cancel and available for booking';
     if (!isBookable) return acc;
 
-    if (s.schedulingType === 'WAVE') {
-      return acc + (s.availableCount !== undefined ? s.availableCount : 1);
+    if (s.availableCount !== undefined) {
+      return acc + s.availableCount;
     }
     return acc + 1;
   }, 0);
@@ -381,15 +384,15 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Wave Slots ("Bada Slot" with Start & End Time + Remaining Bookings) */}
-            {waveSlots.length > 0 && (
+            {/* Stream Slots (Continuous session window with live tokens) */}
+            {streamSlots.length > 0 && (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-700">
-                  <Layers className="h-4 w-4 text-[#0066cc]" />
-                  <span>Wave Consultation Windows (Token-Based)</span>
+                  <Users className="h-4 w-4 text-indigo-600" />
+                  <span>Stream Consultation Windows (Token-Based Queue)</span>
                 </div>
                 <div className="space-y-3">
-                  {waveSlots.map((slot, idx) => renderWaveSlot(slot, idx))}
+                  {streamSlots.map((slot, idx) => renderStreamSlot(slot, idx))}
                 </div>
               </div>
             )}
@@ -445,7 +448,13 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
               {waveSlots.length > 0 && (
                 <span className="flex items-center gap-2">
                   <span className="inline-block h-2.5 w-2.5 rounded-full bg-blue-500" />
-                  Wave Window (Live Capacity)
+                  Wave Slot (Per-Slot Capacity)
+                </span>
+              )}
+              {streamSlots.length > 0 && (
+                <span className="flex items-center gap-2">
+                  <span className="inline-block h-2.5 w-2.5 rounded-full bg-indigo-500" />
+                  Stream Session (Token Queue)
                 </span>
               )}
             </div>
@@ -468,7 +477,20 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
               <div className="flex items-center gap-3.5 rounded-xl bg-slate-50 p-4 border border-slate-100">
                 <DoctorAvatar name={doctor.fullName} size="md" className="rounded-xl border border-slate-200 shadow-2xs" />
                 <div>
-                  <h4 className="text-sm font-bold text-slate-900">{doctor.fullName}</h4>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-slate-900">{doctor.fullName}</h4>
+                    {doctor.isVerified ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[9px] font-bold text-emerald-700 shadow-2xs">
+                        <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                        <span>Verified</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[9px] font-bold text-amber-700 shadow-2xs">
+                        <AlertCircle className="w-2.5 h-2.5 text-amber-600" />
+                        <span>Unverified</span>
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs font-semibold text-slate-600 capitalize">
                     {doctor.specialization} • {doctor.qualification}
                   </p>
@@ -494,7 +516,13 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
                   {selectedSlot.schedulingType === 'WAVE' && (
                     <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#0066cc] bg-blue-50 px-2 py-0.5 rounded-full mt-1 border border-blue-200/60">
                       <Layers className="h-2.5 w-2.5" />
-                      Wave Session • {selectedSlot.availableCount ?? 1} bookings remaining
+                      Wave Slot • {selectedSlot.availableCount ?? 1} bookings remaining
+                    </span>
+                  )}
+                  {selectedSlot.schedulingType === 'STREAM' && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full mt-1 border border-indigo-200/60">
+                      <Users className="h-2.5 w-2.5" />
+                      Stream Session • {selectedSlot.availableCount ?? 1} bookings remaining
                     </span>
                   )}
                 </div>
@@ -571,15 +599,26 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
       slot.status === 'available' ||
       slot.status === 'cancel and available for booking';
 
+    const maxPatients = slot.maxPatients || (slot.schedulingType === 'WAVE' ? 3 : 1);
+    const bookedCount = slot.bookedCount || 0;
+    const availableCount =
+      slot.availableCount !== undefined
+        ? slot.availableCount
+        : isBookable
+        ? Math.max(0, maxPatients - bookedCount)
+        : 0;
+
+    const isFull = availableCount <= 0 || !isBookable;
+
     return (
       <Button
         key={`${slot.startTime}-${slot.endTime}-${index}`}
         type="button"
         variant="ghost"
-        disabled={!isBookable}
+        disabled={isFull}
         onClick={() => handleSelectSlot(slot)}
         className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border py-2.5 px-2 text-center transition-all duration-150 h-auto group ${
-          isBookable
+          !isFull
             ? 'border-slate-200 bg-white text-slate-800 hover:border-[#0066cc] hover:bg-[#0066cc] hover:text-white shadow-2xs active:scale-95'
             : 'cursor-not-allowed border-slate-100 bg-slate-100/80 text-slate-400 opacity-60'
         }`}
@@ -588,18 +627,24 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
           {formatTime(slot.startTime)} – {formatTime(slot.endTime)}
         </span>
         <span className="text-[9px] uppercase font-bold tracking-wider opacity-75 group-hover:text-blue-100">
-          {isBookable ? 'Available' : 'Booked'}
+          {!isFull ? (
+            slot.schedulingType === 'WAVE' && maxPatients > 1
+              ? `${availableCount} left`
+              : 'Available'
+          ) : (
+            'Booked'
+          )}
         </span>
       </Button>
     );
   }
 
-  function renderWaveSlot(slot: Slot, index: number) {
+  function renderStreamSlot(slot: Slot, index: number) {
     const isBookable =
       slot.status === 'available' ||
       slot.status === 'cancel and available for booking';
 
-    const maxPatients = slot.maxPatients || 0;
+    const maxPatients = slot.maxPatients || 10;
     const bookedCount = slot.bookedCount || 0;
     const availableCount =
       slot.availableCount !== undefined
@@ -618,20 +663,20 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
 
     return (
       <div
-        key={`wave-slot-${slot.startTime}-${slot.endTime}-${index}`}
+        key={`stream-slot-${slot.startTime}-${slot.endTime}-${index}`}
         className={`relative overflow-hidden rounded-2xl border transition-all duration-200 p-4 sm:p-5 ${
           !isFull
-            ? 'border-blue-200 bg-gradient-to-br from-blue-50/70 via-white to-indigo-50/30 hover:border-[#0066cc] hover:shadow-md'
+            ? 'border-indigo-200 bg-gradient-to-br from-indigo-50/70 via-white to-blue-50/30 hover:border-[#0066cc] hover:shadow-md'
             : 'border-slate-200 bg-slate-50/80 opacity-70'
         }`}
       >
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          {/* Left: Timing & Wave Badge */}
+          {/* Left: Timing & Stream Badge */}
           <div className="space-y-1.5 flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-[#0066cc]">
-                <Layers className="h-3 w-3" />
-                Wave Consultation Window
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-indigo-700">
+                <Users className="h-3 w-3" />
+                Stream Consultation Window
               </span>
               {!isFull ? (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
@@ -641,7 +686,7 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
               ) : (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-200 px-2.5 py-0.5 text-[10px] font-bold text-slate-600">
                   <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-                  Wave Full
+                  Stream Session Full
                 </span>
               )}
             </div>
@@ -656,7 +701,7 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
             </div>
 
             <p className="text-xs text-slate-600 leading-relaxed">
-              Open batch/walk-in session. Patients are accommodated throughout this window with live token numbers.
+              Open streaming consultation session. Patients are accommodated sequentially throughout this window with live token numbers.
             </p>
           </div>
 
@@ -704,11 +749,11 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
             >
               {!isFull ? (
                 <span className="flex items-center gap-1.5">
-                  <span>Book in Wave ({formatTime(slot.startTime)} – {formatTime(slot.endTime)})</span>
+                  <span>Book in Stream ({formatTime(slot.startTime)} – {formatTime(slot.endTime)})</span>
                   <ArrowRight className="h-3.5 w-3.5" />
                 </span>
               ) : (
-                'Wave Session Full'
+                'Stream Session Full'
               )}
             </Button>
           </div>

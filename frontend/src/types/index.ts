@@ -168,6 +168,57 @@ export interface RecurringAvailability {
   maxPatients?: number;
 }
 
+export interface CustomAvailabilityOverride {
+  id: string;
+  doctorId: string;
+  date: string; // YYYY-MM-DD
+  dayOfWeek?: 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  slotDuration: number;
+  schedulingType: 'STREAM' | 'WAVE';
+  bufferTime: number;
+  maxPatients?: number;
+}
+
+export interface SlotBookingInfo {
+  id: string;
+  patientName: string;
+  tokenNumber: number | null;
+  status: string;
+  paymentStatus?: string;
+}
+
+export interface DividedSlotDetail {
+  startTime: string;
+  endTime: string;
+  status: 'available' | 'booked';
+  maxPatients: number;
+  bookedCount: number;
+  availableCount: number;
+  bookings?: SlotBookingInfo[];
+}
+
+export interface DayScheduleSlot {
+  id: string;
+  startTime: string;
+  endTime: string;
+  slotDuration: number;
+  bufferTime?: number;
+  schedulingType?: 'STREAM' | 'WAVE';
+  maxPatients?: number;
+  dividedSlots: DividedSlotDetail[];
+}
+
+export interface DayScheduleDetail {
+  date: string;
+  dayOfWeek: 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
+  source: 'custom' | 'recurring' | 'none';
+  onLeave?: boolean;
+  message?: string;
+  slots: DayScheduleSlot[];
+}
+
 export interface DoctorLeave {
   id: string;
   doctorId: string;

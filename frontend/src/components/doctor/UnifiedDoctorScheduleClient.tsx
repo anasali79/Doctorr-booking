@@ -2,7 +2,12 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { RecurringAvailability, DoctorLeave } from '@/types';
+import {
+  RecurringAvailability,
+  DoctorLeave,
+  CustomAvailabilityOverride,
+  DayScheduleDetail,
+} from '@/types';
 import { DAYS_OF_WEEK } from '@/lib/constants';
 import { formatTime, formatDate, getTodayIST } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -23,6 +28,10 @@ import {
   ArrowRight,
   RefreshCw,
   Info,
+  ChevronDown,
+  ChevronUp,
+  Users,
+  BarChart3,
 } from 'lucide-react';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import { Button } from '@/components/ui/button';
@@ -33,7 +42,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 interface UnifiedDoctorScheduleClientProps {
   initialAvailability: any;
   initialLeaves: DoctorLeave[];
-  defaultTab?: 'recurring' | 'overrides' | 'unavailable' | 'leaves';
+  defaultTab?: 'recurring' | 'occupancy' | 'overrides' | 'unavailable' | 'leaves';
 }
 
 function parseAvailabilityList(input: unknown): RecurringAvailability[] {
@@ -44,6 +53,71 @@ function parseAvailabilityList(input: unknown): RecurringAvailability[] {
     if (Array.isArray(obj.data)) return obj.data;
   }
   return [];
+}
+
+function parseCustomOverridesList(input: unknown): CustomAvailabilityOverride[] {
+  if (input && typeof input === 'object') {
+    const obj = input as any;
+    if (Array.isArray(obj.customOverrides)) return obj.customOverrides;
+    if (obj.data && Array.isArray(obj.data.customOverrides)) return obj.data.customOverrides;
+  }
+  return [];
+}
+
+function parseGeneratedSchedule(input: unknown): DayScheduleDetail[] {
+  if (input && typeof input === 'object') {
+    const obj = input as any;
+    if (Array.isArray(obj.generatedSchedule)) return obj.generatedSchedule;
+    if (obj.data && Array.isArray(obj.data.generatedSchedule)) return obj.data.generatedSchedule;
+  }
+  return [];
+}
+
+function calculateShiftSubSlots(
+  startTime: string,
+  endTime: string,
+  duration: number,
+  buffer: number,
+  schedulingType: 'STREAM' | 'WAVE',
+  maxPatients: number,
+) {
+  if (schedulingType === 'STREAM') {
+    return [
+      {
+        startTime,
+        endTime,
+        maxPatients: maxPatients || 10,
+      },
+    ];
+  }
+
+  const [sh, sm] = startTime.split(':').map(Number);
+  const [eh, em] = endTime.split(':').map(Number);
+  const startMins = sh * 60 + sm;
+  const endMins = eh * 60 + em;
+
+  const subSlots: Array<{ startTime: string; endTime: string; maxPatients: number }> = [];
+  let curr = startMins;
+
+  while (curr + duration <= endMins) {
+    const sH = Math.floor(curr / 60);
+    const sM = curr % 60;
+    const eH = Math.floor((curr + duration) / 60);
+    const eM = (curr + duration) % 60;
+
+    const sStr = `${String(sH).padStart(2, '0')}:${String(sM).padStart(2, '0')}`;
+    const eStr = `${String(eH).padStart(2, '0')}:${String(eM).padStart(2, '0')}`;
+
+    subSlots.push({
+      startTime: sStr,
+      endTime: eStr,
+      maxPatients: maxPatients || 3,
+    });
+
+    curr += duration + buffer;
+  }
+
+  return subSlots;
 }
 
 const DAY_LABELS: Record<string, string> = {
@@ -62,7 +136,7 @@ export function UnifiedDoctorScheduleClient({
   defaultTab = 'recurring',
 }: UnifiedDoctorScheduleClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'recurring' | 'overrides' | 'unavailable' | 'leaves'>(defaultTab);
+  const [activeTab, setActiveTab] = useState<'recurring' | 'occupancy' | 'overrides' | 'unavailable' | 'leaves'>(defaultTab);
 
   // Availability State
   const [availabilities, setAvailabilities] = useState<RecurringAvailability[]>(() =>
@@ -71,6 +145,38 @@ export function UnifiedDoctorScheduleClient({
   const [leaves, setLeaves] = useState<DoctorLeave[]>(() =>
     Array.isArray(initialLeaves) ? initialLeaves : [],
   );
+  const [customOverrides, setCustomOverrides] = useState<CustomAvailabilityOverride[]>(() =>
+    parseCustomOverridesList(initialAvailability),
+  );
+  const [deletingOverrideId, setDeletingOverrideId] = useState<string | null>(null);
+
+  // Live Generated Schedule & Occupancy State
+  const [generatedSchedule, setGeneratedSchedule] = useState<DayScheduleDetail[]>(() =>
+    parseGeneratedSchedule(initialAvailability),
+  );
+  const [selectedOccupancyDate, setSelectedOccupancyDate] = useState<string>(getTodayIST());
+  const [expandedShiftIds, setExpandedShiftIds] = useState<Record<string, boolean>>({});
+  const [refreshingSchedule, setRefreshingSchedule] = useState(false);
+
+  const toggleExpandShift = (id: string) => {
+    setExpandedShiftIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const refreshFullSchedule = async () => {
+    try {
+      setRefreshingSchedule(true);
+      const res = await clientAxios.get<any>('/api/doctor/availability-proxy');
+      const payload = res.data?.data || res.data;
+      setAvailabilities(parseAvailabilityList(payload));
+      setCustomOverrides(parseCustomOverridesList(payload));
+      setGeneratedSchedule(parseGeneratedSchedule(payload));
+      toast.success('Roster Refreshed', { description: 'Live slot occupancy updated with latest bookings.' });
+    } catch (err: unknown) {
+      toast.error('Could not refresh roster', { description: extractErrorMessage(err) });
+    } finally {
+      setRefreshingSchedule(false);
+    }
+  };
 
   // Recurring Form State
   const [selectedDays, setSelectedDays] = useState<string[]>([
@@ -83,9 +189,9 @@ export function UnifiedDoctorScheduleClient({
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('17:00');
   const [slotDuration, setSlotDuration] = useState<number>(30);
-  const [schedulingType, setSchedulingType] = useState<'STREAM' | 'WAVE'>('STREAM');
+  const [schedulingType, setSchedulingType] = useState<'STREAM' | 'WAVE'>('WAVE');
   const [bufferTime, setBufferTime] = useState<number>(0);
-  const [maxPatients, setMaxPatients] = useState<number>(1);
+  const [maxPatients, setMaxPatients] = useState<number>(3);
   const [allowFutureBooking, setAllowFutureBooking] = useState(true);
   const [maxFutureBookingDays, setMaxFutureBookingDays] = useState(7);
   const [savingRecurring, setSavingRecurring] = useState(false);
@@ -97,6 +203,8 @@ export function UnifiedDoctorScheduleClient({
   const [overrideEndTime, setOverrideEndTime] = useState('14:00');
   const [overrideDuration, setOverrideDuration] = useState(30);
   const [overrideBuffer, setOverrideBuffer] = useState(0);
+  const [overrideSchedulingType, setOverrideSchedulingType] = useState<'STREAM' | 'WAVE'>('WAVE');
+  const [overrideMaxPatients, setOverrideMaxPatients] = useState<number>(3);
   const [savingOverride, setSavingOverride] = useState(false);
 
   // Unavailable State
@@ -146,10 +254,13 @@ export function UnifiedDoctorScheduleClient({
       if (endMin <= startMin) return 0;
 
       const totalWorkingMins = endMin - startMin;
+      if (schedulingType === 'STREAM') {
+        return maxPatients || 10;
+      }
       const slotAndBuffer = slotDuration + bufferTime;
       if (slotAndBuffer <= 0) return 0;
 
-      return Math.floor(totalWorkingMins / slotAndBuffer);
+      return Math.floor(totalWorkingMins / slotAndBuffer) * (maxPatients || 3);
     } catch {
       return 0;
     }
@@ -178,7 +289,7 @@ export function UnifiedDoctorScheduleClient({
         schedulingType,
         slotDuration: Number(slotDuration),
         bufferTime: Number(bufferTime),
-        maxPatients: schedulingType === 'WAVE' ? Number(maxPatients) : 1,
+        maxPatients: Number(maxPatients),
         allowFutureBooking,
         maxFutureBookingDays: allowFutureBooking ? Number(maxFutureBookingDays) : null,
       };
@@ -191,8 +302,10 @@ export function UnifiedDoctorScheduleClient({
 
       // Refetch
       const updatedRes = await clientAxios.get<any>('/api/doctor/availability-proxy');
-      const parsed = parseAvailabilityList(updatedRes.data?.data || updatedRes.data);
-      setAvailabilities(parsed);
+      const updatedData = updatedRes.data?.data || updatedRes.data;
+      setAvailabilities(parseAvailabilityList(updatedData));
+      setCustomOverrides(parseCustomOverridesList(updatedData));
+      setGeneratedSchedule(parseGeneratedSchedule(updatedData));
       router.refresh();
     } catch (err: unknown) {
       toast.error('Failed to configure availability', {
@@ -237,16 +350,53 @@ export function UnifiedDoctorScheduleClient({
         endTime: overrideEndTime,
         slotDuration: Number(overrideDuration),
         bufferTime: Number(overrideBuffer),
+        schedulingType: overrideSchedulingType,
+        maxPatients: Number(overrideMaxPatients),
       });
 
       toast.success('Custom Shift Added!', {
         description: `Special consultation slots opened on ${formatDate(overrideDate)}.`,
       });
+
+      try {
+        const updatedRes = await clientAxios.get<any>('/api/doctor/availability-proxy');
+        const payload = updatedRes.data?.data || updatedRes.data;
+        setAvailabilities(parseAvailabilityList(payload));
+        setCustomOverrides(parseCustomOverridesList(payload));
+        setGeneratedSchedule(parseGeneratedSchedule(payload));
+      } catch (e) {
+        // Fallback
+      }
+
       router.refresh();
     } catch (err: unknown) {
       toast.error('Override Failed', { description: extractErrorMessage(err) });
     } finally {
       setSavingOverride(false);
+    }
+  };
+
+  // Delete Custom Override
+  const handleDeleteOverride = async (id: string, date: string, startTime: string, endTime: string) => {
+    if (!confirm(`Are you sure you want to remove the special shift on ${formatDate(date)} (${formatTime(startTime)} – ${formatTime(endTime)})?`)) {
+      return;
+    }
+
+    try {
+      setDeletingOverrideId(id);
+      await clientAxios.delete(`/api/doctor/availability-proxy/override/${id}`);
+
+      toast.success('Shift Override Removed', {
+        description: `Special schedule for ${formatDate(date)} has been removed.`,
+      });
+      setCustomOverrides((prev) => prev.filter((o) => o.id !== id));
+      router.refresh();
+    } catch (err: unknown) {
+      toast.error('Failed to remove override', {
+        description: extractErrorMessage(err),
+      });
+    } finally {
+      setDeletingOverrideId(null);
     }
   };
 
@@ -397,6 +547,20 @@ export function UnifiedDoctorScheduleClient({
           </span>
         </Button>
 
+        <Button type="button" variant="ghost" onClick={() => setActiveTab('occupancy')} className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all whitespace-nowrap ${
+            activeTab === 'occupancy'
+              ? 'bg-blue-700 text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+          } h-auto`}>
+          <Layers className="h-3.5 w-3.5" />
+          <span>Live Slots & Occupancy</span>
+          <span className={`rounded-full px-2 py-0.5 text-[10px] ${
+            activeTab === 'occupancy' ? 'bg-blue-800 text-blue-100' : 'bg-emerald-50 text-emerald-700 font-semibold'
+          }`}>
+            Live Roster
+          </span>
+        </Button>
+
         <Button type="button" variant="ghost" onClick={() => setActiveTab('leaves')} className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all whitespace-nowrap ${
             activeTab === 'leaves'
               ? 'bg-blue-700 text-white shadow-xs'
@@ -416,8 +580,13 @@ export function UnifiedDoctorScheduleClient({
               ? 'bg-blue-700 text-white shadow-xs'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
           } h-auto`}>
-          <Plus className="h-3.5 w-3.5" />
+          <Zap className="h-3.5 w-3.5" />
           <span>Special Date Override</span>
+          <span className={`rounded-full px-2 py-0.5 text-[10px] ${
+            activeTab === 'overrides' ? 'bg-blue-800 text-blue-100' : 'bg-slate-100 text-slate-600'
+          }`}>
+            {customOverrides.length}
+          </span>
         </Button>
 
         <Button type="button" variant="ghost" onClick={() => setActiveTab('unavailable')} className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all whitespace-nowrap ${
@@ -529,37 +698,46 @@ export function UnifiedDoctorScheduleClient({
                 </div>
               </div>
 
-              {/* Capacity Model: STREAM vs WAVE */}
+              {/* Capacity Model: WAVE vs STREAM */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Consultation Capacity Model
+                  Consultation Scheduling Model
                 </label>
                 <div className="grid grid-cols-2 gap-2">
-                  <Button type="button" variant="ghost" onClick={() => setSchedulingType('STREAM')} className={`p-3 rounded-2xl border text-left transition-all ${
-                      schedulingType === 'STREAM'
-                        ? 'border-blue-700 bg-blue-50/70 text-slate-900 ring-1 ring-blue-700'
-                        : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-white'
-                    } h-auto flex-col items-start`}>
-                    <span className="block text-xs font-bold text-slate-900">STREAM</span>
-                    <span className="block text-[10px] text-slate-500 mt-0.5">1 patient per slot</span>
-                  </Button>
-
-                  <Button type="button" variant="ghost" onClick={() => setSchedulingType('WAVE')} className={`p-3 rounded-2xl border text-left transition-all ${
+                  <Button type="button" variant="ghost" onClick={() => { setSchedulingType('WAVE'); if (maxPatients === 15) setMaxPatients(3); }} className={`p-3 rounded-2xl border text-left transition-all ${
                       schedulingType === 'WAVE'
                         ? 'border-blue-700 bg-blue-50/70 text-slate-900 ring-1 ring-blue-700'
                         : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-white'
                     } h-auto flex-col items-start`}>
-                    <span className="block text-xs font-bold text-slate-900">WAVE</span>
-                    <span className="block text-[10px] text-slate-500 mt-0.5">Batch / Walk-in wave</span>
+                    <span className="block text-xs font-bold text-slate-900">WAVE Scheduling</span>
+                    <span className="block text-[10px] text-slate-500 mt-0.5">Time slots with slot capacity</span>
+                  </Button>
+
+                  <Button type="button" variant="ghost" onClick={() => { setSchedulingType('STREAM'); if (maxPatients === 3) setMaxPatients(15); }} className={`p-3 rounded-2xl border text-left transition-all ${
+                      schedulingType === 'STREAM'
+                        ? 'border-blue-700 bg-blue-50/70 text-slate-900 ring-1 ring-blue-700'
+                        : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-white'
+                    } h-auto flex-col items-start`}>
+                    <span className="block text-xs font-bold text-slate-900">STREAM Scheduling</span>
+                    <span className="block text-[10px] text-slate-500 mt-0.5">Continuous session with queue tokens</span>
                   </Button>
                 </div>
 
-                {schedulingType === 'WAVE' && (
+                {schedulingType === 'WAVE' ? (
                   <div className="mt-2.5">
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Max Patients per Wave
+                      Capacity per Slot (Max Patients per Slot)
                     </label>
-                    <Input type="number" min={1} max={20} value={maxPatients} onChange={(e) => setMaxPatients(Number(e.target.value))} className="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800 h-auto" />
+                    <Input type="number" min={1} max={20} value={maxPatients} onChange={(e) => setMaxPatients(Math.max(1, Number(e.target.value)))} className="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800 h-auto" />
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">e.g. 3 patients can book each 30-minute slot</span>
+                  </div>
+                ) : (
+                  <div className="mt-2.5">
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Total Session Capacity (Max Patients for Window)
+                    </label>
+                    <Input type="number" min={1} max={100} value={maxPatients} onChange={(e) => setMaxPatients(Math.max(1, Number(e.target.value)))} className="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800 h-auto" />
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">e.g. 15 patients accommodated with sequential tokens</span>
                   </div>
                 )}
               </div>
@@ -587,13 +765,13 @@ export function UnifiedDoctorScheduleClient({
               {/* Slot Calculator Output */}
               <div className="rounded-2xl bg-blue-50/90 border border-blue-200/80 p-3.5 flex items-center justify-between">
                 <div>
-                  <span className="text-[11px] font-bold text-blue-900 block">Calculated Capacity</span>
+                  <span className="text-[11px] font-bold text-blue-900 block">Calculated Daily Capacity</span>
                   <span className="text-xs text-blue-800">
-                    ~{previewSlotCount} slots per working day
+                    ~{previewSlotCount} {schedulingType === 'WAVE' ? 'spots across slots/day' : 'patients/stream session'}
                   </span>
                 </div>
                 <span className="font-mono text-xl font-black text-blue-900">
-                  {previewSlotCount * selectedDays.length} <span className="text-xs font-normal">/wk</span>
+                  {previewSlotCount * selectedDays.length} <span className="text-xs font-normal">spots/wk</span>
                 </span>
               </div>
 
@@ -624,6 +802,15 @@ export function UnifiedDoctorScheduleClient({
                 {availabilities.length} Shifts Configured
               </span>
             </div>
+
+            {customOverrides.length > 0 && (
+              <div className="p-3.5 bg-blue-50/70 border border-blue-200/80 rounded-2xl flex items-start gap-2.5 text-xs text-blue-900">
+                <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <span>
+                  You have <strong>{customOverrides.length} active date override(s)</strong> set in &ldquo;Special Date Override&rdquo;. Those specific dates will use your custom shifts instead of these weekly recurring hours.
+                </span>
+              </div>
+            )}
 
             {availabilities.length === 0 ? (
               <div className="rounded-3xl border border-slate-200/90 bg-white p-12 text-center shadow-xs">
@@ -657,16 +844,84 @@ export function UnifiedDoctorScheduleClient({
                       </div>
 
                       <div className="mt-2.5 flex items-center gap-3 text-[11px] text-slate-500 border-t border-slate-100 pt-2.5">
-                        <span>Slot: {slot.slotDuration || 30}m</span>
-                        <span>•</span>
-                        <span>Buffer: {slot.bufferTime || 0}m</span>
-                        {slot.schedulingType === 'WAVE' && (
+                        {slot.schedulingType === 'WAVE' ? (
                           <>
+                            <span>Slot: {slot.slotDuration || 30}m</span>
                             <span>•</span>
-                            <span>Max: {slot.maxPatients || 1}</span>
+                            <span>Buffer: {slot.bufferTime || 0}m</span>
+                            <span>•</span>
+                            <span>Capacity: {slot.maxPatients || 3} / slot</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Stream Window</span>
+                            <span>•</span>
+                            <span>Session Capacity: {slot.maxPatients || 10}</span>
                           </>
                         )}
                       </div>
+
+                      {/* Expandable Generated Slots Preview */}
+                      {(() => {
+                        const calculatedSubSlots = calculateShiftSubSlots(
+                          slot.startTime,
+                          slot.endTime,
+                          slot.slotDuration || 30,
+                          slot.bufferTime || 0,
+                          slot.schedulingType || 'STREAM',
+                          slot.maxPatients || (slot.schedulingType === 'WAVE' ? 3 : 10),
+                        );
+                        const isExpanded = Boolean(expandedShiftIds[slot.id]);
+
+                        return (
+                          <div className="mt-3 border-t border-slate-100 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => toggleExpandShift(slot.id)}
+                              className="w-full flex items-center justify-between text-[11px] font-bold text-blue-700 hover:text-blue-800 p-1.5 rounded-lg hover:bg-blue-50/60 transition-colors"
+                            >
+                              <span className="flex items-center gap-1.5">
+                                <Layers className="w-3.5 h-3.5" />
+                                <span>
+                                  {slot.schedulingType === 'WAVE'
+                                    ? `View Slot Architecture (${calculatedSubSlots.length} slots generated)`
+                                    : 'View Stream Session Capacity'}
+                                </span>
+                              </span>
+                              {isExpanded ? (
+                                <ChevronUp className="w-3.5 h-3.5" />
+                              ) : (
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+
+                            {isExpanded && (
+                              <div className="mt-2 space-y-1.5 p-2 bg-slate-50/80 rounded-xl border border-slate-200/60 max-h-48 overflow-y-auto">
+                                {calculatedSubSlots.map((sub, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="flex items-center justify-between px-2.5 py-1.5 bg-white rounded-lg border border-slate-200/70 text-[11px]"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className="w-4 h-4 rounded-full bg-blue-100 text-blue-700 font-bold text-[9px] flex items-center justify-center">
+                                        {idx + 1}
+                                      </span>
+                                      <span className="font-mono font-bold text-slate-800">
+                                        {formatTime(sub.startTime)} – {formatTime(sub.endTime)}
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] font-semibold text-slate-500">
+                                      {slot.schedulingType === 'WAVE'
+                                        ? `Max ${sub.maxPatients} patients`
+                                        : `Total ${sub.maxPatients} queue capacity`}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     <div className="mt-4 flex items-center justify-end border-t border-slate-100 pt-2.5">
@@ -799,82 +1054,621 @@ export function UnifiedDoctorScheduleClient({
         </div>
       )}
 
+      {/* ─── TAB 2: LIVE SLOTS & OCCUPANCY DASHBOARD ─── */}
+      {activeTab === 'occupancy' && (() => {
+        const dayData = generatedSchedule.find((d) => d.date === selectedOccupancyDate);
+        const daySlots = dayData?.slots || [];
+        const isLeave = Boolean(dayData?.onLeave);
+
+        let totalDaySlots = 0;
+        let totalDayCapacity = 0;
+        let totalDayBooked = 0;
+
+        for (const shift of daySlots) {
+          for (const ds of shift.dividedSlots || []) {
+            totalDaySlots++;
+            totalDayCapacity += ds.maxPatients || 0;
+            totalDayBooked += ds.bookedCount || 0;
+          }
+        }
+
+        const totalDayAvailable = Math.max(0, totalDayCapacity - totalDayBooked);
+        const occupancyRate = totalDayCapacity > 0 ? Math.round((totalDayBooked / totalDayCapacity) * 100) : 0;
+
+        const ribbonDates: Array<{
+          dateStr: string;
+          dayName: string;
+          dayNum: string;
+          monthName: string;
+          hasShift: boolean;
+          onLeave: boolean;
+          bookedCount: number;
+        }> = [];
+
+        const [baseY, baseM, baseD] = getTodayIST().split('-').map(Number);
+        for (let i = 0; i < 14; i++) {
+          const d = new Date(baseY, baseM - 1, baseD + i);
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          const dateStr = [y, m, day].join('-');
+
+          const dayMatch = generatedSchedule.find((gs) => gs.date === dateStr);
+          let bCount = 0;
+          let hasS = false;
+          if (dayMatch && dayMatch.slots && dayMatch.slots.length > 0) {
+            hasS = true;
+            for (const s of dayMatch.slots) {
+              for (const ds of s.dividedSlots || []) {
+                bCount += ds.bookedCount || 0;
+              }
+            }
+          }
+
+          ribbonDates.push({
+            dateStr,
+            dayName: d.toLocaleDateString('en-IN', { weekday: 'short' }),
+            dayNum: String(d.getDate()),
+            monthName: d.toLocaleDateString('en-IN', { month: 'short' }),
+            hasShift: hasS,
+            onLeave: Boolean(dayMatch?.onLeave),
+            bookedCount: bCount,
+          });
+        }
+
+        return (
+          <div className="space-y-6">
+            {/* Header with Title and Refresh */}
+            <div className="rounded-3xl border border-slate-200/90 bg-white p-6 sm:p-7 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-emerald-700">
+                  <Layers className="h-3.5 w-3.5" />
+                  Clinical Capacity & Live Occupancy
+                </div>
+                <h2 className="text-xl font-bold text-slate-900 mt-1">Live Slot Roster & Bookings</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Deep inspection into how your clinic shifts are divided into consultation slots and real-time patient occupancy.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={refreshFullSchedule}
+                  disabled={refreshingSchedule}
+                  className="rounded-xl border-slate-200 text-xs font-semibold hover:bg-slate-50 h-auto py-2"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${refreshingSchedule ? 'animate-spin' : ''}`} />
+                  <span>Refresh Bookings</span>
+                </Button>
+              </div>
+            </div>
+
+            {/* Date Ribbon Strip */}
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-3 shadow-2xs">
+              <div className="flex items-center justify-between mb-2 px-1">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Select Calendar Date (14-Day Live Window)
+                </span>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  Showing: <strong className="text-slate-700">{formatDate(selectedOccupancyDate)}</strong>
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                {ribbonDates.map((rd) => {
+                  const isSelected = rd.dateStr === selectedOccupancyDate;
+                  return (
+                    <button
+                      key={rd.dateStr}
+                      type="button"
+                      onClick={() => setSelectedOccupancyDate(rd.dateStr)}
+                      className={`flex flex-col items-center justify-center min-w-[70px] sm:min-w-[80px] py-2.5 px-2 rounded-2xl border text-center transition-all shrink-0 ${
+                        isSelected
+                          ? 'border-blue-700 bg-blue-700 text-white shadow-sm ring-2 ring-blue-700/20'
+                          : rd.onLeave
+                          ? 'border-rose-200 bg-rose-50/60 text-rose-800 hover:border-rose-300'
+                          : rd.hasShift
+                          ? 'border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-300 hover:bg-white'
+                          : 'border-dashed border-slate-200 bg-slate-50/40 text-slate-400 hover:border-slate-300'
+                      }`}
+                    >
+                      <span className={`text-[10px] font-bold uppercase ${isSelected ? 'text-blue-100' : 'text-slate-500'}`}>
+                        {rd.dayName}
+                      </span>
+                      <span className="text-lg font-black font-mono leading-tight my-0.5">
+                        {rd.dayNum}
+                      </span>
+                      <span className={`text-[10px] font-semibold ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
+                        {rd.monthName}
+                      </span>
+
+                      <div className="mt-1.5">
+                        {rd.onLeave ? (
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${isSelected ? 'bg-rose-500 text-white' : 'bg-rose-100 text-rose-700'}`}>
+                            Leave
+                          </span>
+                        ) : rd.hasShift ? (
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                            isSelected
+                              ? 'bg-blue-800 text-blue-100'
+                              : rd.bookedCount > 0
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {rd.bookedCount > 0 ? `${rd.bookedCount} bkd` : 'Open'}
+                          </span>
+                        ) : (
+                          <span className={`text-[9px] ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
+                            Off
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Selected Day Clinical Metrics */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+                <div className="flex items-center justify-between text-slate-500">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Shift Type</span>
+                  <Sliders className="h-4 w-4 text-blue-600" />
+                </div>
+                <div className="mt-2 text-base font-bold text-slate-900">
+                  {isLeave
+                    ? 'Leave Day'
+                    : dayData?.source === 'custom'
+                    ? 'Special Override'
+                    : dayData?.source === 'recurring'
+                    ? 'Weekly Shift'
+                    : 'No Shift Configured'}
+                </div>
+                <div className="text-[11px] text-slate-400 mt-0.5">
+                  {isLeave ? 'Patients blocked' : daySlots.length > 0 ? `${daySlots.length} shift window(s)` : 'Clinic closed'}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+                <div className="flex items-center justify-between text-slate-500">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Generated Slots</span>
+                  <Clock className="h-4 w-4 text-indigo-600" />
+                </div>
+                <div className="mt-2 text-2xl font-black font-mono text-slate-900">
+                  {totalDaySlots} <span className="text-xs font-normal text-slate-500">slots</span>
+                </div>
+                <div className="text-[11px] text-slate-400 mt-0.5">
+                  {totalDayCapacity} patient capacity
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+                <div className="flex items-center justify-between text-slate-500">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Confirmed Bookings</span>
+                  <Users className="h-4 w-4 text-amber-600" />
+                </div>
+                <div className="mt-2 text-2xl font-black font-mono text-slate-900">
+                  {totalDayBooked} <span className="text-xs font-normal text-slate-500">patients</span>
+                </div>
+                <div className="text-[11px] text-emerald-600 font-semibold mt-0.5">
+                  {totalDayAvailable} remaining spots open
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+                <div className="flex items-center justify-between text-slate-500">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Fill Rate</span>
+                  <BarChart3 className="h-4 w-4 text-emerald-600" />
+                </div>
+                <div className="mt-2 text-2xl font-black font-mono text-slate-900">
+                  {occupancyRate}%
+                </div>
+                <div className="w-full bg-slate-100 rounded-full h-1.5 mt-2 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      occupancyRate >= 90 ? 'bg-rose-600' : occupancyRate >= 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                    }`}
+                    style={{ width: `${occupancyRate}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Deep Slot-by-Slot Capacity Roster */}
+            <div className="rounded-3xl border border-slate-200/90 bg-white p-6 sm:p-7 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06)] space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">
+                    Slot Breakdown &amp; Occupancy for {formatDate(selectedOccupancyDate)}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Chronological consultation slots generated for this clinical shift with live booking counts
+                  </p>
+                </div>
+                <span className="rounded-full bg-blue-50 text-blue-700 border border-blue-200/60 px-3 py-1 text-xs font-bold">
+                  {totalDayBooked} / {totalDayCapacity} Booked
+                </span>
+              </div>
+
+              {isLeave ? (
+                <div className="p-8 text-center bg-rose-50/50 rounded-2xl border border-rose-200/70">
+                  <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto mb-2" />
+                  <h4 className="font-bold text-rose-900 text-sm">Doctor is on Leave</h4>
+                  <p className="text-xs text-rose-700 max-w-md mx-auto mt-1">
+                    You have marked this date as official leave. All slots are closed and existing patient bookings were protected.
+                  </p>
+                </div>
+              ) : daySlots.length === 0 ? (
+                <div className="p-10 text-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50">
+                  <Clock className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <h4 className="font-bold text-slate-800 text-sm">No Shifts Scheduled for this Day</h4>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+                    Patients cannot book consultations on {formatDate(selectedOccupancyDate)} because no regular weekly shift or date override is active.
+                  </p>
+                  <div className="mt-4 flex items-center justify-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        setOverrideDate(selectedOccupancyDate);
+                        setActiveTab('overrides');
+                      }}
+                      className="btn-primary text-xs h-auto py-2"
+                    >
+                      <Plus className="w-3.5 h-3.5 mr-1" />
+                      <span>Open Special Shift for {formatDate(selectedOccupancyDate)}</span>
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {daySlots.map((shift, sIdx) => {
+                    const isWave = shift.schedulingType === 'WAVE';
+                    return (
+                      <div key={shift.id || sIdx} className="space-y-3">
+                        {/* Shift Window Banner */}
+                        <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                          <div className="flex items-center gap-2.5">
+                            <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+                            <span className="font-bold text-slate-900 text-xs">
+                              Shift Window: {formatTime(shift.startTime)} – {formatTime(shift.endTime)}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              isWave
+                                ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/60'
+                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                            }`}>
+                              {isWave ? `WAVE (${shift.slotDuration}m slots)` : 'STREAM (Continuous Window)'}
+                            </span>
+                          </div>
+
+                          <span className="text-[11px] text-slate-500 font-medium">
+                            {shift.dividedSlots?.length || 0} slot(s) generated
+                          </span>
+                        </div>
+
+                        {/* Divided Slots Grid */}
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {(shift.dividedSlots || []).map((slot, idx) => {
+                            const isFull = slot.bookedCount >= slot.maxPatients;
+                            const isPartial = slot.bookedCount > 0 && !isFull;
+                            const slotFillPct = slot.maxPatients > 0 ? Math.round((slot.bookedCount / slot.maxPatients) * 100) : 0;
+
+                            return (
+                              <div
+                                key={idx}
+                                className={`rounded-2xl border p-4 transition-all ${
+                                  isFull
+                                    ? 'border-rose-200 bg-rose-50/30'
+                                    : isPartial
+                                    ? 'border-amber-200 bg-amber-50/20'
+                                    : 'border-slate-200 bg-white hover:border-blue-200 shadow-2xs'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-slate-100 text-slate-700 font-mono font-bold text-xs">
+                                      #{idx + 1}
+                                    </span>
+                                    <div>
+                                      <span className="font-mono text-sm font-extrabold text-slate-900 block">
+                                        {formatTime(slot.startTime)} – {formatTime(slot.endTime)}
+                                      </span>
+                                      <span className="text-[10px] text-slate-500">
+                                        {isWave ? `${shift.slotDuration} mins consultation slot` : 'Continuous session token window'}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    isFull
+                                      ? 'bg-rose-100 text-rose-800'
+                                      : isPartial
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : 'bg-emerald-100 text-emerald-800'
+                                  }`}>
+                                    {isFull ? 'Fully Booked' : isPartial ? `${slot.availableCount} Spot Left` : 'Available'}
+                                  </span>
+                                </div>
+
+                                {/* Live Occupancy Progress Bar */}
+                                <div className="mt-3.5 space-y-1.5">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="font-semibold text-slate-700 text-[11px]">
+                                      Occupancy: <strong className="text-slate-900">{slot.bookedCount} / {slot.maxPatients}</strong> booked
+                                    </span>
+                                    <span className="text-[11px] font-mono font-bold text-slate-500">
+                                      {slotFillPct}%
+                                    </span>
+                                  </div>
+                                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full transition-all ${
+                                        isFull ? 'bg-rose-600' : isPartial ? 'bg-amber-500' : 'bg-emerald-500'
+                                      }`}
+                                      style={{ width: `${slotFillPct}%` }}
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* Booked Patients Detail Roster */}
+                                <div className="mt-3 pt-3 border-t border-slate-100/80">
+                                  {slot.bookings && slot.bookings.length > 0 ? (
+                                    <div className="space-y-1.5">
+                                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                                        Confirmed Patients ({slot.bookings.length}):
+                                      </span>
+                                      <div className="space-y-1">
+                                        {slot.bookings.map((b, bIdx) => (
+                                          <div
+                                            key={b.id || bIdx}
+                                            className="flex items-center justify-between px-2.5 py-1.5 bg-white/90 rounded-xl border border-slate-200/70 text-xs"
+                                          >
+                                            <div className="flex items-center gap-1.5">
+                                              <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[9px] font-bold text-blue-800 font-mono">
+                                                Token #{b.tokenNumber ?? (bIdx + 1)}
+                                              </span>
+                                              <span className="font-semibold text-slate-800 truncate max-w-[130px] sm:max-w-[160px]">
+                                                {b.patientName}
+                                              </span>
+                                            </div>
+                                            <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                              Confirmed
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-between text-[11px] text-slate-400">
+                                      <span>0 patients booked</span>
+                                      <span className="text-emerald-600 font-semibold text-[10px]">Ready for Booking</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ─── TAB 3: SPECIFIC DATE OVERRIDE ─── */}
       {activeTab === 'overrides' && (
-        <div className="max-w-2xl mx-auto rounded-3xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06)] space-y-6">
-          <div>
-            <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-700">
-              <Zap className="h-3.5 w-3.5" />
-              Special Hours & Overrides
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Left: Override Builder Form */}
+          <div className="lg:col-span-5 rounded-3xl border border-slate-200/90 bg-white p-6 sm:p-7 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06)] space-y-6">
+            <div>
+              <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-700">
+                <Zap className="h-3.5 w-3.5" />
+                Special Hours & Overrides
+              </div>
+              <h2 className="text-xl font-bold text-slate-900 mt-1">Open Special Date Slots</h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Add consultation slots for a specific date (e.g. holiday clinic, emergency evening session) without modifying your recurring schedule.
+              </p>
             </div>
-            <h2 className="text-xl font-bold text-slate-900 mt-1">Open Special Date Slots</h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Add consultation slots for a specific date (e.g. holiday clinic, emergency evening session) without modifying your recurring schedule.
-            </p>
+
+            <form onSubmit={handleCreateOverride} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Target Date</label>
+                <Input type="date" min={getTodayIST()} value={overrideDate} onChange={(e) => setOverrideDate(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 h-auto" required />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Start Hour</label>
+                  <Input type="time" value={overrideStartTime} onChange={(e) => setOverrideStartTime(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 h-auto" required />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">End Hour</label>
+                  <Input type="time" value={overrideEndTime} onChange={(e) => setOverrideEndTime(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 h-auto" required />
+                </div>
+              </div>
+
+              {/* Model Selector for Override */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Consultation Scheduling Model
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button type="button" variant="ghost" onClick={() => { setOverrideSchedulingType('WAVE'); if (overrideMaxPatients === 15) setOverrideMaxPatients(3); }} className={`p-2.5 rounded-xl border text-left transition-all ${
+                      overrideSchedulingType === 'WAVE'
+                        ? 'border-blue-700 bg-blue-50/70 text-slate-900 ring-1 ring-blue-700'
+                        : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-white'
+                    } h-auto flex-col items-start`}>
+                    <span className="block text-xs font-bold text-slate-900">WAVE</span>
+                    <span className="block text-[10px] text-slate-500 mt-0.5">Time slots with slot capacity</span>
+                  </Button>
+
+                  <Button type="button" variant="ghost" onClick={() => { setOverrideSchedulingType('STREAM'); if (overrideMaxPatients === 3) setOverrideMaxPatients(15); }} className={`p-2.5 rounded-xl border text-left transition-all ${
+                      overrideSchedulingType === 'STREAM'
+                        ? 'border-blue-700 bg-blue-50/70 text-slate-900 ring-1 ring-blue-700'
+                        : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-white'
+                    } h-auto flex-col items-start`}>
+                    <span className="block text-xs font-bold text-slate-900">STREAM</span>
+                    <span className="block text-[10px] text-slate-500 mt-0.5">Continuous session capacity</span>
+                  </Button>
+                </div>
+              </div>
+
+              {overrideSchedulingType === 'WAVE' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Slot Duration</label>
+                    <Select value={String(overrideDuration)} onValueChange={(val) => setOverrideDuration(Number(val))}>
+                        <SelectTrigger className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 h-auto">
+                          <SelectValue placeholder="Slot Duration" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="15">15 mins</SelectItem>
+                          <SelectItem value="20">20 mins</SelectItem>
+                          <SelectItem value="30">30 mins</SelectItem>
+                          <SelectItem value="45">45 mins</SelectItem>
+                          <SelectItem value="60">60 mins</SelectItem>
+                        </SelectContent>
+                      </Select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Buffer Time</label>
+                    <Select value={String(overrideBuffer)} onValueChange={(val) => setOverrideBuffer(Number(val))}>
+                        <SelectTrigger className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 h-auto">
+                          <SelectValue placeholder="Buffer Time" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="0">0 mins</SelectItem>
+                          <SelectItem value="5">5 mins</SelectItem>
+                          <SelectItem value="10">10 mins</SelectItem>
+                        </SelectContent>
+                      </Select>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {overrideSchedulingType === 'WAVE' ? 'Capacity per Slot (Patients per Slot)' : 'Total Session Capacity (Patients for Window)'}
+                </label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={overrideSchedulingType === 'WAVE' ? 20 : 100}
+                  value={overrideMaxPatients}
+                  onChange={(e) => setOverrideMaxPatients(Math.max(1, Number(e.target.value)))}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 h-auto"
+                  required
+                />
+              </div>
+
+              <Button type="submit" disabled={savingOverride} className="btn-primary w-full py-3 text-xs h-auto">
+                {savingOverride ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Publishing Special Slots…</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4" />
+                    <span>Publish Special Date Slots</span>
+                  </>
+                )}
+              </Button>
+            </form>
           </div>
 
-          <form onSubmit={handleCreateOverride} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Target Date</label>
-              <Input type="date" min={getTodayIST()} value={overrideDate} onChange={(e) => setOverrideDate(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 h-auto" required />
+          {/* Right: Active Overrides Roster */}
+          <div className="lg:col-span-7 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">Active Date Overrides</h3>
+                <p className="text-xs text-slate-500">Special shift hours taking precedence on specific calendar dates</p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                {customOverrides.length} Configured
+              </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Start Hour</label>
-                <Input type="time" value={overrideStartTime} onChange={(e) => setOverrideStartTime(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 h-auto" required />
+            {customOverrides.length === 0 ? (
+              <div className="rounded-3xl border border-slate-200/90 bg-white p-12 text-center shadow-xs">
+                <Sparkles className="h-8 w-8 text-slate-300 mx-auto" />
+                <h4 className="font-bold text-slate-800 text-sm mt-3">No date overrides configured</h4>
+                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                  All dates currently follow your weekly recurring schedule. Use the form on the left to set custom hours for any specific calendar date.
+                </p>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">End Hour</label>
-                <Input type="time" value={overrideEndTime} onChange={(e) => setOverrideEndTime(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 h-auto" required />
-              </div>
-            </div>
+            ) : (
+              <div className="space-y-3">
+                {customOverrides.map((override) => {
+                  const dayName = override.dayOfWeek ? (DAY_LABELS[override.dayOfWeek] || override.dayOfWeek) : '';
+                  return (
+                    <div
+                      key={override.id}
+                      className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs hover:border-blue-300 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    >
+                      <div className="flex items-start sm:items-center gap-3.5">
+                        <div className="flex flex-col items-center justify-center h-12 w-12 rounded-xl bg-blue-50 text-blue-700 border border-blue-200/60 font-bold shrink-0">
+                          <span className="text-[10px] uppercase leading-tight font-semibold text-blue-500">{dayName}</span>
+                          <span className="text-base font-black leading-tight font-mono">{override.date.split('-')[2]}</span>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-slate-900 text-sm">
+                              {formatDate(override.date)}
+                            </span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                              override.schedulingType === 'WAVE'
+                                ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/60'
+                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                            }`}>
+                              {override.schedulingType === 'WAVE' ? 'WAVE (Slots)' : 'STREAM (Window)'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-slate-600 mt-1 flex-wrap">
+                            <span className="font-semibold text-slate-800 font-mono">
+                              {formatTime(override.startTime)} – {formatTime(override.endTime)}
+                            </span>
+                            <span>•</span>
+                            <span>
+                              {override.schedulingType === 'WAVE'
+                                ? `${override.slotDuration}m slots (${override.maxPatients ?? 3} patients/slot)`
+                                : `Queue capacity: ${override.maxPatients ?? 10} patients`}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Slot Duration</label>
-                <Select value={String(overrideDuration)} onValueChange={(val) => setOverrideDuration(Number(val))}>
-                    <SelectTrigger className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 h-auto">
-                      <SelectValue placeholder="Slot Duration" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="15">15 mins</SelectItem>
-                      <SelectItem value="20">20 mins</SelectItem>
-                      <SelectItem value="30">30 mins</SelectItem>
-                      <SelectItem value="45">45 mins</SelectItem>
-                      <SelectItem value="60">60 mins</SelectItem>
-                    </SelectContent>
-                  </Select>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => handleDeleteOverride(override.id, override.date, override.startTime, override.endTime)}
+                        disabled={deletingOverrideId === override.id}
+                        className="self-end sm:self-center px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition-colors flex items-center gap-1.5 h-auto"
+                      >
+                        {deletingOverrideId === override.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                        <span>Remove Override</span>
+                      </Button>
+                    </div>
+                  );
+                })}
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Buffer Time</label>
-                <Select value={String(overrideBuffer)} onValueChange={(val) => setOverrideBuffer(Number(val))}>
-                    <SelectTrigger className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 h-auto">
-                      <SelectValue placeholder="Buffer Time" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="0">0 mins</SelectItem>
-                      <SelectItem value="5">5 mins</SelectItem>
-                      <SelectItem value="10">10 mins</SelectItem>
-                    </SelectContent>
-                  </Select>
-              </div>
-            </div>
-
-            <Button type="submit" disabled={savingOverride} className="btn-primary w-full py-3 text-xs h-auto">
-              {savingOverride ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Publishing Special Slots…</span>
-                </>
-              ) : (
-                <>
-                  <Plus className="h-4 w-4" />
-                  <span>Publish Special Date Slots</span>
-                </>
-              )}
-            </Button>
-          </form>
+            )}
+          </div>
         </div>
       )}
 
