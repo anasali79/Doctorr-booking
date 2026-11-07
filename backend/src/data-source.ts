@@ -6,6 +6,7 @@ import { Patient } from './patient/entities/patient.entity';
 import { RecurringAvailability } from './doctor/entities/recurring-availability.entity';
 import { CustomAvailability } from './doctor/entities/custom-availability.entity';
 import { Appointment } from './appointment/entities/appointment.entity';
+import { AppointmentRescheduleRequest } from './appointment/entities/appointment-reschedule-request.entity';
 import { Notification } from './notification/entities/notification.entity';
 import { NotificationPreference } from './notification/entities/notification-preference.entity';
 import { NotificationDelivery } from './notification/entities/notification-delivery.entity';
@@ -30,6 +31,7 @@ const shared: DataSourceOptions = {
     RecurringAvailability,
     CustomAvailability,
     Appointment,
+    AppointmentRescheduleRequest,
     Notification,
     NotificationPreference,
     NotificationDelivery,

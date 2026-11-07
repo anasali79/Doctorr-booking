@@ -384,6 +384,46 @@ function buildRefundCard(params: {
   `;
 }
 
+function buildRescheduleComparisonCard(params: {
+  doctorName: string;
+  originalDate: string;
+  originalTime: string;
+  proposedDate: string;
+  proposedTime: string;
+  proposedToken?: string;
+}): string {
+  const { doctorName, originalDate, originalTime, proposedDate, proposedTime, proposedToken } = params;
+  return `
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin: 18px 0; overflow: hidden;">
+      <tr>
+        <td style="padding: 14px 18px; border-bottom: 1px solid #e2e8f0; background-color: #f1f5f9;">
+          <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #475569; letter-spacing: 0.6px;">
+            Rescheduling Details
+          </span>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding: 16px 18px;">
+          <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td style="padding: 6px 0; font-size: 13px; color: #64748b; width: 34%;">Doctor:</td>
+              <td style="padding: 6px 0; font-size: 14px; font-weight: 600; color: #0f172a;">Dr. ${doctorName}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; font-size: 13px; color: #dc2626;">Original Time:</td>
+              <td style="padding: 6px 0; font-size: 13px; color: #dc2626; text-decoration: line-through;">${originalDate} at ${originalTime}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; font-size: 13px; color: #0066cc; font-weight: 700;">Proposed Time:</td>
+              <td style="padding: 6px 0; font-size: 14px; font-weight: 700; color: #0066cc;">${proposedDate} at ${proposedTime} ${proposedToken ? `(Token #${proposedToken})` : ''}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  `;
+}
+
 // ─── Main Notification Template Renderer ─────────────────────────────────────
 export function renderNotificationTemplate(
   eventType: NotificationEventType,
@@ -1057,6 +1097,300 @@ export function renderNotificationTemplate(
         }),
         whatsAppText: `CAREUP CLINICAL APPOINTMENTS\n───────────────────────────────\nCLINIC CHECK-IN SCAN\n\nDear ${patientName},\n\nA check-in scan was detected for your consultation with Dr. ${doctorName}.\n\nApprove Check-In:\n${appBaseUrl}/patient/appointments\n\n───────────────────────────────\nCareUp Healthcare | Clinical Service Notice`,
         smsText: `CareUp: Check-in scan detected for Dr. ${doctorName}. Open ${appBaseUrl}/patient/appointments to approve.`,
+      };
+    }
+
+    // ─── ELASTIC SCHEDULING: SCHEDULE EXPANDED ───────────────────────────────
+    case NotificationEventType.SCHEDULE_EXPANDED: {
+      const details = safeString(data.details, 'Availability expanded successfully.');
+      const title = 'Schedule Successfully Expanded';
+      return {
+        title,
+        inAppMessage: `Your clinical availability has been expanded. ${details}`,
+        emailSubject: 'Schedule Update: Availability Expanded',
+        emailHtml: buildBaseEmail({
+          badgeText: 'SCHEDULE EXPANDED',
+          badgeTheme: 'success',
+          title: 'Availability Expanded',
+          subtitle: 'Your consultation schedule has been extended with additional slots.',
+          bodyHtml: `
+            <p style="margin: 0 0 16px 0;">Dear Dr. ${doctorName},</p>
+            <p style="margin: 0 0 16px 0;">Your schedule has been successfully expanded. New consultation slots have been generated for the extended time period, preserving all existing bookings intact.</p>
+            <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px 18px; margin: 16px 0;">
+              <p style="margin: 0; font-size: 13px; color: #166534;"><strong>Summary:</strong> ${details}</p>
+            </div>
+          `,
+          ctaLabel: 'View Schedule',
+          ctaUrl: `${appBaseUrl}/doctor/schedule`,
+          appBaseUrl,
+        }),
+        whatsAppText: `CAREUP DOCTOR PORTAL\n───────────────────────────────\nSCHEDULE EXPANDED\n\nDear Dr. ${doctorName},\n\nYour clinical availability was expanded successfully.\n${details}\n\n───────────────────────────────\nCareUp Healthcare`,
+        smsText: `CareUp: Your clinical schedule was expanded successfully. Details: ${details}`,
+      };
+    }
+
+    // ─── ELASTIC SCHEDULING: SCHEDULE SHRUNK ─────────────────────────────────
+    case NotificationEventType.SCHEDULE_SHRUNK: {
+      const details = safeString(data.details, 'Availability reduced without conflicts.');
+      const title = 'Schedule Reduction Completed';
+      return {
+        title,
+        inAppMessage: `Your clinical schedule was reduced. ${details}`,
+        emailSubject: 'Schedule Update: Hours Reduced',
+        emailHtml: buildBaseEmail({
+          badgeText: 'SCHEDULE REDUCED',
+          badgeTheme: 'neutral',
+          title: 'Schedule Reduction Completed',
+          subtitle: 'Your availability was updated and unused slots were removed.',
+          bodyHtml: `
+            <p style="margin: 0 0 16px 0;">Dear Dr. ${doctorName},</p>
+            <p style="margin: 0 0 16px 0;">Your availability was successfully updated. No existing patient appointments were affected by this change.</p>
+            <p style="margin: 0 0 16px 0; font-size: 13px; color: #64748b;">${details}</p>
+          `,
+          ctaLabel: 'Manage Schedule',
+          ctaUrl: `${appBaseUrl}/doctor/schedule`,
+          appBaseUrl,
+        }),
+        whatsAppText: `CAREUP DOCTOR PORTAL\n───────────────────────────────\nSCHEDULE UPDATED\n\nDear Dr. ${doctorName},\n\nYour availability was reduced with zero patient conflicts.\n\n───────────────────────────────\nCareUp Healthcare`,
+        smsText: `CareUp: Your schedule reduction was completed without conflicts.`,
+      };
+    }
+
+    // ─── ELASTIC SCHEDULING: SCHEDULE CONFLICT DETECTED ──────────────────────
+    case NotificationEventType.SCHEDULE_CONFLICT_DETECTED: {
+      const conflictCount = Number(data.conflictCount || 1);
+      const title = 'Schedule Conflict Detected';
+      const msg = `Your updated availability affects ${conflictCount} booked appointment(s). Rescheduling is required.`;
+      return {
+        title,
+        inAppMessage: msg,
+        emailSubject: `Schedule Conflict: ${conflictCount} Appointment(s) Affected`,
+        emailHtml: buildBaseEmail({
+          badgeText: 'ACTION REQUIRED',
+          badgeTheme: 'warning',
+          title: 'Schedule Conflict Warning',
+          subtitle: `Your availability modification conflicts with existing bookings.`,
+          bodyHtml: `
+            <p style="margin: 0 0 16px 0;">Dear Dr. ${doctorName},</p>
+            <p style="margin: 0 0 16px 0;">Updating your hours affects <strong>${conflictCount} confirmed appointment(s)</strong>. Confirmed appointments have not been altered.</p>
+            <p style="margin: 0 0 16px 0;">Please use either <strong>Smart Rescheduling</strong> or <strong>Manual Rescheduling</strong> to find suitable replacement slots for affected patients.</p>
+          `,
+          ctaLabel: 'Resolve Conflicts',
+          ctaUrl: `${appBaseUrl}/doctor/schedule`,
+          appBaseUrl,
+        }),
+        whatsAppText: `CAREUP DOCTOR PORTAL\n───────────────────────────────\nCONFLICT ALERT\n\nDear Dr. ${doctorName},\n\nYour updated hours affect ${conflictCount} confirmed appointments. Please open your schedule to approve alternative slots.\n\n───────────────────────────────\nCareUp Healthcare`,
+        smsText: `CareUp: Updated availability affects ${conflictCount} appointments. Please approve rescheduling in your dashboard.`,
+      };
+    }
+
+    // ─── PATIENT: APPOINTMENT RESCHEDULING REQUEST ───────────────────────────
+    case NotificationEventType.RESCHEDULE_PROPOSED_BY_DOCTOR: {
+      const origDate = data.originalDate ? formatDate(data.originalDate) : dateStr;
+      const origTime = data.originalStartTime ? formatTime(data.originalStartTime) : timeStr;
+      const propDate = data.proposedDate ? formatDate(data.proposedDate) : 'new date';
+      const propTime = data.proposedStartTime ? formatTime(data.proposedStartTime) : 'new time';
+      const title = 'Appointment Rescheduling Request';
+      const msg = `Dr. ${doctorName} has updated their availability and proposed moving your appointment from ${origDate} at ${origTime} to ${propDate} at ${propTime}. Please confirm or choose another slot.`;
+
+      return {
+        title,
+        inAppMessage: msg,
+        emailSubject: `Action Required: Rescheduling Request from Dr. ${doctorName}`,
+        emailHtml: buildBaseEmail({
+          badgeText: 'RESCHEDULE PROPOSAL',
+          badgeTheme: 'primary',
+          title: 'Appointment Rescheduling Request',
+          subtitle: `Dr. ${doctorName} has updated their clinic schedule and proposed an alternative time.`,
+          bodyHtml: `
+            <p style="margin: 0 0 16px 0;">Dear ${patientName},</p>
+            <p style="margin: 0 0 16px 0;">Your appointment with <strong>Dr. ${doctorName}</strong>, originally scheduled for <strong>${origDate} at ${origTime}</strong>, needs to be rescheduled because the doctor has updated their availability.</p>
+            <p style="margin: 0 0 16px 0;">We have found an alternative appointment for you:</p>
+            ${buildRescheduleComparisonCard({
+              doctorName,
+              originalDate: origDate,
+              originalTime: origTime,
+              proposedDate: propDate,
+              proposedTime: propTime,
+              proposedToken: data.proposedTokenNumber ? String(data.proposedTokenNumber) : undefined,
+            })}
+            <p style="margin: 16px 0 8px 0; font-size: 13px; color: #475569;">This replacement slot is temporarily reserved for you. Please confirm whether this time works for you, choose another available slot, or cancel with a full refund.</p>
+          `,
+          ctaLabel: 'Review & Respond to Request',
+          ctaUrl: `${appBaseUrl}/patient/appointments`,
+          appBaseUrl,
+        }),
+        whatsAppText: `CAREUP CLINICAL APPOINTMENTS\n───────────────────────────────\nRESCHEDULING REQUEST\n\nDear ${patientName},\n\nYour appointment with Dr. ${doctorName} originally on ${origDate} at ${origTime} needs to be rescheduled due to availability updates.\n\nProposed New Time:\n*${propDate} at ${propTime}*\n\nPlease confirm or choose another slot:\n${appBaseUrl}/patient/appointments\n\n───────────────────────────────\nCareUp Healthcare`,
+        smsText: `CareUp: Dr. ${doctorName} requested rescheduling your appointment to ${propDate} at ${propTime}. Open ${appBaseUrl}/patient/appointments to confirm or choose another time.`,
+      };
+    }
+
+    // ─── RESCHEDULE ACCEPTED BY PATIENT ──────────────────────────────────────
+    case NotificationEventType.RESCHEDULE_ACCEPTED_BY_PATIENT: {
+      const isDoctor = recipientRole === 'DOCTOR';
+      const title = 'Appointment Rescheduling Confirmed';
+      const msg = isDoctor
+        ? `Patient ${patientName} accepted the proposed appointment for ${dateStr} at ${timeStr}.`
+        : `Your appointment with Dr. ${doctorName} has been successfully rescheduled to ${dateStr} at ${timeStr}.`;
+
+      return {
+        title,
+        inAppMessage: msg,
+        emailSubject: isDoctor
+          ? `Reschedule Confirmed: ${patientName} on ${dateStr}`
+          : `Appointment Rescheduled: Dr. ${doctorName}`,
+        emailHtml: buildBaseEmail({
+          badgeText: 'RESCHEDULE CONFIRMED',
+          badgeTheme: 'success',
+          title: 'Appointment Successfully Rescheduled',
+          subtitle: isDoctor
+            ? `Patient ${patientName} accepted the proposed time slot.`
+            : `Your new appointment time is confirmed with Dr. ${doctorName}.`,
+          bodyHtml: `
+            <p style="margin: 0 0 16px 0;">Dear ${isDoctor ? `Dr. ${doctorName}` : patientName},</p>
+            <p style="margin: 0 0 16px 0;">${msg}</p>
+            ${buildAppointmentCard({
+              patientName,
+              doctorName,
+              specialization: spec,
+              dateStr,
+              timeStr,
+              endTimeStr,
+              refId,
+              token,
+              isDoctor,
+            })}
+          `,
+          ctaLabel: isDoctor ? 'View Doctor Schedule' : 'View My Appointments',
+          ctaUrl: isDoctor ? `${appBaseUrl}/doctor/schedule` : `${appBaseUrl}/patient/appointments`,
+          appBaseUrl,
+        }),
+        whatsAppText: `CAREUP CLINICAL APPOINTMENTS\n───────────────────────────────\nRESCHEDULE CONFIRMED\n\n${msg}\n\nDate: *${dateStr}*\nTime: *${timeStr}*\nToken: *${token || 'N/A'}*\n\n───────────────────────────────\nCareUp Healthcare`,
+        smsText: `CareUp: Appointment rescheduling confirmed for ${dateStr} at ${timeStr}. Thank you.`,
+      };
+    }
+
+    // ─── RESCHEDULE REJECTED BY PATIENT ──────────────────────────────────────
+    case NotificationEventType.RESCHEDULE_REJECTED_BY_PATIENT: {
+      const title = 'Patient Rejected Rescheduling Proposal';
+      const msg = `Patient ${patientName} declined the proposed slot for their appointment on ${dateStr}.`;
+      return {
+        title,
+        inAppMessage: msg,
+        emailSubject: `Rescheduling Declined: Patient ${patientName}`,
+        emailHtml: buildBaseEmail({
+          badgeText: 'PROPOSAL DECLINED',
+          badgeTheme: 'warning',
+          title: 'Rescheduling Proposal Declined',
+          subtitle: `The patient did not accept the suggested replacement slot.`,
+          bodyHtml: `
+            <p style="margin: 0 0 16px 0;">Dear Dr. ${doctorName},</p>
+            <p style="margin: 0 0 16px 0;">Patient <strong>${patientName}</strong> has declined the proposed replacement slot for their appointment on <strong>${dateStr}</strong>.</p>
+            <p style="margin: 0 0 16px 0;">The patient has been invited to select another available slot from your schedule. Their original booking remains recorded until resolved.</p>
+          `,
+          ctaLabel: 'Review Schedule',
+          ctaUrl: `${appBaseUrl}/doctor/schedule`,
+          appBaseUrl,
+        }),
+        whatsAppText: `CAREUP DOCTOR PORTAL\n───────────────────────────────\nPROPOSAL DECLINED\n\nDear Dr. ${doctorName},\n\nPatient ${patientName} declined the suggested replacement slot for ${dateStr}.\n\n───────────────────────────────\nCareUp Healthcare`,
+        smsText: `CareUp: Patient ${patientName} declined the proposed rescheduling slot for ${dateStr}.`,
+      };
+    }
+
+    // ─── RESCHEDULE ALTERNATIVE CHOSEN ───────────────────────────────────────
+    case NotificationEventType.RESCHEDULE_ALTERNATIVE_CHOSEN: {
+      const title = 'Patient Selected Alternative Slot';
+      const msg = `Patient ${patientName} selected a different available slot: ${dateStr} at ${timeStr}.`;
+      return {
+        title,
+        inAppMessage: msg,
+        emailSubject: `Alternative Slot Selected: ${patientName}`,
+        emailHtml: buildBaseEmail({
+          badgeText: 'SLOT SELECTED',
+          badgeTheme: 'success',
+          title: 'Patient Selected Alternative Slot',
+          subtitle: `Patient confirmed an alternative opening on your schedule.`,
+          bodyHtml: `
+            <p style="margin: 0 0 16px 0;">Dear Dr. ${doctorName},</p>
+            <p style="margin: 0 0 16px 0;">Patient <strong>${patientName}</strong> selected a replacement opening for their consultation.</p>
+            ${buildAppointmentCard({
+              patientName,
+              doctorName,
+              specialization: spec,
+              dateStr,
+              timeStr,
+              endTimeStr,
+              refId,
+              token,
+              isDoctor: true,
+            })}
+          `,
+          ctaLabel: 'Open Doctor Schedule',
+          ctaUrl: `${appBaseUrl}/doctor/schedule`,
+          appBaseUrl,
+        }),
+        whatsAppText: `CAREUP DOCTOR PORTAL\n───────────────────────────────\nALTERNATIVE SELECTED\n\nDear Dr. ${doctorName},\n\nPatient ${patientName} selected a new slot on *${dateStr} at ${timeStr}*.\n\n───────────────────────────────\nCareUp Healthcare`,
+        smsText: `CareUp: Patient ${patientName} selected alternative slot on ${dateStr} at ${timeStr}.`,
+      };
+    }
+
+    // ─── RESCHEDULE REQUEST EXPIRED ──────────────────────────────────────────
+    case NotificationEventType.RESCHEDULE_REQUEST_EXPIRED: {
+      const isDoctor = recipientRole === 'DOCTOR';
+      const title = 'Rescheduling Request Expired';
+      const msg = isDoctor
+        ? `The rescheduling proposal for patient ${patientName} on ${dateStr} has expired without response.`
+        : `Your temporary reservation for Dr. ${doctorName} on ${dateStr} has expired. Please contact the clinic or book a new time.`;
+
+      return {
+        title,
+        inAppMessage: msg,
+        emailSubject: title,
+        emailHtml: buildBaseEmail({
+          badgeText: 'REQUEST EXPIRED',
+          badgeTheme: 'neutral',
+          title: 'Rescheduling Window Expired',
+          subtitle: isDoctor
+            ? `Patient ${patientName} did not respond within the reservation window.`
+            : `The temporary slot hold has elapsed.`,
+          bodyHtml: `
+            <p style="margin: 0 0 16px 0;">Dear ${isDoctor ? `Dr. ${doctorName}` : patientName},</p>
+            <p style="margin: 0 0 16px 0;">${msg}</p>
+            <p style="margin: 0 0 16px 0; font-size: 13px; color: #64748b;">The temporary reservation has been safely released back to available inventory. The confirmed appointment was not silently cancelled.</p>
+          `,
+          ctaLabel: isDoctor ? 'View Doctor Schedule' : 'View Appointments',
+          ctaUrl: isDoctor ? `${appBaseUrl}/doctor/schedule` : `${appBaseUrl}/patient/appointments`,
+          appBaseUrl,
+        }),
+        whatsAppText: `CAREUP CLINICAL NOTICE\n───────────────────────────────\nREQUEST EXPIRED\n\n${msg}\n\n───────────────────────────────\nCareUp Healthcare`,
+        smsText: `CareUp: Rescheduling request for ${dateStr} has expired. Open ${appBaseUrl} to check your appointments.`,
+      };
+    }
+
+    // ─── RESCHEDULE NO SLOT AVAILABLE ────────────────────────────────────────
+    case NotificationEventType.RESCHEDULE_NO_SLOT_AVAILABLE: {
+      const title = 'No Alternative Slot Found';
+      const msg = `Smart Rescheduling could not find an automatic compatible slot for patient ${patientName}. Manual action required.`;
+      return {
+        title,
+        inAppMessage: msg,
+        emailSubject: `Action Required: No Replacement Slot for ${patientName}`,
+        emailHtml: buildBaseEmail({
+          badgeText: 'NO SLOT FOUND',
+          badgeTheme: 'warning',
+          title: 'Alternative Slot Search Exhausted',
+          subtitle: `No compatible slot within working limits was found for ${patientName}.`,
+          bodyHtml: `
+            <p style="margin: 0 0 16px 0;">Dear Dr. ${doctorName},</p>
+            <p style="margin: 0 0 16px 0;">The Smart Rescheduling engine could not find an automatic replacement slot for <strong>${patientName}</strong> matching your scheduling constraints and capacity.</p>
+            <p style="margin: 0 0 16px 0;">Please open your schedule to manually coordinate or assign a custom time slot.</p>
+          `,
+          ctaLabel: 'Coordinate Manually',
+          ctaUrl: `${appBaseUrl}/doctor/schedule`,
+          appBaseUrl,
+        }),
+        whatsAppText: `CAREUP DOCTOR PORTAL\n───────────────────────────────\nNO SLOT FOUND\n\nDear Dr. ${doctorName},\n\nNo automatic alternative slot was found for patient ${patientName}. Please select a replacement manually.\n\n───────────────────────────────\nCareUp Healthcare`,
+        smsText: `CareUp: No automatic slot found for ${patientName}. Please reschedule manually from your dashboard.`,
       };
     }
 
