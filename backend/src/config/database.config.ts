@@ -18,6 +18,7 @@ import { ReminderJob } from '../reminder/entities/reminder-job.entity';
 import { Prescription } from '../prescription/entities/prescription.entity';
 import { DoctorVerification } from '../doctor/entities/doctor-verification.entity';
 import { AdminAuditLog } from '../admin/entities/admin-audit-log.entity';
+import { AppointmentRescheduleRequest } from '../appointment/entities/appointment-reschedule-request.entity';
 
 export function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
   const databaseUrl = config.get<string>('DATABASE_URL');
@@ -44,6 +45,7 @@ export function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
       Prescription,
       DoctorVerification,
       AdminAuditLog,
+      AppointmentRescheduleRequest,
     ],
     synchronize: false,
     migrations: [__dirname + '/../migrations/*.{js,ts}'],

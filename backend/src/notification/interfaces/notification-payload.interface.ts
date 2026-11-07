@@ -4,7 +4,7 @@ import { DeliveryStatus } from '../enums/delivery-status.enum';
 
 export interface RecipientInfo {
   id: string; // userId or patientId or doctorId
-  userId: string;
+  userId?: string;
   name: string;
   email?: string | null;
   phone?: string | null;
