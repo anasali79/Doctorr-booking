@@ -5,6 +5,7 @@ import { DoctorService } from './doctor.service';
 import { Doctor } from './entities/doctor.entity';
 import { RecurringAvailability } from './entities/recurring-availability.entity';
 import { CustomAvailability } from './entities/custom-availability.entity';
+import { AppointmentRescheduleRequest } from '../appointment/entities/appointment-reschedule-request.entity';
 import { AvailabilityService } from './availability.service';
 import { AvailabilityController } from './availability.controller';
 import { Appointment } from '../appointment/entities/appointment.entity';
@@ -18,6 +19,12 @@ import { DoctorVerification } from './entities/doctor-verification.entity';
 import { DoctorVerificationService } from './doctor-verification.service';
 import { DoctorVerificationController } from './doctor-verification.controller';
 import { DoctorVerificationGuard } from '../common/guards/doctor-verification.guard';
+import { ElasticSchedulingService } from './elastic-scheduling.service';
+import { ElasticSchedulingController } from './elastic-scheduling.controller';
+import { NotificationModule } from '../notification/notification.module';
+import { PaymentModule } from '../payment/payment.module';
+import { ReminderModule } from '../reminder/reminder.module';
+import { SocketsModule } from '../sockets/sockets.module';
 
 @Module({
   imports: [
@@ -25,6 +32,7 @@ import { DoctorVerificationGuard } from '../common/guards/doctor-verification.gu
       Doctor,
       RecurringAvailability,
       CustomAvailability,
+      AppointmentRescheduleRequest,
       Appointment,
       User,
       Patient,
@@ -32,12 +40,17 @@ import { DoctorVerificationGuard } from '../common/guards/doctor-verification.gu
       DoctorVerification,
     ]),
     forwardRef(() => AppointmentModule),
+    NotificationModule,
+    forwardRef(() => PaymentModule),
+    forwardRef(() => ReminderModule),
+    SocketsModule,
   ],
   controllers: [
     AvailabilityController,
     LeaveController,
     DoctorController,
     DoctorVerificationController,
+    ElasticSchedulingController,
   ],
   providers: [
     DoctorService,
@@ -45,6 +58,7 @@ import { DoctorVerificationGuard } from '../common/guards/doctor-verification.gu
     LeaveService,
     DoctorVerificationService,
     DoctorVerificationGuard,
+    ElasticSchedulingService,
   ],
   exports: [
     DoctorService,
@@ -52,6 +66,7 @@ import { DoctorVerificationGuard } from '../common/guards/doctor-verification.gu
     LeaveService,
     DoctorVerificationService,
     DoctorVerificationGuard,
+    ElasticSchedulingService,
   ],
 })
 export class DoctorModule {}
