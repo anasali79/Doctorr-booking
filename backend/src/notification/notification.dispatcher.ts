@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -8,9 +8,12 @@ import {
   RecipientInfo,
 } from './interfaces/notification-payload.interface';
 import { NotificationChannel } from './enums/notification-channel.enum';
+import { NotificationEventType } from './enums/notification-event-type.enum';
 import { DeliveryStatus } from './enums/delivery-status.enum';
 import { NotificationDelivery } from './entities/notification-delivery.entity';
 import { NotificationPreference } from './entities/notification-preference.entity';
+import { Patient } from '../patient/entities/patient.entity';
+import { Doctor } from '../doctor/entities/doctor.entity';
 import { EmailProvider } from './providers/email.provider';
 import { InAppProvider } from './providers/in-app.provider';
 import { WhatsAppProvider } from './providers/whatsapp.provider';
@@ -38,6 +41,14 @@ export class NotificationDispatcher {
     private readonly whatsAppProvider: WhatsAppProvider,
     private readonly smsProvider: SmsProvider,
     private readonly configService: ConfigService,
+
+    @Optional()
+    @InjectRepository(Patient)
+    private readonly patientRepo?: Repository<Patient>,
+
+    @Optional()
+    @InjectRepository(Doctor)
+    private readonly doctorRepo?: Repository<Doctor>,
   ) {
     this.appBaseUrl =
       this.configService.get<string>('APP_BASE_URL') ||
@@ -81,10 +92,22 @@ export class NotificationDispatcher {
   ): Promise<ChannelSendResult[]> {
     const channelResults: ChannelSendResult[] = [];
 
-    // 1. Fetch user preferences
-    const preferences = await this.getPreferences(recipient.userId);
+    // 1. Resolve userId if missing so preferences can be reliably retrieved
+    let userId: string | undefined = recipient.userId;
+    if (!userId) {
+      if (recipient.role === 'DOCTOR' && this.doctorRepo) {
+        const doc = await this.doctorRepo.findOne({ where: { id: recipient.id } });
+        userId = doc?.userId;
+      } else if (this.patientRepo) {
+        const pat = await this.patientRepo.findOne({ where: { id: recipient.id } });
+        userId = pat?.userId;
+      }
+    }
 
-    // 2. Render templates for this specific recipient role
+    // 2. Fetch user preferences
+    const preferences = userId ? await this.getPreferences(userId) : null;
+
+    // 3. Render templates for this specific recipient role
     const template = renderNotificationTemplate(
       event.eventType,
       event.data,
@@ -92,7 +115,7 @@ export class NotificationDispatcher {
       this.appBaseUrl,
     );
 
-    // 3. Determine enabled channels
+    // 4. Determine enabled channels
     const channelsToProcess = this.resolveActiveChannels(event, preferences);
 
     // 4. Process each channel in parallel / isolated promises
@@ -250,6 +273,40 @@ export class NotificationDispatcher {
     }
   }
 
+  private isReminderEvent(eventType: NotificationEventType): boolean {
+    return [
+      NotificationEventType.APPOINTMENT_REMINDER_24H,
+      NotificationEventType.APPOINTMENT_REMINDER_2H,
+      NotificationEventType.APPOINTMENT_REMINDER_30M,
+    ].includes(eventType);
+  }
+
+  private isPaymentAlertEvent(eventType: NotificationEventType): boolean {
+    return [
+      NotificationEventType.PAYMENT_INITIATED,
+      NotificationEventType.PAYMENT_PENDING,
+      NotificationEventType.PAYMENT_SUCCESSFUL,
+      NotificationEventType.PAYMENT_FAILED,
+      NotificationEventType.PAYMENT_VERIFICATION_PENDING,
+      NotificationEventType.PAYMENT_VERIFICATION_FAILED,
+      NotificationEventType.PAYMENT_DUPLICATE_DETECTED,
+      NotificationEventType.PAYMENT_RECONCILED,
+    ].includes(eventType);
+  }
+
+  private isRefundAlertEvent(eventType: NotificationEventType): boolean {
+    return [
+      NotificationEventType.REFUND_REQUESTED,
+      NotificationEventType.REFUND_INITIATED,
+      NotificationEventType.REFUND_PENDING,
+      NotificationEventType.REFUND_PROCESSING,
+      NotificationEventType.REFUND_SUCCESSFUL,
+      NotificationEventType.REFUND_FAILED,
+      NotificationEventType.REFUND_REJECTED,
+      NotificationEventType.REFUND_DELAYED,
+    ].includes(eventType);
+  }
+
   private resolveActiveChannels(
     event: NotificationEventPayload,
     preferences: NotificationPreference | null,
@@ -271,6 +328,31 @@ export class NotificationDispatcher {
       return targets;
     }
 
+    // 1. Reminders toggle check: If event is a reminder and remindersEnabled is false -> suppress all channels
+    if (this.isReminderEvent(event.eventType) && !preferences.remindersEnabled) {
+      this.logger.debug(
+        `Suppressing reminder event ${event.eventType}: remindersEnabled is false`,
+      );
+      return [];
+    }
+
+    // 2. Payment alert toggle check: If event is a payment alert and paymentAlertsEnabled is false -> suppress all channels
+    if (this.isPaymentAlertEvent(event.eventType) && !preferences.paymentAlertsEnabled) {
+      this.logger.debug(
+        `Suppressing payment event ${event.eventType}: paymentAlertsEnabled is false`,
+      );
+      return [];
+    }
+
+    // 3. Refund alert toggle check: If event is a refund alert and refundAlertsEnabled is false -> suppress all channels
+    if (this.isRefundAlertEvent(event.eventType) && !preferences.refundAlertsEnabled) {
+      this.logger.debug(
+        `Suppressing refund event ${event.eventType}: refundAlertsEnabled is false`,
+      );
+      return [];
+    }
+
+    // 4. Channel-specific toggles:
     return targets.filter((ch) => {
       switch (ch) {
         case NotificationChannel.EMAIL:

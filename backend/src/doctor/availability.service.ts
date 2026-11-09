@@ -3,9 +3,13 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
+  Inject,
+  forwardRef,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, MoreThanOrEqual, DataSource } from 'typeorm';
 import {
   RecurringAvailability,
   DayOfWeek,
@@ -14,6 +18,8 @@ import { CustomAvailability } from './entities/custom-availability.entity';
 import { Doctor } from './entities/doctor.entity';
 import { Appointment } from '../appointment/entities/appointment.entity';
 import { DoctorLeave } from './entities/leave.entity';
+import { AppointmentRescheduleRequest } from '../appointment/entities/appointment-reschedule-request.entity';
+import { RescheduleRequestStatus } from '../appointment/enums/reschedule-request-status.enum';
 import {
   CreateRecurringAvailabilityDto,
   UpdateRecurringAvailabilityDto,
@@ -23,6 +29,13 @@ import {
 } from './dto/availability.dto';
 import { SchedulingType } from '../common/enums/scheduling-type.enum';
 import { AppointmentStatus } from '../common/enums/appointment-status.enum';
+import { AppointmentService } from '../appointment/appointment.service';
+import { PaymentService } from '../payment/payment.service';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationDispatcher } from '../notification/notification.dispatcher';
+import { AppointmentGateway, SOCKET_EVENTS } from '../sockets/appointment.gateway';
+import { QueueService } from '../appointment/queue.service';
+import { ReminderService } from '../reminder/reminder.service';
 
 export interface DividedSlotWithBookings {
   startTime: string;
@@ -93,6 +106,8 @@ function getDayOfWeekFromDate(dateStr: string): DayOfWeek {
 
 @Injectable()
 export class AvailabilityService {
+  private readonly logger = new Logger(AvailabilityService.name);
+
   constructor(
     @InjectRepository(RecurringAvailability)
     private readonly recurringRepo: Repository<RecurringAvailability>,
@@ -108,6 +123,37 @@ export class AvailabilityService {
 
     @InjectRepository(DoctorLeave)
     private readonly leaveRepo: Repository<DoctorLeave>,
+
+    @Optional()
+    @InjectRepository(AppointmentRescheduleRequest)
+    private readonly rescheduleRequestRepo?: Repository<AppointmentRescheduleRequest>,
+
+    @Optional()
+    @Inject(forwardRef(() => AppointmentService))
+    private readonly appointmentService?: AppointmentService,
+
+    @Optional()
+    @Inject(forwardRef(() => PaymentService))
+    private readonly paymentService?: PaymentService,
+
+    @Optional()
+    private readonly notificationService?: NotificationService,
+
+    @Optional()
+    private readonly notificationDispatcher?: NotificationDispatcher,
+
+    @Optional()
+    private readonly appointmentGateway?: AppointmentGateway,
+
+    @Optional()
+    private readonly queueService?: QueueService,
+
+    @Optional()
+    @Inject(forwardRef(() => ReminderService))
+    private readonly reminderService?: ReminderService,
+
+    @Optional()
+    private readonly dataSource?: DataSource,
   ) { }
 
   // ─── Recurring Availability ──────────────────────────────────────────────────
@@ -866,13 +912,228 @@ export class AvailabilityService {
     return this.recurringRepo.save(slot);
   }
 
-  async deleteRecurring(userId: string, id: string): Promise<void> {
+  async checkRecurringShiftDelete(
+    userId: string,
+    id: string,
+  ): Promise<{
+    slot: RecurringAvailability;
+    conflictCount: number;
+    affectedAppointments: Array<{
+      id: string;
+      patientId: string;
+      doctorId: string;
+      patientName: string;
+      date: string;
+      startTime: string;
+      endTime: string;
+      tokenNumber: number | null;
+      paymentStatus: string;
+      status: string;
+    }>;
+  }> {
     const doctor = await this.findDoctorByUserIdOrFail(userId);
     const slot = await this.findRecurringSlotOrFail(id, doctor.id);
-    await this.recurringRepo.remove(slot);
+    const todayStr = getTodayIST();
+    const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const currentMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
+
+    // Find all confirmed appointments for this doctor from today onwards
+    const appointments = await this.appointmentRepo.find({
+      where: {
+        doctorId: doctor.id,
+        status: AppointmentStatus.CONFIRMED,
+        date: MoreThanOrEqual(todayStr),
+      },
+      relations: { patient: { user: true } },
+      order: { date: 'ASC', startTime: 'ASC' },
+    });
+
+    // Check custom overrides for this doctor from today onwards
+    const customOverrides = await this.customRepo.find({
+      where: {
+        doctorId: doctor.id,
+        date: MoreThanOrEqual(todayStr),
+      },
+    });
+
+    const customDates = new Set(
+      customOverrides.map((o) =>
+        typeof o.date === 'string'
+          ? o.date.split('T')[0]
+          : (o.date as any) instanceof Date
+            ? (o.date as any).toISOString().split('T')[0]
+            : String(o.date),
+      ),
+    );
+
+    const conflictingAppointments = appointments.filter((app) => {
+      const appDateStr = typeof app.date === 'string'
+        ? app.date.split('T')[0]
+        : (app.date as any) instanceof Date
+          ? (app.date as any).toISOString().split('T')[0]
+          : String(app.date);
+
+      // If this date has a custom override, schedule is governed by custom overrides, not this recurring slot
+      if (customDates.has(appDateStr)) return false;
+
+      const appDay = getDayOfWeekFromDate(appDateStr);
+      if (appDay !== slot.dayOfWeek) return false;
+
+      // Check time overlap
+      if (!timesOverlap(app.startTime, app.endTime, slot.startTime, slot.endTime)) {
+        return false;
+      }
+
+      // If appointment is today, only consider it if it hasn't ended yet
+      if (appDateStr === todayStr && toMinutes(app.endTime) < currentMinutes) {
+        return false;
+      }
+
+      return true;
+    });
+
+    return {
+      slot,
+      conflictCount: conflictingAppointments.length,
+      affectedAppointments: conflictingAppointments.map((a) => ({
+        id: a.id,
+        patientId: a.patientId,
+        doctorId: a.doctorId,
+        patientName: a.patient?.fullName || 'Patient',
+        date: typeof a.date === 'string'
+          ? a.date.split('T')[0]
+          : (a.date as any) instanceof Date
+            ? (a.date as any).toISOString().split('T')[0]
+            : String(a.date),
+        startTime: a.startTime,
+        endTime: a.endTime,
+        tokenNumber: a.tokenNumber,
+        paymentStatus: a.paymentStatus,
+        status: a.status,
+      })),
+    };
   }
 
-  async deleteCustomOverride(userId: string, id: string): Promise<void> {
+  async deleteRecurring(
+    userId: string,
+    id: string,
+    confirmCancelAndRefund?: boolean,
+  ): Promise<{
+    message: string;
+    cancelledAppointmentsCount: number;
+  }> {
+    const doctor = await this.findDoctorByUserIdOrFail(userId);
+    const check = await this.checkRecurringShiftDelete(userId, id);
+
+    if (check.conflictCount > 0) {
+      if (!confirmCancelAndRefund) {
+        throw new ConflictException({
+          message: `Cannot delete recurring shift: There are ${check.conflictCount} confirmed appointment(s) booked during this recurring shift.`,
+          requiresConfirmation: true,
+          conflictCount: check.conflictCount,
+          affectedAppointments: check.affectedAppointments,
+        });
+      }
+
+      // Option C: Doctor confirmed shift deletion — cancel appointments and issue refunds
+      for (const appt of check.affectedAppointments) {
+        try {
+          if (this.appointmentService) {
+            await this.appointmentService.cancelAppointmentByDoctor(userId, appt.id);
+          } else {
+            await this.appointmentRepo.update(appt.id, {
+              status: AppointmentStatus.CANCELLED,
+              pendingExpiresAt: null,
+            });
+            if (this.rescheduleRequestRepo) {
+              await this.rescheduleRequestRepo.update(
+                { appointmentId: appt.id, status: RescheduleRequestStatus.PENDING },
+                {
+                  status: RescheduleRequestStatus.CANCELLED,
+                  doctorReason: 'Doctor removed recurring shift',
+                },
+              );
+            }
+            if (this.paymentService && appt.paymentStatus === 'PAID') {
+              try {
+                await this.paymentService.createRefund(userId, 'DOCTOR', {
+                  appointmentId: appt.id,
+                  reason: 'Doctor removed recurring shift',
+                });
+              } catch (e: any) {
+                this.logger.warn(`Refund fallback error for ${appt.id}: ${e.message}`);
+              }
+            }
+            this.appointmentGateway?.emitAppointmentEvent(SOCKET_EVENTS.CANCELLED, {
+              appointmentId: appt.id,
+              patientId: appt.patientId,
+              doctorId: appt.doctorId,
+              status: AppointmentStatus.CANCELLED,
+              updatedAt: new Date().toISOString(),
+            });
+          }
+        } catch (err: any) {
+          this.logger.error(
+            `Failed to cancel appointment ${appt.id} during recurring shift deletion: ${err.message}`,
+          );
+        }
+      }
+    }
+
+    // Cancel any pending reschedule requests associated with this recurring day and shift
+    if (this.rescheduleRequestRepo) {
+      try {
+        const pendingReqs = await this.rescheduleRequestRepo.find({
+          where: {
+            doctorId: doctor.id,
+            status: RescheduleRequestStatus.PENDING,
+          },
+        });
+        for (const req of pendingReqs) {
+          const propDay = getDayOfWeekFromDate(req.proposedDate);
+          const origDay = getDayOfWeekFromDate(req.originalDate);
+          if (propDay === check.slot.dayOfWeek || origDay === check.slot.dayOfWeek) {
+            await this.rescheduleRequestRepo.update(req.id, {
+              status: RescheduleRequestStatus.CANCELLED,
+              doctorReason: `Doctor removed recurring schedule for ${check.slot.dayOfWeek}`,
+            });
+          }
+        }
+      } catch (err: any) {
+        // Log and continue deletion
+      }
+    }
+
+    await this.recurringRepo.remove(check.slot);
+
+    return {
+      message:
+        check.conflictCount > 0
+          ? `Recurring shift removed successfully. ${check.conflictCount} appointment(s) cancelled and refunded.`
+          : 'Recurring availability slot deleted successfully',
+      cancelledAppointmentsCount: check.conflictCount,
+    };
+  }
+
+  async checkCustomOverrideDelete(
+    userId: string,
+    id: string,
+  ): Promise<{
+    override: CustomAvailability;
+    conflictCount: number;
+    affectedAppointments: Array<{
+      id: string;
+      patientId: string;
+      doctorId: string;
+      patientName: string;
+      date: string;
+      startTime: string;
+      endTime: string;
+      tokenNumber: number | null;
+      paymentStatus: string;
+      status: string;
+    }>;
+  }> {
     const doctor = await this.findDoctorByUserIdOrFail(userId);
     const override = await this.customRepo.findOne({
       where: { id, doctorId: doctor.id },
@@ -887,29 +1148,148 @@ export class AvailabilityService {
         ? (override.date as any).toISOString().split('T')[0]
         : String(override.date);
 
-    // Guard: Prevent deletion if there are active confirmed appointments in this override slot window
-    const conflictingAppointments = await this.appointmentRepo.find({
+    const appointments = await this.appointmentRepo.find({
       where: {
         doctorId: doctor.id,
         date: cleanDate,
         status: AppointmentStatus.CONFIRMED,
       },
+      relations: { patient: { user: true } },
+      order: { startTime: 'ASC' },
     });
 
-    const bookedInSlot = conflictingAppointments.filter((app) => {
-      return (
-        app.startTime < override.endTime &&
-        app.endTime > override.startTime
-      );
+    const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const todayStr = getTodayIST();
+    const currentMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
+
+    const conflictingAppointments = appointments.filter((app) => {
+      if (!timesOverlap(app.startTime, app.endTime, override.startTime, override.endTime)) {
+        return false;
+      }
+      if (cleanDate === todayStr && toMinutes(app.endTime) < currentMinutes) {
+        return false;
+      }
+      return true;
     });
 
-    if (bookedInSlot.length > 0) {
-      throw new BadRequestException(
-        `Cannot delete shift override: There are ${bookedInSlot.length} confirmed appointment(s) booked during this shift (${override.startTime} - ${override.endTime} on ${cleanDate}). Please reschedule or cancel the appointments before removing this override.`,
-      );
+    return {
+      override,
+      conflictCount: conflictingAppointments.length,
+      affectedAppointments: conflictingAppointments.map((a) => ({
+        id: a.id,
+        patientId: a.patientId,
+        doctorId: a.doctorId,
+        patientName: a.patient?.fullName || 'Patient',
+        date: cleanDate,
+        startTime: a.startTime,
+        endTime: a.endTime,
+        tokenNumber: a.tokenNumber,
+        paymentStatus: a.paymentStatus,
+        status: a.status,
+      })),
+    };
+  }
+
+  async deleteCustomOverride(
+    userId: string,
+    id: string,
+    confirmCancelAndRefund?: boolean,
+  ): Promise<{
+    message: string;
+    cancelledAppointmentsCount: number;
+  }> {
+    const doctor = await this.findDoctorByUserIdOrFail(userId);
+    const check = await this.checkCustomOverrideDelete(userId, id);
+
+    if (check.conflictCount > 0) {
+      if (!confirmCancelAndRefund) {
+        throw new ConflictException({
+          message: `Cannot delete shift override: There are ${check.conflictCount} confirmed appointment(s) booked during this shift.`,
+          requiresConfirmation: true,
+          conflictCount: check.conflictCount,
+          affectedAppointments: check.affectedAppointments,
+        });
+      }
+
+      // Option C: Doctor confirmed shift deletion — cancel appointments and issue refunds
+      for (const appt of check.affectedAppointments) {
+        try {
+          if (this.appointmentService) {
+            await this.appointmentService.cancelAppointmentByDoctor(userId, appt.id);
+          } else {
+            await this.appointmentRepo.update(appt.id, {
+              status: AppointmentStatus.CANCELLED,
+              pendingExpiresAt: null,
+            });
+            if (this.rescheduleRequestRepo) {
+              await this.rescheduleRequestRepo.update(
+                { appointmentId: appt.id, status: RescheduleRequestStatus.PENDING },
+                {
+                  status: RescheduleRequestStatus.CANCELLED,
+                  doctorReason: 'Doctor removed shift override',
+                },
+              );
+            }
+            if (this.paymentService && appt.paymentStatus === 'PAID') {
+              try {
+                await this.paymentService.createRefund(userId, 'DOCTOR', {
+                  appointmentId: appt.id,
+                  reason: 'Doctor removed shift override',
+                });
+              } catch (e: any) {
+                this.logger.warn(`Refund fallback error for ${appt.id}: ${e.message}`);
+              }
+            }
+            this.appointmentGateway?.emitAppointmentEvent(SOCKET_EVENTS.CANCELLED, {
+              appointmentId: appt.id,
+              patientId: appt.patientId,
+              doctorId: appt.doctorId,
+              status: AppointmentStatus.CANCELLED,
+              updatedAt: new Date().toISOString(),
+            });
+          }
+        } catch (err: any) {
+          this.logger.error(
+            `Failed to cancel appointment ${appt.id} during shift override deletion: ${err.message}`,
+          );
+        }
+      }
     }
 
-    await this.customRepo.remove(override);
+    const cleanDate = typeof check.override.date === 'string'
+      ? check.override.date.split('T')[0]
+      : (check.override.date as any) instanceof Date
+        ? (check.override.date as any).toISOString().split('T')[0]
+        : String(check.override.date);
+
+    // Cancel any pending reschedule requests associated with this custom override date
+    if (this.rescheduleRequestRepo) {
+      try {
+        await this.rescheduleRequestRepo.update(
+          {
+            doctorId: doctor.id,
+            proposedDate: cleanDate,
+            status: RescheduleRequestStatus.PENDING,
+          },
+          {
+            status: RescheduleRequestStatus.CANCELLED,
+            doctorReason: `Doctor deleted schedule override for ${cleanDate}`,
+          },
+        );
+      } catch (err: any) {
+        // Log and continue deletion
+      }
+    }
+
+    await this.customRepo.remove(check.override);
+
+    return {
+      message:
+        check.conflictCount > 0
+          ? `Shift override removed successfully. ${check.conflictCount} appointment(s) cancelled and refunded.`
+          : 'Custom availability override deleted successfully',
+      cancelledAppointmentsCount: check.conflictCount,
+    };
   }
 
   async createCustomOverride(
@@ -1442,7 +1822,9 @@ export class AvailabilityService {
       throw new BadRequestException('Invalid duration');
     }
 
-    const doctor = await this.doctorRepo.findOne({ where: { id: doctorId } });
+    const doctor = await this.doctorRepo.findOne({
+      where: [{ id: doctorId }, { userId: doctorId }],
+    });
     if (!doctor) {
       throw new NotFoundException(`Doctor with ID ${doctorId} not found`);
     }
@@ -1476,7 +1858,7 @@ export class AvailabilityService {
     }> = [];
 
     const customSlots = await this.customRepo.find({
-      where: { doctorId, date: cleanDate },
+      where: { doctorId: doctor.id, date: cleanDate },
       order: { startTime: 'ASC' },
     });
 
@@ -1493,7 +1875,7 @@ export class AvailabilityService {
         }));
     } else {
       const recurringSlots = await this.recurringRepo.find({
-        where: { doctorId, dayOfWeek },
+        where: { doctorId: doctor.id, dayOfWeek },
         order: { startTime: 'ASC' },
       });
 
@@ -1566,18 +1948,42 @@ export class AvailabilityService {
     }
 
     const appointments = await this.appointmentRepo.find({
-      where: { doctorId, date: cleanDate },
+      where: { doctorId: doctor.id, date: cleanDate },
     });
+
+    let pendingReschedules: AppointmentRescheduleRequest[] = [];
+    if (this.rescheduleRequestRepo) {
+      try {
+        pendingReschedules = await this.rescheduleRequestRepo.find({
+          where: {
+            doctorId: doctor.id,
+            proposedDate: cleanDate,
+            status: RescheduleRequestStatus.PENDING,
+          },
+        });
+        const nowTime = new Date().getTime();
+        pendingReschedules = pendingReschedules.filter(
+          (r) => new Date(r.expiresAt).getTime() > nowTime,
+        );
+      } catch {
+        pendingReschedules = [];
+      }
+    }
 
     const resultSlots = futureSlots.map((slot) => {
       if (slot.schedulingType === SchedulingType.WAVE) {
-        const bookedCount = appointments.filter(
+        const apptBookedCount = appointments.filter(
           (app) =>
             app.startTime === slot.startTime &&
             app.endTime === slot.endTime &&
             isApptActivelyBlocking(app),
         ).length;
 
+        const reservedCount = pendingReschedules.filter(
+          (r) => r.proposedStartTime === slot.startTime && r.proposedEndTime === slot.endTime,
+        ).length;
+
+        const bookedCount = apptBookedCount + reservedCount;
         const maxPatients = slot.maxPatients || 3;
         const availableCount = Math.max(0, maxPatients - bookedCount);
         const status =
@@ -1592,7 +1998,7 @@ export class AvailabilityService {
       }
 
       // STREAM scheduling: session capacity check
-      const bookedCount = appointments.filter((app) => {
+      const apptBookedCount = appointments.filter((app) => {
         if (!isApptActivelyBlocking(app)) return false;
         const appStart = toMinutes(app.startTime);
         const appEnd = toMinutes(app.endTime);
@@ -1601,6 +2007,15 @@ export class AvailabilityService {
         return appStart >= slotStart && appEnd <= slotEnd;
       }).length;
 
+      const reservedCount = pendingReschedules.filter((r) => {
+        const rStart = toMinutes(r.proposedStartTime);
+        const rEnd = toMinutes(r.proposedEndTime);
+        const slotStart = toMinutes(slot.startTime);
+        const slotEnd = toMinutes(slot.endTime);
+        return rStart < slotEnd && slotStart < rEnd;
+      }).length;
+
+      const bookedCount = apptBookedCount + reservedCount;
       const maxPatients = slot.maxPatients || 10;
       const availableCount = Math.max(0, maxPatients - bookedCount);
       const status =

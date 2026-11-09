@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   Clock,
   FileText,
+  Sparkles,
 } from 'lucide-react';
 import { launchRazorpayCheckout } from '@/lib/razorpay';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
@@ -36,6 +37,11 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+import { PatientRescheduleRequestModal } from './PatientRescheduleRequestModal';
+import {
+  elasticSchedulingApi,
+  RescheduleRequestRecord,
+} from '@/lib/api/elastic-scheduling';
 
 interface PatientAppointmentsClientProps {
   initialAppointments: Appointment[];
@@ -51,6 +57,31 @@ export function PatientAppointmentsClient({
   const [activeTab, setActiveTab] = useState<'UPCOMING' | 'PAST' | 'CANCELLED' | 'PENDING'>(initialTab);
   const [retryingPaymentId, setRetryingPaymentId] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(Date.now());
+
+  // Pending reschedule proposals state
+  const [rescheduleRequests, setRescheduleRequests] = useState<RescheduleRequestRecord[]>([]);
+  const [activeRescheduleRequest, setActiveRescheduleRequest] = useState<RescheduleRequestRecord | null>(null);
+  const [loadingRescheduleRequests, setLoadingRescheduleRequests] = useState(false);
+
+  const fetchRescheduleRequests = async () => {
+    try {
+      setLoadingRescheduleRequests(true);
+      const data = await elasticSchedulingApi.getPatientPendingRequests();
+      setRescheduleRequests(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to load pending reschedule requests:', err);
+    } finally {
+      setLoadingRescheduleRequests(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchRescheduleRequests();
+  }, []);
+
+  React.useEffect(() => {
+    setAppointments(initialAppointments);
+  }, [initialAppointments]);
 
   React.useEffect(() => {
     if (initialTab && initialTab !== activeTab) {
@@ -243,10 +274,12 @@ export function PatientAppointmentsClient({
       setAppointments((prev) =>
         prev.map((a) =>
           a.id === cancellingId
-            ? { ...a, status: 'CANCELLED', paymentStatus: isPaidAppointment ? 'REFUNDED' : a.paymentStatus }
+            ? { ...a, status: 'CANCELLED', paymentStatus: isPaidAppointment ? 'REFUNDED' : a.paymentStatus, pendingRescheduleRequest: null }
             : a,
         ),
       );
+      setRescheduleRequests((prev) => prev.filter((r) => r.appointmentId !== cancellingId));
+      fetchRescheduleRequests();
       setCancellingId(null);
       setCancelReasonCustom('');
       setCancelReasonPreset('Change of plans / Schedule conflict');
@@ -331,8 +364,95 @@ export function PatientAppointmentsClient({
     }
   };
 
+  const handleRescheduleProposalResolved = async () => {
+    setActiveRescheduleRequest(null);
+    await fetchRescheduleRequests();
+    router.refresh();
+  };
+
+  const activeProposals = rescheduleRequests.filter((r) => {
+    const matchedAppt = appointments.find((a) => a.id === r.appointmentId);
+    if (matchedAppt) {
+      return matchedAppt.status === 'CONFIRMED';
+    }
+    return true;
+  });
+
   return (
     <div className="space-y-6">
+      {/* ─── DOCTOR RESCHEDULING PROPOSALS ALERT BANNER ─── */}
+      {activeProposals.length > 0 && (
+        <Card className="rounded-3xl border border-blue-300 bg-blue-50/90 p-5 shadow-xs space-y-4 backdrop-blur-md">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-full bg-blue-200/80 flex items-center justify-center shrink-0">
+                <Sparkles className="w-4 h-4 text-blue-800" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-blue-950">
+                  Doctor Rescheduling Proposal Available ({activeProposals.length})
+                </h3>
+                <p className="text-xs text-blue-700">
+                  Your doctor updated their clinic schedule and proposed an alternative appointment. Please review and respond.
+                </p>
+              </div>
+            </div>
+            <span className="text-[11px] font-bold text-blue-900 bg-blue-200/80 px-3 py-1 rounded-full uppercase tracking-wider self-start sm:self-auto">
+              Action Required
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+            {activeProposals.map((req) => (
+              <div key={req.id} className="bg-white rounded-2xl border border-blue-200/90 p-4 shadow-2xs space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-3">
+                    <DoctorAvatar name={req.doctor?.fullName || req.appointment?.doctor?.fullName || 'Doctor'} size="sm" className="rounded-xl border border-black/10" />
+                    <div>
+                      <h4 className="font-bold text-zinc-950 text-sm">
+                        Dr. {req.doctor?.fullName || req.appointment?.doctor?.fullName || 'Doctor'}
+                      </h4>
+                      <p className="text-xs text-zinc-500 capitalize">
+                        {req.doctor?.specialization || req.appointment?.doctor?.specialization || 'Specialist'}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
+                    Slot Held For You
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 text-xs text-zinc-700 bg-blue-50/40 p-2.5 rounded-xl border border-blue-100">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Current Slot:</span>
+                    <span className="font-semibold text-slate-700 line-through">
+                      {formatDate(req.originalDate)} at {formatTime(req.originalStartTime)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between font-bold text-blue-900">
+                    <span className="flex items-center gap-1 text-blue-700">
+                      <Clock className="w-3.5 h-3.5 text-blue-600" /> Proposed Slot:
+                    </span>
+                    <span>
+                      {formatDate(req.proposedDate)} at {formatTime(req.proposedStartTime)}
+                    </span>
+                  </div>
+                </div>
+
+                <Button
+                  type="button"
+                  onClick={() => setActiveRescheduleRequest(req)}
+                  className="w-full bg-[#0066cc] hover:bg-[#0052a3] text-white font-bold text-xs h-9 rounded-xl shadow-xs flex items-center justify-center gap-2"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Review & Respond to Proposal</span>
+                </Button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {/* Active Pending Reservations Alert Banner */}
       {pendingList.length > 0 && (
         <Card className="rounded-3xl border border-amber-300 bg-amber-50/80 p-5 shadow-xs space-y-4 backdrop-blur-md">
@@ -522,6 +642,35 @@ export function PatientAppointmentsClient({
                       #{displayToken}
                     </span>
                   </div>
+
+                  {/* Reschedule Proposal Notification on Card */}
+                  {(() => {
+                    if (appt.status !== 'CONFIRMED') return null;
+                    const req = rescheduleRequests.find((r) => r.appointmentId === appt.id) || (appt as any).pendingRescheduleRequest;
+                    if (!req || req.status !== 'PENDING') return null;
+
+                    return (
+                      <div className="p-3 bg-blue-50/90 border border-blue-200/80 rounded-2xl flex items-center justify-between gap-2">
+                        <div className="text-xs">
+                          <span className="font-bold text-blue-950 flex items-center gap-1">
+                            <Sparkles className="w-3.5 h-3.5 text-blue-700" />
+                            Doctor Proposed Reschedule
+                          </span>
+                          <span className="text-[11px] text-blue-700 font-medium block mt-0.5">
+                            {formatDate(req.proposedDate)} at {formatTime(req.proposedStartTime)}
+                          </span>
+                        </div>
+                        <Button
+                          type="button"
+                          size="xs"
+                          onClick={() => setActiveRescheduleRequest(req)}
+                          className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-7 px-3 rounded-xl shrink-0"
+                        >
+                          Review
+                        </Button>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Pending Payment Card Action */}
@@ -886,6 +1035,14 @@ export function PatientAppointmentsClient({
         isOpen={!!selectedPrescription}
         onClose={() => setSelectedPrescription(null)}
         prescription={selectedPrescription}
+      />
+
+      {/* Patient Reschedule Request Modal */}
+      <PatientRescheduleRequestModal
+        isOpen={Boolean(activeRescheduleRequest)}
+        onClose={() => setActiveRescheduleRequest(null)}
+        request={activeRescheduleRequest}
+        onSuccess={handleRescheduleProposalResolved}
       />
     </div>
   );

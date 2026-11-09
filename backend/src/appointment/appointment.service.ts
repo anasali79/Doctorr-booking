@@ -10,8 +10,10 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Not, DataSource, EntityManager, In } from 'typeorm';
+import { Repository, Not, DataSource, EntityManager, In, MoreThan } from 'typeorm';
 import { Appointment } from './entities/appointment.entity';
+import { AppointmentRescheduleRequest } from './entities/appointment-reschedule-request.entity';
+import { RescheduleRequestStatus } from './enums/reschedule-request-status.enum';
 import { Doctor } from '../doctor/entities/doctor.entity';
 import { Patient } from '../patient/entities/patient.entity';
 import { DoctorLeave } from '../doctor/entities/leave.entity';
@@ -181,6 +183,16 @@ export class AppointmentService {
     try {
       const email = appt.patient?.user?.email;
       if (!email) return;
+
+      const userId = appt.patient?.userId || appt.patient?.user?.id;
+      if (userId && this.notificationService) {
+        const isEnabled = await this.notificationService.isEmailEnabled(userId);
+        if (!isEnabled) {
+          this.logger.debug(`Booking email suppressed for patient ${appt.patientId}: emailEnabled is false`);
+          return;
+        }
+      }
+
       await this.emailService.sendBookingConfirmation(
         email,
         appt.patient.fullName,
@@ -201,6 +213,16 @@ export class AppointmentService {
     try {
       const email = appt.patient?.user?.email;
       if (!email) return;
+
+      const userId = appt.patient?.userId || appt.patient?.user?.id;
+      if (userId && this.notificationService) {
+        const isEnabled = await this.notificationService.isEmailEnabled(userId);
+        if (!isEnabled) {
+          this.logger.debug(`Cancellation email suppressed for patient ${appt.patientId}: emailEnabled is false`);
+          return;
+        }
+      }
+
       await this.emailService.sendCancellationNotification(
         email,
         appt.patient.fullName,
@@ -221,6 +243,16 @@ export class AppointmentService {
     try {
       const email = appt.patient?.user?.email;
       if (!email) return;
+
+      const userId = appt.patient?.userId || appt.patient?.user?.id;
+      if (userId && this.notificationService) {
+        const isEnabled = await this.notificationService.isEmailEnabled(userId);
+        if (!isEnabled) {
+          this.logger.debug(`Reschedule email suppressed for patient ${appt.patientId}: emailEnabled is false`);
+          return;
+        }
+      }
+
       await this.emailService.sendRescheduleNotification(
         email,
         appt.patient.fullName,
@@ -284,8 +316,19 @@ export class AppointmentService {
       },
     });
 
-    if (confirmedCount >= maxPatients) {
-      throw new ConflictException('This slot is already booked');
+    const pendingCount = await manager.count(AppointmentRescheduleRequest, {
+      where: {
+        doctorId,
+        proposedDate: date,
+        proposedStartTime: startTime,
+        proposedEndTime: endTime,
+        status: RescheduleRequestStatus.PENDING,
+        expiresAt: MoreThan(new Date()),
+      },
+    });
+
+    if (confirmedCount + pendingCount >= maxPatients) {
+      throw new ConflictException('This slot is already booked or temporarily reserved');
     }
   }
 
@@ -422,7 +465,9 @@ export class AppointmentService {
       throw new NotFoundException('Appointment not found after save');
     }
 
-    this.sendBookingEmail(fullAppointment);
+    if (!this.notificationDispatcher) {
+      await this.sendBookingEmail(fullAppointment);
+    }
 
     // Multi-Channel Dispatch across Email, In-App, WhatsApp, and SMS
     if (this.notificationDispatcher) {
@@ -529,7 +574,28 @@ export class AppointmentService {
         for (const rx of prescriptions) {
           rxMap.set(rx.appointmentId, rx.id);
         }
-        return appointments.map((appt) => this.toPatientAppointmentResponse(appt, rxMap.get(appt.id)));
+
+        const pendingReschedules = apptIds.length > 0
+          ? await this.dataSource.getRepository(AppointmentRescheduleRequest).find({
+              where: {
+                appointmentId: In(apptIds),
+                status: RescheduleRequestStatus.PENDING,
+                expiresAt: MoreThan(new Date()),
+              },
+            })
+          : [];
+        const reschedMap = new Map<string, any>();
+        for (const req of pendingReschedules) {
+          const matchedAppt = appointments.find((a) => a.id === req.appointmentId);
+          if (matchedAppt && matchedAppt.status === AppointmentStatus.CONFIRMED) {
+            reschedMap.set(req.appointmentId, req);
+          }
+        }
+
+        return appointments.map((appt) => ({
+          ...this.toPatientAppointmentResponse(appt, rxMap.get(appt.id)),
+          pendingRescheduleRequest: reschedMap.get(appt.id) || null,
+        }));
       })(),
     };
   }
@@ -737,6 +803,20 @@ export class AppointmentService {
       app.pendingExpiresAt = null;
       await queryRunner.manager.save(app);
 
+      // Automatically cancel any active pending reschedule requests for this appointment
+      await queryRunner.manager.update(
+        AppointmentRescheduleRequest,
+        {
+          appointmentId: app.id,
+          status: RescheduleRequestStatus.PENDING,
+        },
+        {
+          status: RescheduleRequestStatus.CANCELLED,
+          patientNotes: reason || 'Appointment cancelled by patient',
+          patientRespondedAt: new Date(),
+        },
+      );
+
       await this.queueService.recalculateQueue(app.doctorId, app.date, queryRunner.manager);
       await queryRunner.commitTransaction();
     } catch (err) {
@@ -786,7 +866,9 @@ export class AppointmentService {
       cancelledNotif.note,
     );
 
-        this.sendCancellationEmail(updatedAppointment);
+    if (!this.notificationDispatcher) {
+      await this.sendCancellationEmail(updatedAppointment);
+    }
 
     if (this.notificationDispatcher) {
       const patientUser = updatedAppointment.patient?.user;
@@ -1164,7 +1246,9 @@ export class AppointmentService {
     });
 
     if (fullNewAppointment) {
-      this.sendRescheduleEmail(fullNewAppointment, previousDate, previousStartTime);
+      if (!this.notificationDispatcher) {
+        await this.sendRescheduleEmail(fullNewAppointment, previousDate, previousStartTime);
+      }
 
       if (this.notificationDispatcher) {
         const patientUser = fullNewAppointment.patient?.user;
@@ -1362,6 +1446,19 @@ export class AppointmentService {
       app.status = AppointmentStatus.CANCELLED;
       await queryRunner.manager.save(app);
 
+      // Automatically cancel any active pending reschedule requests for this appointment
+      await queryRunner.manager.update(
+        AppointmentRescheduleRequest,
+        {
+          appointmentId: app.id,
+          status: RescheduleRequestStatus.PENDING,
+        },
+        {
+          status: RescheduleRequestStatus.CANCELLED,
+          doctorReason: 'Appointment cancelled by doctor',
+        },
+      );
+
       await this.queueService.recalculateQueue(doctor.id, appointment.date, queryRunner.manager);
       await queryRunner.commitTransaction();
     } catch (err) {
@@ -1406,7 +1503,9 @@ export class AppointmentService {
       doctorCancelNotif.note,
     );
 
-    this.sendCancellationEmail(updatedAppointment);
+    if (!this.notificationDispatcher) {
+      await this.sendCancellationEmail(updatedAppointment);
+    }
 
     if (this.notificationDispatcher) {
       const patientUser = updatedAppointment.patient?.user;
@@ -1684,7 +1783,9 @@ export class AppointmentService {
     });
 
     if (fullNewAppointment) {
-      this.sendRescheduleEmail(fullNewAppointment, previousDate, previousStartTime);
+      if (!this.notificationDispatcher) {
+        await this.sendRescheduleEmail(fullNewAppointment, previousDate, previousStartTime);
+      }
 
       if (this.notificationDispatcher) {
         const patientUser = fullNewAppointment.patient?.user;
