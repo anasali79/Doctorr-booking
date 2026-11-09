@@ -85,8 +85,8 @@ describe('AvailabilityService - Wave & Stream Scheduling', () => {
       customRepo.find.mockResolvedValueOnce([]); // no custom override
       appointmentRepo.find.mockResolvedValueOnce([]); // no existing bookings
 
-      // Use future Monday date (e.g. 2026-11-09 is a Monday)
-      const slots = await service.getAvailableSlots(mockDoctor.id!, '2026-11-09');
+      // Use future Monday date (e.g. 2026-11-23 is a Monday)
+      const slots = await service.getAvailableSlots(mockDoctor.id!, '2026-11-23');
 
       expect(slots).toHaveLength(4);
       expect(slots[0]).toMatchObject({
@@ -162,7 +162,7 @@ describe('AvailabilityService - Wave & Stream Scheduling', () => {
         },
       ]);
 
-      const slots = await service.getAvailableSlots(mockDoctor.id!, '2026-11-09');
+      const slots = await service.getAvailableSlots(mockDoctor.id!, '2026-11-23');
 
       expect(slots).toHaveLength(2);
       // 10:00-10:30 slot should be booked (full)
@@ -437,6 +437,40 @@ describe('AvailabilityService - Wave & Stream Scheduling', () => {
       const result = await service.deleteCustomOverride('user-uuid-1', 'override-123', true);
       expect(customRepo.remove).toHaveBeenCalledWith(mockOverride);
       expect(result.cancelledAppointmentsCount).toBe(1);
+    });
+  });
+
+  describe('getSlotCapacity & Empty Slots Graceful Handling', () => {
+    it('should return correct capacity for recurring wave schedule sub-slots', async () => {
+      recurringRepo.find.mockResolvedValueOnce([
+        {
+          id: 'rec-1',
+          doctorId: mockDoctor.id,
+          dayOfWeek: DayOfWeek.MONDAY,
+          startTime: '09:00',
+          endTime: '10:00',
+          slotDuration: 30,
+          schedulingType: SchedulingType.WAVE,
+          bufferTime: 0,
+          maxPatients: 2,
+        },
+      ]);
+      customRepo.find.mockResolvedValueOnce([]);
+
+      const cap = await service.getSlotCapacity(mockDoctor.id!, '2026-11-23', '09:00', '09:30');
+      expect(cap).toEqual({
+        maxPatients: 2,
+        schedulingType: SchedulingType.WAVE,
+      });
+    });
+
+    it('should return empty array with message when no recurring or custom availability exists', async () => {
+      recurringRepo.find.mockResolvedValueOnce([]);
+      customRepo.find.mockResolvedValueOnce([]);
+
+      const slots = await service.getAvailableSlots(mockDoctor.id!, '2026-11-23');
+      expect(slots).toHaveLength(0);
+      expect((slots as any).message).toContain('No availability found');
     });
   });
 });

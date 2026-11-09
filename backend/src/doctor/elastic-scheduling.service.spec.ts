@@ -98,6 +98,12 @@ describe('ElasticSchedulingService', () => {
       find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn().mockResolvedValue(null),
       save: jest.fn().mockImplementation((a) => Promise.resolve({ ...a, id: a.id || 'appt-saved-id' })),
+      createQueryBuilder: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ max: '0' }),
+      }),
     };
 
     recurringRepoMock = {
@@ -345,6 +351,63 @@ describe('ElasticSchedulingService', () => {
           shiftType: ShiftType.CUSTOM,
           shiftId: 'custom-shift-1',
           newStartTime: '10:00',
+          newEndTime: '12:00',
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('Combined: should cleanly adjust when expanding start and shrinking end with zero conflicts', async () => {
+      appointmentRepoMock.find.mockResolvedValue([]);
+
+      const result = await service.applyShrink('user-doc-1', {
+        shiftType: ShiftType.CUSTOM,
+        shiftId: 'custom-shift-1',
+        newStartTime: '09:00', // expanded: 09:00 - 10:00
+        newEndTime: '12:00',   // shrunk: 12:00 - 13:00
+      });
+
+      expect(result.message).toContain('completed successfully with zero conflicts');
+      expect(result.operation).toBe('COMBINED');
+      expect(result.expandedIntervals).toEqual([{ start: '09:00', end: '10:00' }]);
+      expect(result.clippedIntervals).toEqual([{ start: '12:00', end: '13:00' }]);
+      expect(customRepoMock.save).toHaveBeenCalled();
+    });
+
+    it('Combined: should detect conflicts in clipped interval during combined adjustment', async () => {
+      const bookedAppt = {
+        id: 'appt-evening-conflict',
+        doctorId: 'doc-uuid-1',
+        patientId: 'pat-uuid-2',
+        date: '2026-11-16',
+        startTime: '12:30',
+        endTime: '13:00',
+        status: AppointmentStatus.CONFIRMED,
+        paymentStatus: 'PAID',
+        tokenNumber: 8,
+        patient: { fullName: 'Bob Builder', phone: '+918888888888' },
+      };
+
+      appointmentRepoMock.find.mockResolvedValue([bookedAppt]);
+
+      const conflictCheck = await service.checkShrinkConflicts('user-doc-1', {
+        shiftType: ShiftType.CUSTOM,
+        shiftId: 'custom-shift-1',
+        newStartTime: '08:00', // expanded: 08:00 - 10:00
+        newEndTime: '12:00',   // shrunk: 12:00 - 13:00
+      });
+
+      expect(conflictCheck.hasConflicts).toBe(true);
+      expect(conflictCheck.conflictCount).toBe(1);
+      expect(conflictCheck.operation).toBe('COMBINED');
+      expect(conflictCheck.expandedIntervals).toEqual([{ start: '08:00', end: '10:00' }]);
+      expect(conflictCheck.clippedIntervals).toEqual([{ start: '12:00', end: '13:00' }]);
+      expect(conflictCheck.affectedAppointments[0].appointmentId).toBe('appt-evening-conflict');
+
+      await expect(
+        service.applyShrink('user-doc-1', {
+          shiftType: ShiftType.CUSTOM,
+          shiftId: 'custom-shift-1',
+          newStartTime: '08:00',
           newEndTime: '12:00',
         }),
       ).rejects.toThrow(ConflictException);

@@ -1,4 +1,4 @@
-import {
+ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -376,17 +376,46 @@ export class ElasticSchedulingService {
 
     const isShrunkStart = newStartMins > oldStartMins;
     const isShrunkEnd = newEndMins < oldEndMins;
+    const isExpandedStart = newStartMins < oldStartMins;
+    const isExpandedEnd = newEndMins > oldEndMins;
 
-    if (!isShrunkStart && !isShrunkEnd) {
-      throw new BadRequestException(
-        'New time range must be narrower than existing shift boundaries (later start or earlier end)',
-      );
+    if (!isShrunkStart && !isShrunkEnd && !isExpandedStart && !isExpandedEnd) {
+      throw new BadRequestException('No schedule change detected');
     }
 
-    if (newStartMins < oldStartMins || newEndMins > oldEndMins) {
-      throw new BadRequestException(
-        'Elastic shrinking cannot expand existing boundaries. Use schedule expansion instead.',
-      );
+    // Overlap validation: If expanding either boundary, verify no overlap with other shifts on the same day
+    if (isExpandedStart || isExpandedEnd) {
+      if (dto.shiftType === ShiftType.RECURRING && targetDayOfWeek) {
+        const otherShifts = await this.recurringRepo
+          .createQueryBuilder('ra')
+          .where('ra.doctorId = :doctorId', { doctorId: doctor.id })
+          .andWhere('ra.dayOfWeek = :day', { day: targetDayOfWeek })
+          .andWhere('ra.id != :id', { id: dto.shiftId })
+          .getMany();
+
+        for (const other of otherShifts) {
+          if (timesOverlap(dto.newStartTime, dto.newEndTime, other.startTime, other.endTime)) {
+            throw new ConflictException(
+              `Updated hours (${dto.newStartTime}–${dto.newEndTime}) overlap with existing shift (${other.startTime}–${other.endTime}) on ${targetDayOfWeek}`,
+            );
+          }
+        }
+      } else if (dto.shiftType === ShiftType.CUSTOM && targetDate) {
+        const otherShifts = await this.customRepo
+          .createQueryBuilder('ca')
+          .where('ca.doctorId = :doctorId', { doctorId: doctor.id })
+          .andWhere('ca.date = :date', { date: targetDate })
+          .andWhere('ca.id != :id', { id: dto.shiftId })
+          .getMany();
+
+        for (const other of otherShifts) {
+          if (timesOverlap(dto.newStartTime, dto.newEndTime, other.startTime, other.endTime)) {
+            throw new ConflictException(
+              `Updated hours (${dto.newStartTime}–${dto.newEndTime}) overlap with existing custom shift on ${targetDate}`,
+            );
+          }
+        }
+      }
     }
 
     // Identify clipped (removed) intervals
@@ -397,6 +426,18 @@ export class ElasticSchedulingService {
     if (isShrunkEnd) {
       clippedIntervals.push({ start: dto.newEndTime, end: oldEndTime });
     }
+
+    // Identify expanded (newly added) intervals
+    const expandedIntervals: Array<{ start: string; end: string }> = [];
+    if (isExpandedStart) {
+      expandedIntervals.push({ start: dto.newStartTime, end: oldStartTime });
+    }
+    if (isExpandedEnd) {
+      expandedIntervals.push({ start: oldEndTime, end: dto.newEndTime });
+    }
+
+    const isCombined = (isShrunkStart || isShrunkEnd) && (isExpandedStart || isExpandedEnd);
+    const operation = isCombined ? 'COMBINED' : (isShrunkStart || isShrunkEnd ? 'SHRINK' : 'EXPANSION');
 
     const todayStr = getTodayIST();
     let conflictingAppointments: Appointment[] = [];
@@ -485,6 +526,8 @@ export class ElasticSchedulingService {
       hasConflicts: affectedAppointments.length > 0,
       conflictCount: affectedAppointments.length,
       clippedIntervals,
+      expandedIntervals,
+      operation,
       affectedAppointments,
     };
   }
@@ -499,6 +542,8 @@ export class ElasticSchedulingService {
         conflictCount: conflicts.conflictCount,
         affectedAppointments: conflicts.affectedAppointments,
         clippedIntervals: conflicts.clippedIntervals,
+        expandedIntervals: conflicts.expandedIntervals,
+        operation: conflicts.operation,
       });
     }
 
@@ -512,10 +557,17 @@ export class ElasticSchedulingService {
       const saved = await this.recurringRepo.save(shift);
 
       try {
+        const notifTitle =
+          conflicts.operation === 'COMBINED'
+            ? 'Schedule Hours Adjusted'
+            : conflicts.operation === 'EXPANSION'
+            ? 'Schedule Expanded'
+            : 'Schedule Reduction Completed';
+        const notifMsg = `Your ${shift.dayOfWeek} shift was updated to ${dto.newStartTime}–${dto.newEndTime}.`;
         await this.notificationService.createDoctorNotification(
           doctor.id,
-          'Schedule Reduction Completed',
-          `Your ${shift.dayOfWeek} shift was reduced to ${dto.newStartTime}–${dto.newEndTime}.`,
+          notifTitle,
+          notifMsg,
           NotificationType.SCHEDULE_UPDATE,
         );
       } catch (err: any) {
@@ -523,8 +575,16 @@ export class ElasticSchedulingService {
       }
 
       return {
-        message: 'Schedule shrinking completed successfully with zero conflicts.',
+        message:
+          conflicts.operation === 'COMBINED'
+            ? 'Combined schedule adjustment completed successfully with zero conflicts.'
+            : conflicts.operation === 'EXPANSION'
+            ? 'Schedule expansion completed successfully.'
+            : 'Schedule shrinking completed successfully with zero conflicts.',
         shift: saved,
+        operation: conflicts.operation,
+        expandedIntervals: conflicts.expandedIntervals,
+        clippedIntervals: conflicts.clippedIntervals,
       };
     } else {
       const shift = await this.customRepo.findOne({
@@ -536,8 +596,16 @@ export class ElasticSchedulingService {
       const saved = await this.customRepo.save(shift);
 
       return {
-        message: 'Custom shift shrinking completed successfully with zero conflicts.',
+        message:
+          conflicts.operation === 'COMBINED'
+            ? 'Custom shift combined adjustment completed successfully with zero conflicts.'
+            : conflicts.operation === 'EXPANSION'
+            ? 'Custom shift expansion completed successfully.'
+            : 'Custom shift shrinking completed successfully with zero conflicts.',
         shift: saved,
+        operation: conflicts.operation,
+        expandedIntervals: conflicts.expandedIntervals,
+        clippedIntervals: conflicts.clippedIntervals,
       };
     }
   }
@@ -620,6 +688,8 @@ export class ElasticSchedulingService {
         }
       }
     }
+
+    const batchWaveTokens: Record<string, number> = {};
 
     for (const app of appointments) {
       const apptSchedulingType: 'WAVE' | 'STREAM' = app.tokenNumber !== null ? 'WAVE' : 'STREAM';
@@ -720,12 +790,25 @@ export class ElasticSchedulingService {
 
               if (bookedSoFar < maxCap) {
                 batchWaveCounts[waveKey] = currentBatchCount + 1;
+
+                if (batchWaveTokens[candDate] === undefined) {
+                  const maxResult = await this.appointmentRepo
+                    .createQueryBuilder('a')
+                    .select('MAX(a.tokenNumber)', 'max')
+                    .where('a.doctorId = :doctorId', { doctorId: doctor.id })
+                    .andWhere('a.date = :date', { date: candDate })
+                    .andWhere('a.status NOT IN (:...s)', { s: [AppointmentStatus.CANCELLED, AppointmentStatus.RESCHEDULED] })
+                    .getRawOne();
+                  batchWaveTokens[candDate] = maxResult?.max ? parseInt(maxResult.max, 10) : 0;
+                }
+                batchWaveTokens[candDate] += 1;
+
                 matchedSlot = {
                   date: candDate,
                   startTime: slot.startTime,
                   endTime: slot.endTime,
                   priority,
-                  tokenNumber: bookedSoFar + 1,
+                  tokenNumber: batchWaveTokens[candDate],
                 };
                 break;
               }
@@ -878,6 +961,7 @@ export class ElasticSchedulingService {
     const now = new Date();
     // Default 24-hour reservation window
     const defaultExpiry = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const bulkTokensPerDay: Record<string, number> = {};
 
     try {
       for (const proposal of dto.proposals) {
@@ -904,18 +988,18 @@ export class ElasticSchedulingService {
 
         let proposedToken: number | null = null;
         if (sType === SchedulingType.WAVE) {
-          const maxResult = await queryRunner.manager
-            .createQueryBuilder(Appointment, 'a')
-            .select('MAX(a.tokenNumber)', 'max')
-            .where('a.doctorId = :doctorId', { doctorId: doctor.id })
-            .andWhere('a.date = :date', { date: proposal.proposedDate })
-            .andWhere('a.startTime = :startTime', { startTime: proposal.proposedStartTime })
-            .andWhere('a.endTime = :endTime', { endTime: proposal.proposedEndTime })
-            .andWhere('a.status NOT IN (:...s)', { s: [AppointmentStatus.CANCELLED, AppointmentStatus.RESCHEDULED] })
-            .getRawOne();
-
-          const currentMax = maxResult?.max ? parseInt(maxResult.max, 10) : 0;
-          proposedToken = currentMax + 1;
+          if (bulkTokensPerDay[proposal.proposedDate] === undefined) {
+            const maxResult = await queryRunner.manager
+              .createQueryBuilder(Appointment, 'a')
+              .select('MAX(a.tokenNumber)', 'max')
+              .where('a.doctorId = :doctorId', { doctorId: doctor.id })
+              .andWhere('a.date = :date', { date: proposal.proposedDate })
+              .andWhere('a.status NOT IN (:...s)', { s: [AppointmentStatus.CANCELLED, AppointmentStatus.RESCHEDULED] })
+              .getRawOne();
+            bulkTokensPerDay[proposal.proposedDate] = maxResult?.max ? parseInt(maxResult.max, 10) : 0;
+          }
+          bulkTokensPerDay[proposal.proposedDate] += 1;
+          proposedToken = bulkTokensPerDay[proposal.proposedDate];
         }
 
         const request = this.rescheduleRequestRepo.create({
@@ -1128,8 +1212,6 @@ export class ElasticSchedulingService {
           .select('MAX(a.tokenNumber)', 'max')
           .where('a.doctorId = :doctorId', { doctorId: doctor.id })
           .andWhere('a.date = :date', { date: dto.proposedDate })
-          .andWhere('a.startTime = :startTime', { startTime: dto.proposedStartTime })
-          .andWhere('a.endTime = :endTime', { endTime: dto.proposedEndTime })
           .andWhere('a.status NOT IN (:...s)', { s: [AppointmentStatus.CANCELLED, AppointmentStatus.RESCHEDULED] })
           .getRawOne();
 
@@ -1289,7 +1371,38 @@ export class ElasticSchedulingService {
       appt.startTime = request.proposedStartTime;
       appt.endTime = request.proposedEndTime;
       if (request.proposedTokenNumber) {
-        appt.tokenNumber = request.proposedTokenNumber;
+        const collision = await queryRunner.manager.findOne(Appointment, {
+          where: {
+            doctorId: appt.doctorId,
+            date: request.proposedDate,
+            tokenNumber: request.proposedTokenNumber,
+            status: Not(In([AppointmentStatus.CANCELLED, AppointmentStatus.RESCHEDULED])),
+            id: Not(appt.id),
+          },
+        });
+        if (collision) {
+          const maxResult = await queryRunner.manager
+            .createQueryBuilder(Appointment, 'a')
+            .select('MAX(a.tokenNumber)', 'max')
+            .where('a.doctorId = :doctorId', { doctorId: appt.doctorId })
+            .andWhere('a.date = :date', { date: request.proposedDate })
+            .andWhere('a.status NOT IN (:...s)', { s: [AppointmentStatus.CANCELLED, AppointmentStatus.RESCHEDULED] })
+            .getRawOne();
+          const currentMax = maxResult?.max ? parseInt(maxResult.max, 10) : 0;
+          appt.tokenNumber = currentMax + 1;
+        } else {
+          appt.tokenNumber = request.proposedTokenNumber;
+        }
+      } else {
+        const maxResult = await queryRunner.manager
+          .createQueryBuilder(Appointment, 'a')
+          .select('MAX(a.tokenNumber)', 'max')
+          .where('a.doctorId = :doctorId', { doctorId: appt.doctorId })
+          .andWhere('a.date = :date', { date: request.proposedDate })
+          .andWhere('a.status NOT IN (:...s)', { s: [AppointmentStatus.CANCELLED, AppointmentStatus.RESCHEDULED] })
+          .getRawOne();
+        const currentMax = maxResult?.max ? parseInt(maxResult.max, 10) : 0;
+        appt.tokenNumber = currentMax + 1;
       }
       appt.status = AppointmentStatus.CONFIRMED;
 
@@ -1419,12 +1532,51 @@ export class ElasticSchedulingService {
     if (dto.notes) request.patientNotes = dto.notes;
     await this.rescheduleRequestRepo.save(request);
 
+    // If the original shift is no longer staffed/available, auto-cancel appointment and refund patient
+    let isOriginalSlotValid = false;
+    try {
+      const intervals = await this.availabilityService.getDoctorIntervalsForDate(
+        request.doctorId,
+        request.originalDate,
+      );
+      isOriginalSlotValid = intervals.some(
+        (i) =>
+          toMinutes(i.startTime) <= toMinutes(request.originalStartTime) &&
+          toMinutes(i.endTime) >= toMinutes(request.originalEndTime),
+      );
+    } catch {
+      isOriginalSlotValid = false;
+    }
+
+    let ghostCancelled = false;
+    if (!isOriginalSlotValid && request.appointment) {
+      request.appointment.status = AppointmentStatus.CANCELLED;
+      await this.appointmentRepo.save(request.appointment);
+      ghostCancelled = true;
+
+      if (request.appointment.paymentStatus === 'PAID' && this.paymentService) {
+        try {
+          await this.paymentService.createRefund(userId, 'PATIENT', {
+            appointmentId: request.appointment.id,
+            reason: 'Clinic schedule reduced and patient declined alternative slot',
+            bypassCutoff: true,
+          });
+        } catch (rfErr: any) {
+          this.logger.error(`Auto-refund on rejected ghost slot: ${rfErr.message}`);
+        }
+      }
+    }
+
     // Notify doctor
     try {
+      const docMsg = ghostCancelled
+        ? `Patient ${patient.fullName} declined proposed reschedule. Because original shift is no longer open, appointment was cancelled and refunded.`
+        : `Patient ${patient.fullName} declined the proposed slot for their appointment on ${formatDate(request.originalDate)}. Their original booking remains recorded.`;
+
       await this.notificationService.createDoctorNotification(
         request.doctorId,
         'Patient Declined Reschedule',
-        `Patient ${patient.fullName} declined the proposed slot for their appointment on ${formatDate(request.originalDate)}. Their original booking remains recorded.`,
+        docMsg,
         NotificationType.APPOINTMENT_RESCHEDULED,
       );
 
@@ -1522,8 +1674,6 @@ export class ElasticSchedulingService {
           .select('MAX(a.tokenNumber)', 'max')
           .where('a.doctorId = :doctorId', { doctorId: request.doctorId })
           .andWhere('a.date = :date', { date: dto.date })
-          .andWhere('a.startTime = :startTime', { startTime: dto.startTime })
-          .andWhere('a.endTime = :endTime', { endTime: dto.endTime })
           .andWhere('a.status NOT IN (:...s)', { s: [AppointmentStatus.CANCELLED, AppointmentStatus.RESCHEDULED] })
           .getRawOne();
 
@@ -1649,6 +1799,7 @@ export class ElasticSchedulingService {
         refundResult = await this.paymentService.createRefund(userId, 'PATIENT', {
           appointmentId: appt.id,
           reason: dto.reason || 'Patient cancelled during availability rescheduling',
+          bypassCutoff: true,
         });
         request.refundStatus = 'INITIATED';
         request.refundId = refundResult?.data?.refundId || null;

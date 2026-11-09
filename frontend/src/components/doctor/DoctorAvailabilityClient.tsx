@@ -90,6 +90,9 @@ export function DoctorAvailabilityClient({
       if (endMin <= startMin) return 0;
 
       const totalWorkingMins = endMin - startMin;
+      if (schedulingType === 'STREAM') {
+        return maxPatients || 10;
+      }
       const slotAndBuffer = slotDuration + bufferTime;
       if (slotAndBuffer <= 0) return 0;
 
@@ -117,9 +120,9 @@ export function DoctorAvailabilityClient({
         daysOfWeek: selectedDays,
         startTime,
         endTime,
-        slotDuration,
+        slotDuration: schedulingType === 'WAVE' ? slotDuration : undefined,
         schedulingType,
-        bufferTime,
+        bufferTime: schedulingType === 'WAVE' ? bufferTime : 0,
         maxPatients: Number(maxPatients),
       });
 
@@ -219,40 +222,6 @@ export function DoctorAvailabilityClient({
             </div>
           </div>
 
-          {/* Slot Duration */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="field-label">Slot Duration</label>
-              <Select value={String(slotDuration)} onValueChange={(val) => setSlotDuration(Number(val))}>
-                <SelectTrigger className="field-input text-xs font-semibold">
-                  <SelectValue placeholder="Slot Duration" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="15">15 Minutes</SelectItem>
-                  <SelectItem value="20">20 Minutes</SelectItem>
-                  <SelectItem value="30">30 Minutes</SelectItem>
-                  <SelectItem value="45">45 Minutes</SelectItem>
-                  <SelectItem value="60">60 Minutes</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="field-label">Buffer Time</label>
-              <Select value={String(bufferTime)} onValueChange={(val) => setBufferTime(Number(val))}>
-                <SelectTrigger className="field-input text-xs font-semibold">
-                  <SelectValue placeholder="Buffer Time" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="0">0 Min (Back to back)</SelectItem>
-                  <SelectItem value="5">5 Minutes</SelectItem>
-                  <SelectItem value="10">10 Minutes</SelectItem>
-                  <SelectItem value="15">15 Minutes</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
           {/* Scheduling Type */}
           <div>
             <label className="field-label">Scheduling Flow</label>
@@ -290,6 +259,42 @@ export function DoctorAvailabilityClient({
               </Button>
             </div>
           </div>
+
+          {/* Slot Duration & Buffer - Only shown for WAVE scheduling */}
+          {schedulingType === 'WAVE' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="field-label">Slot Duration</label>
+                <Select value={String(slotDuration)} onValueChange={(val) => setSlotDuration(Number(val))}>
+                  <SelectTrigger className="field-input text-xs font-semibold">
+                    <SelectValue placeholder="Slot Duration" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="15">15 Minutes</SelectItem>
+                    <SelectItem value="20">20 Minutes</SelectItem>
+                    <SelectItem value="30">30 Minutes</SelectItem>
+                    <SelectItem value="45">45 Minutes</SelectItem>
+                    <SelectItem value="60">60 Minutes</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="field-label">Buffer Time</label>
+                <Select value={String(bufferTime)} onValueChange={(val) => setBufferTime(Number(val))}>
+                  <SelectTrigger className="field-input text-xs font-semibold">
+                    <SelectValue placeholder="Buffer Time" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">0 Min (Back to back)</SelectItem>
+                    <SelectItem value="5">5 Minutes</SelectItem>
+                    <SelectItem value="10">10 Minutes</SelectItem>
+                    <SelectItem value="15">15 Minutes</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="field-label">
@@ -387,8 +392,8 @@ export function DoctorAvailabilityClient({
                       {formatTime(item.startTime)} - {formatTime(item.endTime)}
                     </TableCell>
                     <TableCell className="py-3.5 px-4 text-slate-600">
-                      {item.slotDuration} min
-                      {item.bufferTime > 0 ? ` (+${item.bufferTime}m buffer)` : ''}
+                      {item.schedulingType === 'WAVE' ? `${item.slotDuration} min` : 'Continuous'}
+                      {item.schedulingType === 'WAVE' && item.bufferTime > 0 ? ` (+${item.bufferTime}m buffer)` : ''}
                     </TableCell>
                     <TableCell className="py-3.5 px-4">
                       <Badge variant="outline" className="px-2.5 py-0.5 rounded-full bg-slate-100 font-semibold text-[10px] text-slate-700 border border-slate-200/60">
