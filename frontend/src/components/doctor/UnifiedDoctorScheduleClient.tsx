@@ -38,11 +38,28 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ElasticAvailabilityModal } from '@/components/doctor/elastic/ElasticAvailabilityModal';
+import { ScheduleConflictModal } from '@/components/doctor/elastic/ScheduleConflictModal';
+import { SmartReschedulePreviewModal } from '@/components/doctor/elastic/SmartReschedulePreviewModal';
+import { DoctorManualReschedulePickerModal } from '@/components/doctor/elastic/DoctorManualReschedulePickerModal';
+import { DoctorRescheduleTracker } from '@/components/doctor/elastic/DoctorRescheduleTracker';
+import {
+  ShiftDeletionConflictModal,
+  AffectedShiftAppointment,
+} from '@/components/doctor/ShiftDeletionConflictModal';
+import {
+  elasticSchedulingApi,
+  ConflictCheckResult,
+  AffectedAppointment,
+  SmartReschedulePreviewResult,
+  SmartRescheduleProposal,
+} from '@/lib/api/elastic-scheduling';
 
 interface UnifiedDoctorScheduleClientProps {
   initialAvailability: any;
   initialLeaves: DoctorLeave[];
-  defaultTab?: 'recurring' | 'occupancy' | 'overrides' | 'unavailable' | 'leaves';
+  defaultTab?: 'recurring' | 'occupancy' | 'overrides' | 'unavailable' | 'leaves' | 'rescheduling';
+  doctorId?: string;
 }
 
 function parseAvailabilityList(input: unknown): RecurringAvailability[] {
@@ -134,9 +151,10 @@ export function UnifiedDoctorScheduleClient({
   initialAvailability,
   initialLeaves,
   defaultTab = 'recurring',
+  doctorId,
 }: UnifiedDoctorScheduleClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'recurring' | 'occupancy' | 'overrides' | 'unavailable' | 'leaves'>(defaultTab);
+  const [activeTab, setActiveTab] = useState<'recurring' | 'occupancy' | 'overrides' | 'unavailable' | 'leaves' | 'rescheduling'>(defaultTab);
 
   // Availability State
   const [availabilities, setAvailabilities] = useState<RecurringAvailability[]>(() =>
@@ -149,6 +167,113 @@ export function UnifiedDoctorScheduleClient({
     parseCustomOverridesList(initialAvailability),
   );
   const [deletingOverrideId, setDeletingOverrideId] = useState<string | null>(null);
+
+  // Option C Deletion Conflict & Refund State
+  const [deletionConflictModal, setDeletionConflictModal] = useState<{
+    isOpen: boolean;
+    shiftType: 'recurring' | 'override';
+    id: string;
+    shiftLabel: string;
+    conflictCount: number;
+    affectedAppointments: AffectedShiftAppointment[];
+  } | null>(null);
+  const [isDeletingWithRefund, setIsDeletingWithRefund] = useState(false);
+
+  // Elastic Scheduling State
+  const [elasticModalOpen, setElasticModalOpen] = useState(false);
+  const [targetShiftForElastic, setTargetShiftForElastic] = useState<{
+    id: string;
+    shiftType: 'RECURRING' | 'CUSTOM';
+    title: string;
+    dateOrDay: string;
+    startTime: string;
+    endTime: string;
+    slotDuration?: number;
+    schedulingType?: 'WAVE' | 'STREAM';
+    maxPatients?: number;
+  } | null>(null);
+
+  const [conflictModalOpen, setConflictModalOpen] = useState(false);
+  const [conflictData, setConflictData] = useState<ConflictCheckResult | null>(null);
+  const [conflictShiftContext, setConflictShiftContext] = useState<any>(null);
+
+  const [smartPreviewModalOpen, setSmartPreviewModalOpen] = useState(false);
+  const [smartPreviewData, setSmartPreviewData] = useState<SmartReschedulePreviewResult | null>(null);
+
+  const [manualPickerModalOpen, setManualPickerModalOpen] = useState(false);
+  const [manualTargetAppointment, setManualTargetAppointment] = useState<AffectedAppointment | SmartRescheduleProposal | null>(null);
+
+  const effectiveDoctorId =
+    (initialAvailability as any)?.doctorId ||
+    (availabilities[0] as any)?.doctorId ||
+    (customOverrides[0] as any)?.doctorId ||
+    doctorId ||
+    '';
+
+  const handleOpenElastic = (
+    item: any,
+    shiftType: 'RECURRING' | 'CUSTOM'
+  ) => {
+    setTargetShiftForElastic({
+      id: item.id,
+      shiftType,
+      title: shiftType === 'RECURRING' ? `${item.dayOfWeek} Weekly Shift` : `Override for ${formatDate(item.date)}`,
+      dateOrDay: shiftType === 'RECURRING' ? item.dayOfWeek : item.date,
+      startTime: item.startTime,
+      endTime: item.endTime,
+      slotDuration: item.slotDuration,
+      schedulingType: item.schedulingType || 'STREAM',
+      maxPatients: item.maxPatients,
+    });
+    setElasticModalOpen(true);
+  };
+
+  const handleConflictDetected = (conflicts: ConflictCheckResult, shiftData: any) => {
+    setElasticModalOpen(false);
+    setConflictData(conflicts);
+    setConflictShiftContext(shiftData);
+    setConflictModalOpen(true);
+  };
+
+  const handleSelectSmartReschedule = async (affectedIds: string[]) => {
+    try {
+      toast.loading('Analyzing optimal slot matches…', { id: 'smart-analysis' });
+      const shrinkContext = conflictShiftContext
+        ? {
+            shiftType: conflictShiftContext.shiftType,
+            shiftId: conflictShiftContext.id,
+            newStartTime: conflictShiftContext.newStartTime,
+            newEndTime: conflictShiftContext.newEndTime,
+            dateOrDay: conflictShiftContext.dateOrDay,
+          }
+        : undefined;
+
+      const preview = await elasticSchedulingApi.previewSmartReschedule({
+        appointmentIds: affectedIds,
+        shrinkContext,
+      });
+      toast.dismiss('smart-analysis');
+      setSmartPreviewData(preview);
+      setConflictModalOpen(false);
+      setSmartPreviewModalOpen(true);
+    } catch (err: unknown) {
+      toast.dismiss('smart-analysis');
+      toast.error('Failed to generate smart rescheduling suggestions', {
+        description: extractErrorMessage(err),
+      });
+    }
+  };
+
+  const handleSelectManualReschedule = (affectedAppointment: AffectedAppointment) => {
+    setManualTargetAppointment(affectedAppointment);
+    setConflictModalOpen(false);
+    setManualPickerModalOpen(true);
+  };
+
+  const handleModifyProposal = (proposal: SmartRescheduleProposal) => {
+    setManualTargetAppointment(proposal);
+    setManualPickerModalOpen(true);
+  };
 
   // Live Generated Schedule & Occupancy State
   const [generatedSchedule, setGeneratedSchedule] = useState<DayScheduleDetail[]>(() =>
@@ -316,21 +441,85 @@ export function UnifiedDoctorScheduleClient({
     }
   };
 
-  // Delete Recurring Slot
-  const handleDeleteSlot = async (id: string) => {
-    if (!confirm('Are you sure you want to remove this recurring shift?')) return;
+  // Delete Recurring Slot (Option C Support)
+  const handleDeleteSlot = async (id: string, confirmedWithRefund = false) => {
+    const slot = availabilities.find((s) => s.id === id);
+    const label = slot
+      ? `${slot.dayOfWeek} (${formatTime(slot.startTime)} – ${formatTime(slot.endTime)})`
+      : 'this recurring shift';
 
     try {
-      setDeletingId(id);
-      await clientAxios.delete(`/api/doctor/availability-proxy/${id}`);
+      if (!confirmedWithRefund) {
+        // Pre-check for conflicting appointments
+        try {
+          const checkRes = await clientAxios.get<{
+            data: {
+              conflictCount: number;
+              affectedAppointments: AffectedShiftAppointment[];
+              slot: any;
+            };
+          }>(`/api/doctor/availability-proxy/${id}`);
 
-      toast.success('Shift Deleted');
+          if (checkRes.data?.data?.conflictCount > 0) {
+            setDeletionConflictModal({
+              isOpen: true,
+              shiftType: 'recurring',
+              id,
+              shiftLabel: label,
+              conflictCount: checkRes.data.data.conflictCount,
+              affectedAppointments: checkRes.data.data.affectedAppointments,
+            });
+            return;
+          }
+        } catch {
+          // Fallback to direct delete if check route is unreachable
+        }
+
+        if (!confirm(`Are you sure you want to remove recurring shift: ${label}?`)) {
+          return;
+        }
+      }
+
+      setDeletingId(id);
+      if (confirmedWithRefund) {
+        setIsDeletingWithRefund(true);
+      }
+
+      const deleteUrl = confirmedWithRefund
+        ? `/api/doctor/availability-proxy/${id}?confirmCancelAndRefund=true`
+        : `/api/doctor/availability-proxy/${id}`;
+
+      const res = await clientAxios.delete(deleteUrl);
+
+      const cancelCount = res.data?.data?.cancelledAppointmentsCount || 0;
+      if (cancelCount > 0) {
+        toast.success('Shift Removed & Bookings Refunded', {
+          description: `${cancelCount} confirmed appointment(s) cancelled and full refunds initiated.`,
+        });
+      } else {
+        toast.success('Shift Deleted');
+      }
+
       setAvailabilities((prev) => prev.filter((s) => s.id !== id));
+      setDeletionConflictModal(null);
       router.refresh();
-    } catch (err: unknown) {
+    } catch (err: any) {
+      const errData = err?.response?.data || err?.data;
+      if (errData?.requiresConfirmation) {
+        setDeletionConflictModal({
+          isOpen: true,
+          shiftType: 'recurring',
+          id,
+          shiftLabel: label,
+          conflictCount: errData.conflictCount,
+          affectedAppointments: errData.affectedAppointments,
+        });
+        return;
+      }
       toast.error('Delete failed', { description: extractErrorMessage(err) });
     } finally {
       setDeletingId(null);
+      setIsDeletingWithRefund(false);
     }
   };
 
@@ -376,27 +565,91 @@ export function UnifiedDoctorScheduleClient({
     }
   };
 
-  // Delete Custom Override
-  const handleDeleteOverride = async (id: string, date: string, startTime: string, endTime: string) => {
-    if (!confirm(`Are you sure you want to remove the special shift on ${formatDate(date)} (${formatTime(startTime)} – ${formatTime(endTime)})?`)) {
-      return;
-    }
+  // Delete Custom Override (Option C Support)
+  const handleDeleteOverride = async (
+    id: string,
+    date: string,
+    startTime: string,
+    endTime: string,
+    confirmedWithRefund = false,
+  ) => {
+    const label = `${formatDate(date)} (${formatTime(startTime)} – ${formatTime(endTime)})`;
 
     try {
-      setDeletingOverrideId(id);
-      await clientAxios.delete(`/api/doctor/availability-proxy/override/${id}`);
+      if (!confirmedWithRefund) {
+        try {
+          const checkRes = await clientAxios.get<{
+            data: {
+              conflictCount: number;
+              affectedAppointments: AffectedShiftAppointment[];
+              override: any;
+            };
+          }>(`/api/doctor/availability-proxy/override/${id}`);
 
-      toast.success('Shift Override Removed', {
-        description: `Special schedule for ${formatDate(date)} has been removed.`,
-      });
+          if (checkRes.data?.data?.conflictCount > 0) {
+            setDeletionConflictModal({
+              isOpen: true,
+              shiftType: 'override',
+              id,
+              shiftLabel: label,
+              conflictCount: checkRes.data.data.conflictCount,
+              affectedAppointments: checkRes.data.data.affectedAppointments,
+            });
+            return;
+          }
+        } catch {
+          // Fallback to direct delete if check route is unreachable
+        }
+
+        if (!confirm(`Are you sure you want to remove the special shift on ${label}?`)) {
+          return;
+        }
+      }
+
+      setDeletingOverrideId(id);
+      if (confirmedWithRefund) {
+        setIsDeletingWithRefund(true);
+      }
+
+      const deleteUrl = confirmedWithRefund
+        ? `/api/doctor/availability-proxy/override/${id}?confirmCancelAndRefund=true`
+        : `/api/doctor/availability-proxy/override/${id}`;
+
+      const res = await clientAxios.delete(deleteUrl);
+
+      const cancelCount = res.data?.data?.cancelledAppointmentsCount || 0;
+      if (cancelCount > 0) {
+        toast.success('Special Shift Removed & Bookings Refunded', {
+          description: `${cancelCount} confirmed appointment(s) cancelled and full refunds initiated.`,
+        });
+      } else {
+        toast.success('Shift Override Removed', {
+          description: `Special schedule for ${formatDate(date)} has been removed.`,
+        });
+      }
+
       setCustomOverrides((prev) => prev.filter((o) => o.id !== id));
+      setDeletionConflictModal(null);
       router.refresh();
-    } catch (err: unknown) {
+    } catch (err: any) {
+      const errData = err?.response?.data || err?.data;
+      if (errData?.requiresConfirmation) {
+        setDeletionConflictModal({
+          isOpen: true,
+          shiftType: 'override',
+          id,
+          shiftLabel: label,
+          conflictCount: errData.conflictCount,
+          affectedAppointments: errData.affectedAppointments,
+        });
+        return;
+      }
       toast.error('Failed to remove override', {
         description: extractErrorMessage(err),
       });
     } finally {
       setDeletingOverrideId(null);
+      setIsDeletingWithRefund(false);
     }
   };
 
@@ -596,6 +849,15 @@ export function UnifiedDoctorScheduleClient({
           } h-auto`}>
           <AlertTriangle className="h-3.5 w-3.5" />
           <span>Block Specific Hours</span>
+        </Button>
+
+        <Button type="button" variant="ghost" onClick={() => setActiveTab('rescheduling')} className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all whitespace-nowrap ${
+            activeTab === 'rescheduling'
+              ? 'bg-blue-700 text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+          } h-auto`}>
+          <RefreshCw className="h-3.5 w-3.5" />
+          <span>Rescheduling Requests & Tracker</span>
         </Button>
       </div>
 
@@ -924,7 +1186,18 @@ export function UnifiedDoctorScheduleClient({
                       })()}
                     </div>
 
-                    <div className="mt-4 flex items-center justify-end border-t border-slate-100 pt-2.5">
+                    <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-2.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="xs"
+                        onClick={() => handleOpenElastic(slot, 'RECURRING')}
+                        className="text-xs text-blue-700 border-blue-200 hover:bg-blue-50 font-semibold flex items-center gap-1.5 px-2.5 py-1 rounded-xl h-auto"
+                      >
+                        <Sliders className="h-3.5 w-3.5 text-blue-600" />
+                        <span>Adjust Hours (Elastic)</span>
+                      </Button>
+
                       <Button type="button" variant="ghost" size="xs" onClick={() => handleDeleteSlot(slot.id)} disabled={deletingId === slot.id} className="text-xs text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1 p-1 rounded-lg hover:bg-rose-50 transition-colors h-auto">
                         {deletingId === slot.id ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1648,21 +1921,34 @@ export function UnifiedDoctorScheduleClient({
                         </div>
                       </div>
 
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="xs"
-                        onClick={() => handleDeleteOverride(override.id, override.date, override.startTime, override.endTime)}
-                        disabled={deletingOverrideId === override.id}
-                        className="self-end sm:self-center px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition-colors flex items-center gap-1.5 h-auto"
-                      >
-                        {deletingOverrideId === override.id ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-3.5 w-3.5" />
-                        )}
-                        <span>Remove Override</span>
-                      </Button>
+                      <div className="flex items-center gap-2 self-end sm:self-center">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="xs"
+                          onClick={() => handleOpenElastic(override, 'CUSTOM')}
+                          className="px-3 py-1.5 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 text-xs font-semibold hover:bg-blue-100 transition-colors flex items-center gap-1.5 h-auto"
+                        >
+                          <Sliders className="h-3.5 w-3.5 text-blue-600" />
+                          <span>Adjust Hours (Elastic)</span>
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="xs"
+                          onClick={() => handleDeleteOverride(override.id, override.date, override.startTime, override.endTime)}
+                          disabled={deletingOverrideId === override.id}
+                          className="px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition-colors flex items-center gap-1.5 h-auto"
+                        >
+                          {deletingOverrideId === override.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3.5 w-3.5" />
+                          )}
+                          <span>Remove Override</span>
+                        </Button>
+                      </div>
                     </div>
                   );
                 })}
@@ -1727,6 +2013,126 @@ export function UnifiedDoctorScheduleClient({
             </Button>
           </form>
         </div>
+      )}
+      {/* ─── TAB 5: RESCHEDULING REQUESTS TRACKER ─── */}
+      {activeTab === 'rescheduling' && (
+        <div className="space-y-6">
+          <DoctorRescheduleTracker />
+        </div>
+      )}
+
+      {/* ─── ELASTIC SCHEDULING MODALS ─── */}
+      <ElasticAvailabilityModal
+        isOpen={elasticModalOpen}
+        onClose={() => setElasticModalOpen(false)}
+        shift={targetShiftForElastic}
+        onSuccess={() => {
+          setElasticModalOpen(false);
+          refreshFullSchedule();
+        }}
+        onConflictDetected={handleConflictDetected}
+      />
+
+      <ScheduleConflictModal
+        isOpen={conflictModalOpen}
+        onClose={() => setConflictModalOpen(false)}
+        conflictData={conflictData}
+        shiftData={conflictShiftContext}
+        onSelectSmartReschedule={handleSelectSmartReschedule}
+        onSelectManualReschedule={handleSelectManualReschedule}
+      />
+
+      <SmartReschedulePreviewModal
+        isOpen={smartPreviewModalOpen}
+        onClose={() => setSmartPreviewModalOpen(false)}
+        previewData={smartPreviewData}
+        shrinkContext={
+          conflictShiftContext
+            ? {
+                shiftType: conflictShiftContext.shiftType,
+                shiftId: conflictShiftContext.id,
+                newStartTime: conflictShiftContext.newStartTime,
+                newEndTime: conflictShiftContext.newEndTime,
+                dateOrDay: conflictShiftContext.dateOrDay,
+              }
+            : null
+        }
+        onApproved={() => {
+          setSmartPreviewModalOpen(false);
+          setConflictShiftContext(null);
+          setConflictData(null);
+          refreshFullSchedule();
+          setActiveTab('rescheduling');
+        }}
+        onModifyProposal={handleModifyProposal}
+      />
+
+      <DoctorManualReschedulePickerModal
+        isOpen={manualPickerModalOpen}
+        onClose={() => setManualPickerModalOpen(false)}
+        appointment={manualTargetAppointment}
+        doctorId={effectiveDoctorId}
+        shrinkContext={
+          conflictShiftContext
+            ? {
+                shiftType: conflictShiftContext.shiftType,
+                shiftId: conflictShiftContext.id,
+                newStartTime: conflictShiftContext.newStartTime,
+                newEndTime: conflictShiftContext.newEndTime,
+                dateOrDay: conflictShiftContext.dateOrDay,
+              }
+            : null
+        }
+        onSuccess={() => {
+          setManualPickerModalOpen(false);
+          refreshFullSchedule();
+          if (conflictData && manualTargetAppointment) {
+            const targetApptId =
+              (manualTargetAppointment as any).appointmentId ||
+              (manualTargetAppointment as any).id;
+            const remaining = conflictData.affectedAppointments.filter(
+              (a) => a.appointmentId !== targetApptId,
+            );
+            if (remaining.length > 0) {
+              setConflictData({
+                ...conflictData,
+                conflictCount: remaining.length,
+                affectedAppointments: remaining,
+              });
+              setConflictModalOpen(true);
+            } else {
+              setConflictShiftContext(null);
+              setConflictData(null);
+            }
+          }
+        }}
+      />
+
+      {/* Option C Shift Deletion Conflict & Refund Modal */}
+      {deletionConflictModal && (
+        <ShiftDeletionConflictModal
+          isOpen={deletionConflictModal.isOpen}
+          onClose={() => setDeletionConflictModal(null)}
+          onConfirm={async () => {
+            if (deletionConflictModal.shiftType === 'recurring') {
+              await handleDeleteSlot(deletionConflictModal.id, true);
+            } else {
+              const ov = customOverrides.find((o) => o.id === deletionConflictModal.id);
+              await handleDeleteOverride(
+                deletionConflictModal.id,
+                ov?.date || '',
+                ov?.startTime || '',
+                ov?.endTime || '',
+                true,
+              );
+            }
+          }}
+          isLoading={isDeletingWithRefund}
+          shiftLabel={deletionConflictModal.shiftLabel}
+          shiftType={deletionConflictModal.shiftType}
+          conflictCount={deletionConflictModal.conflictCount}
+          affectedAppointments={deletionConflictModal.affectedAppointments}
+        />
       )}
     </div>
   );

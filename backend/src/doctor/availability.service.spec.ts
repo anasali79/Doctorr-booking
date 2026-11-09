@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { AvailabilityService } from './availability.service';
 import { RecurringAvailability, DayOfWeek } from './entities/recurring-availability.entity';
 import { CustomAvailability } from './entities/custom-availability.entity';
@@ -46,6 +46,7 @@ describe('AvailabilityService - Wave & Stream Scheduling', () => {
     };
     appointmentRepo = {
       find: jest.fn().mockResolvedValue([]),
+      update: jest.fn().mockResolvedValue({}),
     };
     leaveRepo = {
       findOne: jest.fn().mockResolvedValue(null),
@@ -406,8 +407,36 @@ describe('AvailabilityService - Wave & Stream Scheduling', () => {
 
       await expect(
         service.deleteCustomOverride('user-uuid-1', 'override-123'),
-      ).rejects.toThrow(BadRequestException);
+      ).rejects.toThrow(ConflictException);
       expect(customRepo.remove).not.toHaveBeenCalled();
+    });
+
+    it('should cancel appointments and delete override when confirmCancelAndRefund is true', async () => {
+      const mockOverride = {
+        id: 'override-123',
+        doctorId: 'doc-uuid-1',
+        date: '2026-11-05',
+        startTime: '10:00',
+        endTime: '12:00',
+      };
+      doctorRepo.findOne.mockResolvedValue(mockDoctor);
+      customRepo.findOne.mockResolvedValue(mockOverride);
+      appointmentRepo.find.mockResolvedValue([
+        {
+          id: 'app-1',
+          doctorId: 'doc-uuid-1',
+          patientId: 'patient-1',
+          date: '2026-11-05',
+          startTime: '10:30',
+          endTime: '11:00',
+          status: AppointmentStatus.CONFIRMED,
+          paymentStatus: 'PAID',
+        },
+      ]);
+
+      const result = await service.deleteCustomOverride('user-uuid-1', 'override-123', true);
+      expect(customRepo.remove).toHaveBeenCalledWith(mockOverride);
+      expect(result.cancelledAppointmentsCount).toBe(1);
     });
   });
 });

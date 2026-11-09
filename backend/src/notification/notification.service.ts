@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Inject,
   forwardRef,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -41,6 +42,8 @@ function formatNotification(notification: Notification) {
 
 @Injectable()
 export class NotificationService {
+  private readonly logger = new Logger(NotificationService.name);
+
   constructor(
     @InjectRepository(Notification)
     private readonly notificationRepo: Repository<Notification>,
@@ -93,7 +96,60 @@ export class NotificationService {
   }
 
   /**
-   * Internal helper to create patient notification
+   * Preference Lookup Helpers
+   */
+  async getPreferencesByUserId(userId: string): Promise<NotificationPreference | null> {
+    if (!userId) return null;
+    try {
+      let pref = await this.preferenceRepo.findOne({ where: { userId } });
+      if (!pref) {
+        pref = this.preferenceRepo.create({
+          userId,
+          emailEnabled: true,
+          inAppEnabled: true,
+          whatsappEnabled: true,
+          smsEnabled: true,
+          remindersEnabled: true,
+          paymentAlertsEnabled: true,
+          refundAlertsEnabled: true,
+        });
+        await this.preferenceRepo.save(pref);
+      }
+      return pref;
+    } catch {
+      return null;
+    }
+  }
+
+  async getPreferencesByPatientId(patientId: string): Promise<NotificationPreference | null> {
+    if (!patientId) return null;
+    try {
+      const patient = await this.patientRepo.findOne({ where: { id: patientId } });
+      if (!patient?.userId) return null;
+      return this.getPreferencesByUserId(patient.userId);
+    } catch {
+      return null;
+    }
+  }
+
+  async getPreferencesByDoctorId(doctorId: string): Promise<NotificationPreference | null> {
+    if (!doctorId) return null;
+    try {
+      const doctor = await this.doctorRepo.findOne({ where: { id: doctorId } });
+      if (!doctor?.userId) return null;
+      return this.getPreferencesByUserId(doctor.userId);
+    } catch {
+      return null;
+    }
+  }
+
+  async isEmailEnabled(userId: string): Promise<boolean> {
+    const pref = await this.getPreferencesByUserId(userId);
+    return pref ? pref.emailEnabled : true;
+  }
+
+  /**
+   * Internal helper to create patient notification (respects user in-app and category preferences)
    */
   async createNotification(
     patientId: string,
@@ -101,7 +157,29 @@ export class NotificationService {
     message: string,
     type: NotificationType,
     note: string | null = null,
-  ): Promise<Notification> {
+  ): Promise<Notification | null> {
+    // Only bypass preferences for critical security check-in verification requests
+    if (type !== NotificationType.CHECK_IN_REQUEST) {
+      try {
+        const pref = await this.getPreferencesByPatientId(patientId);
+        if (pref) {
+          if (!pref.inAppEnabled) {
+            this.logger.debug(`In-app notification suppressed for patient ${patientId}: inAppEnabled is false`);
+            return null;
+          }
+          if (
+            (type === NotificationType.APPOINTMENT_REMINDER || type === NotificationType.FOLLOW_UP_REMINDER) &&
+            !pref.remindersEnabled
+          ) {
+            this.logger.debug(`In-app reminder suppressed for patient ${patientId}: remindersEnabled is false`);
+            return null;
+          }
+        }
+      } catch (err: any) {
+        this.logger.warn(`Could not check preferences for patient ${patientId}: ${err.message}`);
+      }
+    }
+
     const notification = this.notificationRepo.create({
       patientId,
       doctorId: null,
@@ -116,7 +194,7 @@ export class NotificationService {
   }
 
   /**
-   * Internal helper to create doctor notification
+   * Internal helper to create doctor notification (respects doctor in-app and category preferences)
    */
   async createDoctorNotification(
     doctorId: string,
@@ -124,7 +202,26 @@ export class NotificationService {
     message: string,
     type: NotificationType,
     note: string | null = null,
-  ): Promise<Notification> {
+  ): Promise<Notification | null> {
+    try {
+      const pref = await this.getPreferencesByDoctorId(doctorId);
+      if (pref) {
+        if (!pref.inAppEnabled) {
+          this.logger.debug(`In-app notification suppressed for doctor ${doctorId}: inAppEnabled is false`);
+          return null;
+        }
+        if (
+          (type === NotificationType.APPOINTMENT_REMINDER || type === NotificationType.FOLLOW_UP_REMINDER) &&
+          !pref.remindersEnabled
+        ) {
+          this.logger.debug(`In-app reminder suppressed for doctor ${doctorId}: remindersEnabled is false`);
+          return null;
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(`Could not check preferences for doctor ${doctorId}: ${err.message}`);
+    }
+
     const notification = this.notificationRepo.create({
       doctorId,
       patientId: null,
