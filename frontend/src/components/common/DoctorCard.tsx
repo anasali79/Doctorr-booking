@@ -15,13 +15,9 @@ interface DoctorCardProps {
 
 export function DoctorCard({ doctor, index = 0 }: DoctorCardProps) {
   const specLabel = SPECIALIZATION_LABELS[doctor.specialization] || doctor.specialization;
-  const roomNumber = (index % 6) + 1;
   const experienceYears = doctor.experience ? `${doctor.experience} years in practice` : 'Experienced physician';
-  const qualification = doctor.qualification || 'MRCGP';
-
-  // Map room & schedule days
-  const clinicDays = index === 3 ? 'Tuesday and Thursday' : 'Monday to Friday';
-  const languages = index === 0 ? 'English, Yoruba' : index === 2 ? 'English, Korean' : index === 3 ? 'English, Urdu, Bengali' : 'English';
+  const qualification = doctor.qualification || 'Medical Specialist';
+  const fee = typeof doctor.consultationFee === 'number' && doctor.consultationFee > 0 ? `₹${doctor.consultationFee}` : null;
 
   return (
     <article className="group relative flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 transition-all duration-200 hover:border-slate-300 hover:shadow-md">
@@ -69,17 +65,27 @@ export function DoctorCard({ doctor, index = 0 }: DoctorCardProps) {
         {/* Doctor Bio */}
         <p className="mt-3.5 text-xs text-slate-600 line-clamp-2 leading-relaxed">
           {doctor.profileDetails ||
-            'Senior partner at the practice. Happy to see anything, from a new worry to a long-running condition.'}
+            'Experienced medical practitioner committed to providing high quality clinical care and patient-first consultations.'}
         </p>
 
-        {/* Doctor languages & Clinic room info */}
-        <div className="mt-3 space-y-0.5 text-xs text-slate-500">
-          <p>
-            <span className="font-medium text-slate-600">Speaks:</span> {languages}
-          </p>
-          <p>
-            <span className="font-medium text-slate-600">In clinic:</span> {clinicDays} · Room {roomNumber}
-          </p>
+        {/* Doctor Details */}
+        <div className="mt-3 space-y-1 text-xs text-slate-500">
+          {fee && (
+            <p>
+              <span className="font-medium text-slate-600">Consultation Fee:</span>{' '}
+              <span className="font-semibold text-slate-900">{fee}</span>
+            </p>
+          )}
+          {doctor.clinicRoom ? (
+            <p>
+              <span className="font-medium text-slate-600">Room:</span> {doctor.clinicRoom}
+            </p>
+          ) : null}
+          {doctor.languages && doctor.languages.length > 0 ? (
+            <p>
+              <span className="font-medium text-slate-600">Speaks:</span> {doctor.languages.join(', ')}
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -88,7 +94,11 @@ export function DoctorCard({ doctor, index = 0 }: DoctorCardProps) {
         <div className="flex items-center gap-1.5 text-xs text-slate-600">
           <span className="h-2 w-2 rounded-full bg-emerald-500" />
           <span>
-            Next available <strong className="font-semibold text-slate-900">{index % 2 === 0 ? 'Today, 09:20' : 'Tomorrow, 09:10'}</strong>
+            {doctor.nextAvailableSlot ? (
+              <>Next available <strong className="font-semibold text-slate-900">{doctor.nextAvailableSlot}</strong></>
+            ) : (
+              <span className="font-medium text-emerald-700">Available for booking</span>
+            )}
           </span>
         </div>
 

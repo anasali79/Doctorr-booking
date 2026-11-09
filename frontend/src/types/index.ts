@@ -71,6 +71,9 @@ export interface Doctor {
   availabilityStatus?: string;
   isVerified?: boolean;
   verificationStatus?: string;
+  nextAvailableSlot?: string;
+  languages?: string[];
+  clinicRoom?: string;
   user?: User;
 }
 

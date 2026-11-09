@@ -31,6 +31,7 @@ import {
 } from './dto/availability.dto';
 import { AppointmentService } from '../appointment/appointment.service';
 import { RescheduleAppointmentDto } from '../appointment/dto/reschedule-appointment.dto';
+import { CreateWalkInAppointmentDto } from './dto/create-walk-in.dto';
 
 @Controller('doctor')
 export class DoctorController {
@@ -131,6 +132,16 @@ export class DoctorController {
       id,
       dto,
     );
+  }
+
+  @Post('appointments/walk-in')
+  @UseGuards(JwtAuthGuard, RolesGuard, DoctorVerificationGuard)
+  @Roles(Role.DOCTOR)
+  createWalkIn(
+    @CurrentUser() user: { id: string },
+    @Body() dto: CreateWalkInAppointmentDto,
+  ) {
+    return this.appointmentService.createWalkInAppointment(user.id, dto);
   }
 
   // ─── Doctor Patients Directory & Clinical History ─────────────────────────────
@@ -260,7 +271,7 @@ export class DoctorController {
       };
     }
     return {
-      message: 'Available slots retrieved successfully',
+      message: (slots as any).message || 'Available slots retrieved successfully',
       data: slots,
     };
   }

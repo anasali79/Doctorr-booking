@@ -50,4 +50,20 @@ export class DoctorDiscoveryQueryDto {
   })
   @IsBoolean({ message: 'availability must be true or false' })
   availability?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') {
+      return undefined;
+    }
+    if (value === true || value === 'true') {
+      return true;
+    }
+    if (value === false || value === 'false') {
+      return false;
+    }
+    return value;
+  })
+  @IsBoolean()
+  includeUnverified?: boolean;
 }
