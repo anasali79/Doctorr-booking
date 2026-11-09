@@ -10,6 +10,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -88,6 +89,33 @@ export class AvailabilityController {
     };
   }
 
+  @Get('check-delete/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.DOCTOR)
+  async checkRecurringDelete(
+    @CurrentUser() user: { id: string },
+    @Param(
+      'id',
+      new ParseUUIDPipe({
+        version: '4',
+        exceptionFactory: () =>
+          new BadRequestException(
+            'Invalid slot ID format. Expected a valid UUID.',
+          ),
+      }),
+    )
+    id: string,
+  ) {
+    const result = await this.availabilityService.checkRecurringShiftDelete(
+      user.id,
+      id,
+    );
+    return {
+      message: 'Recurring availability deletion check completed',
+      data: result,
+    };
+  }
+
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.DOCTOR)
@@ -105,12 +133,48 @@ export class AvailabilityController {
       }),
     )
     id: string,
+    @Query('confirmCancelAndRefund') confirmCancelAndRefund?: string,
   ) {
-    await this.availabilityService.deleteRecurring(user.id, id);
-    return { message: 'Recurring availability slot deleted successfully' };
+    const isConfirmed = confirmCancelAndRefund === 'true';
+    const result = await this.availabilityService.deleteRecurring(
+      user.id,
+      id,
+      isConfirmed,
+    );
+    return {
+      message: result.message,
+      data: result,
+    };
   }
 
   // ─── Custom Availability (Override) ─────────────────────────────────────────
+
+  @Get('override/check-delete/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.DOCTOR)
+  async checkOverrideDelete(
+    @CurrentUser() user: { id: string },
+    @Param(
+      'id',
+      new ParseUUIDPipe({
+        version: '4',
+        exceptionFactory: () =>
+          new BadRequestException(
+            'Invalid override ID format. Expected a valid UUID.',
+          ),
+      }),
+    )
+    id: string,
+  ) {
+    const result = await this.availabilityService.checkCustomOverrideDelete(
+      user.id,
+      id,
+    );
+    return {
+      message: 'Custom override deletion check completed',
+      data: result,
+    };
+  }
 
   @Post('override')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -146,9 +210,18 @@ export class AvailabilityController {
       }),
     )
     id: string,
+    @Query('confirmCancelAndRefund') confirmCancelAndRefund?: string,
   ) {
-    await this.availabilityService.deleteCustomOverride(user.id, id);
-    return { message: 'Custom availability override deleted successfully' };
+    const isConfirmed = confirmCancelAndRefund === 'true';
+    const result = await this.availabilityService.deleteCustomOverride(
+      user.id,
+      id,
+      isConfirmed,
+    );
+    return {
+      message: result.message,
+      data: result,
+    };
   }
 
   @Post('cancel')

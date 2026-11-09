@@ -566,14 +566,18 @@ export class PaymentService {
       refund.processedAt = new Date();
       await this.refundRepo.save(refund);
 
-      if (refund.patient?.user?.email) {
-        this.emailService.sendRefundCompleted(
-          refund.patient.user.email,
-          refund.patient.fullName,
-          refund.appointment?.doctor?.fullName || 'Doctor',
-          refund.amount,
-          refund.providerRefundId || refund.id,
-        );
+      if (refund.patient?.user?.email && !this.notificationDispatcher) {
+        const userId = refund.patient.user.id;
+        const pref = await this.notificationService.getPreferencesByUserId(userId);
+        if (!pref || (pref.emailEnabled && pref.refundAlertsEnabled)) {
+          this.emailService.sendRefundCompleted(
+            refund.patient.user.email,
+            refund.patient.fullName,
+            refund.appointment?.doctor?.fullName || 'Doctor',
+            refund.amount,
+            refund.providerRefundId || refund.id,
+          );
+        }
       }
 
       if (this.notificationDispatcher && refund.patient?.user) {
@@ -618,14 +622,18 @@ export class PaymentService {
       refund.errorDescription = entity.error_description || null;
       await this.refundRepo.save(refund);
 
-      if (refund.patient?.user?.email) {
-        this.emailService.sendRefundFailed(
-          refund.patient.user.email,
-          refund.patient.fullName,
-          refund.appointment?.doctor?.fullName || 'Doctor',
-          refund.amount,
-          refund.errorDescription || 'Bank processing error',
-        );
+      if (refund.patient?.user?.email && !this.notificationDispatcher) {
+        const userId = refund.patient.user.id;
+        const pref = await this.notificationService.getPreferencesByUserId(userId);
+        if (!pref || (pref.emailEnabled && pref.refundAlertsEnabled)) {
+          this.emailService.sendRefundFailed(
+            refund.patient.user.email,
+            refund.patient.fullName,
+            refund.appointment?.doctor?.fullName || 'Doctor',
+            refund.amount,
+            refund.errorDescription || 'Bank processing error',
+          );
+        }
       }
 
       if (this.notificationDispatcher && refund.patient?.user) {
@@ -904,14 +912,18 @@ export class PaymentService {
 
     const email = fullAppt?.patient?.user?.email;
     if (email) {
-      await this.emailService.sendRefundInitiated(
-        email,
-        fullAppt?.patient?.fullName || 'Patient',
-        fullAppt?.doctor?.fullName || 'Doctor',
-        payment.amount,
-        providerRefund.id,
-        reason,
-      );
+      const patientUserId = fullAppt?.patient?.userId || fullAppt?.patient?.user?.id;
+      const pref = patientUserId ? await this.notificationService.getPreferencesByUserId(patientUserId) : null;
+      if (!pref || (pref.emailEnabled && pref.refundAlertsEnabled)) {
+        await this.emailService.sendRefundInitiated(
+          email,
+          fullAppt?.patient?.fullName || 'Patient',
+          fullAppt?.doctor?.fullName || 'Doctor',
+          payment.amount,
+          providerRefund.id,
+          reason,
+        );
+      }
     }
 
     await this.notificationService.createNotification(
@@ -968,47 +980,59 @@ export class PaymentService {
       // 1. Persistent 24h & 1h reminder scheduling
       await this.reminderService.scheduleAppointmentReminders(appt);
 
-      // 2. Booking confirmation email
+      // 2. Booking confirmation email & Payment receipt email
       const fullAppt = await this.appointmentRepo.findOne({
         where: { id: appt.id },
         relations: { doctor: true, patient: { user: true } },
       });
 
       const email = fullAppt?.patient?.user?.email || patient?.user?.email;
-      if (email && fullAppt) {
-        await this.emailService.sendBookingConfirmation(
-          email,
-          fullAppt.patient.fullName,
-          fullAppt.doctor.fullName,
-          fullAppt.doctor.specialization,
-          fullAppt.date,
-          fullAppt.startTime,
-          fullAppt.tokenNumber,
-          fullAppt.doctor.phone ?? null,
-          fullAppt.id,
-        );
+      const patientUserId = fullAppt?.patient?.user?.id || patient?.user?.id;
+      const patientPref =
+        patientUserId && this.notificationService?.getPreferencesByUserId
+          ? await this.notificationService.getPreferencesByUserId(patientUserId)
+          : null;
+
+      if (!this.notificationDispatcher && email && fullAppt) {
+        if (!patientPref || patientPref.emailEnabled) {
+          await this.emailService.sendBookingConfirmation(
+            email,
+            fullAppt.patient.fullName,
+            fullAppt.doctor.fullName,
+            fullAppt.doctor.specialization,
+            fullAppt.date,
+            fullAppt.startTime,
+            fullAppt.tokenNumber,
+            fullAppt.doctor.phone ?? null,
+            fullAppt.id,
+          );
+        }
 
         // 3. Payment receipt email
-        await this.emailService.sendPaymentSuccess(
-          email,
-          fullAppt.patient.fullName,
-          fullAppt.doctor.fullName,
-          payment.amount,
-          payment.orderId,
-          payment.paymentId || 'N/A',
-          fullAppt.date,
-          fullAppt.startTime,
-        );
+        if (!patientPref || (patientPref.emailEnabled && patientPref.paymentAlertsEnabled)) {
+          await this.emailService.sendPaymentSuccess(
+            email,
+            fullAppt.patient.fullName,
+            fullAppt.doctor.fullName,
+            payment.amount,
+            payment.orderId,
+            payment.paymentId || 'N/A',
+            fullAppt.date,
+            fullAppt.startTime,
+          );
+        }
       }
 
       // 4. In-app notification
-      await this.notificationService.createNotification(
-        appt.patientId,
-        'Appointment Confirmed & Paid',
-        `Your appointment with Dr. ${fullAppt?.doctor?.fullName || 'Doctor'} on ${formatDate(appt.date)} at ${formatTime(appt.startTime)} is confirmed!`,
-        NotificationType.APPOINTMENT_BOOKED,
-        appt.tokenNumber ? `Token #${appt.tokenNumber}` : null,
-      );
+      if (!this.notificationDispatcher) {
+        await this.notificationService.createNotification(
+          appt.patientId,
+          'Appointment Confirmed & Paid',
+          `Your appointment with Dr. ${fullAppt?.doctor?.fullName || 'Doctor'} on ${formatDate(appt.date)} at ${formatTime(appt.startTime)} is confirmed!`,
+          NotificationType.APPOINTMENT_BOOKED,
+          appt.tokenNumber ? `Token #${appt.tokenNumber}` : null,
+        );
+      }
 
       // 5. Broadcast live queue if appointment is today
       const todayStr = getTodayIST();
@@ -1363,16 +1387,23 @@ export class PaymentService {
       await updateRunner.release();
     }
 
-    // Send refund email to patient
-    if (appointment.patient?.user?.email) {
-      await this.emailService.sendRefundInitiated(
-        appointment.patient.user.email,
-        appointment.patient.fullName,
-        appointment.doctor.fullName,
-        refundAmount,
-        providerRefund.id,
-        dto.reason,
-      );
+    // Send refund email to patient (fallback if notificationDispatcher not available)
+    if (appointment.patient?.user?.email && !this.notificationDispatcher) {
+      const patientUserId = appointment.patient?.user?.id;
+      const pref =
+        patientUserId && this.notificationService?.getPreferencesByUserId
+          ? await this.notificationService.getPreferencesByUserId(patientUserId)
+          : null;
+      if (!pref || (pref.emailEnabled && pref.refundAlertsEnabled)) {
+        await this.emailService.sendRefundInitiated(
+          appointment.patient.user.email,
+          appointment.patient.fullName,
+          appointment.doctor.fullName,
+          refundAmount,
+          providerRefund.id,
+          dto.reason,
+        );
+      }
     }
 
     if (this.notificationDispatcher && appointment.patient?.user) {

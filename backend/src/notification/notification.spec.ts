@@ -2,15 +2,20 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { NotificationDispatcher } from './notification.dispatcher';
+import { NotificationService } from './notification.service';
 import { EmailProvider } from './providers/email.provider';
 import { InAppProvider } from './providers/in-app.provider';
 import { WhatsAppProvider } from './providers/whatsapp.provider';
 import { SmsProvider } from './providers/sms.provider';
 import { NotificationWebhookController } from './notification-webhook.controller';
+import { Notification } from './entities/notification.entity';
 import { NotificationDelivery } from './entities/notification-delivery.entity';
 import { NotificationPreference } from './entities/notification-preference.entity';
+import { Patient } from '../patient/entities/patient.entity';
+import { Doctor } from '../doctor/entities/doctor.entity';
 import { NotificationEventType } from './enums/notification-event-type.enum';
 import { NotificationChannel } from './enums/notification-channel.enum';
+import { NotificationType } from './enums/notification-type.enum';
 import { DeliveryStatus } from './enums/delivery-status.enum';
 import { renderNotificationTemplate } from './templates/notification.templates';
 import {
@@ -635,6 +640,147 @@ describe('Vonage (Nexmo) Multi-Channel Notification System', () => {
       expect(mockInAppProvider.send).toHaveBeenCalled();
       expect(mockWhatsAppProvider.send).toHaveBeenCalled();
     });
+
+    it('respects channel-level toggles: only sends to enabled channels', async () => {
+      mockPreferenceRepo.findOne = jest.fn().mockResolvedValue({
+        userId: 'user_1',
+        emailEnabled: false,
+        inAppEnabled: true,
+        whatsappEnabled: false,
+        smsEnabled: false,
+        remindersEnabled: true,
+        paymentAlertsEnabled: true,
+        refundAlertsEnabled: true,
+      });
+
+      const result = await dispatcher.dispatch({
+        eventType: NotificationEventType.APPOINTMENT_CONFIRMED,
+        recipients: [
+          {
+            id: 'patient_profile_1',
+            userId: 'user_1',
+            name: 'John Doe',
+            email: 'patient@example.com',
+            phone: '7987087000',
+            role: 'PATIENT',
+          },
+        ],
+        appointmentId: 'appt_1',
+        data: { patientName: 'John Doe', doctorName: 'Sarah Smith' },
+      });
+
+      expect(mockEmailProvider.send).not.toHaveBeenCalled();
+      expect(mockWhatsAppProvider.send).not.toHaveBeenCalled();
+      expect(mockSmsProvider.send).not.toHaveBeenCalled();
+      expect(mockInAppProvider.send).toHaveBeenCalledTimes(1);
+      expect(result.results['patient_profile_1'].length).toBe(1);
+    });
+
+    it('respects reminders category toggle: suppresses all channels when remindersEnabled is false', async () => {
+      mockPreferenceRepo.findOne = jest.fn().mockResolvedValue({
+        userId: 'user_1',
+        emailEnabled: true,
+        inAppEnabled: true,
+        whatsappEnabled: true,
+        smsEnabled: true,
+        remindersEnabled: false,
+        paymentAlertsEnabled: true,
+        refundAlertsEnabled: true,
+      });
+
+      const result = await dispatcher.dispatch({
+        eventType: NotificationEventType.APPOINTMENT_REMINDER_24H,
+        recipients: [
+          {
+            id: 'patient_profile_1',
+            userId: 'user_1',
+            name: 'John Doe',
+            email: 'patient@example.com',
+            phone: '7987087000',
+            role: 'PATIENT',
+          },
+        ],
+        appointmentId: 'appt_1',
+        data: { patientName: 'John Doe', doctorName: 'Sarah Smith' },
+      });
+
+      expect(mockEmailProvider.send).not.toHaveBeenCalled();
+      expect(mockInAppProvider.send).not.toHaveBeenCalled();
+      expect(mockWhatsAppProvider.send).not.toHaveBeenCalled();
+      expect(mockSmsProvider.send).not.toHaveBeenCalled();
+      expect(result.results['patient_profile_1']).toEqual([]);
+    });
+
+    it('respects payment alerts category toggle: suppresses all channels when paymentAlertsEnabled is false', async () => {
+      mockPreferenceRepo.findOne = jest.fn().mockResolvedValue({
+        userId: 'user_1',
+        emailEnabled: true,
+        inAppEnabled: true,
+        whatsappEnabled: true,
+        smsEnabled: true,
+        remindersEnabled: true,
+        paymentAlertsEnabled: false,
+        refundAlertsEnabled: true,
+      });
+
+      const result = await dispatcher.dispatch({
+        eventType: NotificationEventType.PAYMENT_SUCCESSFUL,
+        recipients: [
+          {
+            id: 'patient_profile_1',
+            userId: 'user_1',
+            name: 'John Doe',
+            email: 'patient@example.com',
+            phone: '7987087000',
+            role: 'PATIENT',
+          },
+        ],
+        appointmentId: 'appt_1',
+        data: { patientName: 'John Doe', doctorName: 'Sarah Smith' },
+      });
+
+      expect(mockEmailProvider.send).not.toHaveBeenCalled();
+      expect(mockInAppProvider.send).not.toHaveBeenCalled();
+      expect(mockWhatsAppProvider.send).not.toHaveBeenCalled();
+      expect(mockSmsProvider.send).not.toHaveBeenCalled();
+      expect(result.results['patient_profile_1']).toEqual([]);
+    });
+
+    it('respects refund alerts category toggle: suppresses all channels when refundAlertsEnabled is false', async () => {
+      mockPreferenceRepo.findOne = jest.fn().mockResolvedValue({
+        userId: 'user_1',
+        emailEnabled: true,
+        inAppEnabled: true,
+        whatsappEnabled: true,
+        smsEnabled: true,
+        remindersEnabled: true,
+        paymentAlertsEnabled: true,
+        refundAlertsEnabled: false,
+      });
+
+      const result = await dispatcher.dispatch({
+        eventType: NotificationEventType.REFUND_INITIATED,
+        recipients: [
+          {
+            id: 'patient_profile_1',
+            userId: 'user_1',
+            name: 'John Doe',
+            email: 'patient@example.com',
+            phone: '7987087000',
+            role: 'PATIENT',
+          },
+        ],
+        appointmentId: 'appt_1',
+        data: { patientName: 'John Doe', doctorName: 'Sarah Smith' },
+      });
+
+      expect(mockEmailProvider.send).not.toHaveBeenCalled();
+      expect(mockInAppProvider.send).not.toHaveBeenCalled();
+      expect(mockWhatsAppProvider.send).not.toHaveBeenCalled();
+      expect(mockSmsProvider.send).not.toHaveBeenCalled();
+      expect(result.results['patient_profile_1']).toEqual([]);
+    });
+    });
   });
 
   // ─── 6. VONAGE WEBHOOKS CONTROLLER ──────────────────────────────────────
@@ -712,4 +858,135 @@ describe('Vonage (Nexmo) Multi-Channel Notification System', () => {
       expect(mockRes.json).toHaveBeenCalledWith({ status: 'ok' });
     });
   });
-});
+
+  // ─── 7. NOTIFICATION SERVICE PREFERENCE ENFORCEMENT ─────────────────────
+  describe('7. NotificationService Preference Enforcement & Channel Gating', () => {
+    let service: NotificationService;
+    let mockNotificationRepo: any;
+    let mockPreferenceRepo: any;
+    let mockPatientRepo: any;
+    let mockDoctorRepo: any;
+
+    beforeEach(async () => {
+      mockNotificationRepo = {
+        create: jest.fn((dto) => ({ id: 'notif_123', ...dto })),
+        save: jest.fn((n) => Promise.resolve(n)),
+      };
+
+      mockPreferenceRepo = {
+        findOne: jest.fn(),
+        create: jest.fn((dto) => ({ ...dto })),
+        save: jest.fn((p) => Promise.resolve(p)),
+      };
+
+      mockPatientRepo = {
+        findOne: jest.fn().mockResolvedValue({ id: 'pat_1', userId: 'user_pat_1' }),
+      };
+
+      mockDoctorRepo = {
+        findOne: jest.fn().mockResolvedValue({ id: 'doc_1', userId: 'user_doc_1' }),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          NotificationService,
+          { provide: getRepositoryToken(Notification), useValue: mockNotificationRepo },
+          { provide: getRepositoryToken(NotificationPreference), useValue: mockPreferenceRepo },
+          { provide: getRepositoryToken(NotificationDelivery), useValue: {} },
+          { provide: getRepositoryToken(Patient), useValue: mockPatientRepo },
+          { provide: getRepositoryToken(Doctor), useValue: mockDoctorRepo },
+        ],
+      }).compile();
+
+      service = module.get<NotificationService>(NotificationService);
+    });
+
+    it('suppresses in-app notification when inAppEnabled is false', async () => {
+      mockPreferenceRepo.findOne.mockResolvedValue({
+        userId: 'user_pat_1',
+        inAppEnabled: false,
+        emailEnabled: true,
+        remindersEnabled: true,
+      });
+
+      const result = await service.createNotification(
+        'pat_1',
+        'Appointment Confirmed',
+        'Your appointment is confirmed',
+        NotificationType.APPOINTMENT_BOOKED,
+      );
+
+      expect(result).toBeNull();
+      expect(mockNotificationRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('creates in-app notification when inAppEnabled is true', async () => {
+      mockPreferenceRepo.findOne.mockResolvedValue({
+        userId: 'user_pat_1',
+        inAppEnabled: true,
+        emailEnabled: true,
+        remindersEnabled: true,
+      });
+
+      const result = await service.createNotification(
+        'pat_1',
+        'Appointment Confirmed',
+        'Your appointment is confirmed',
+        NotificationType.APPOINTMENT_BOOKED,
+      );
+
+      expect(result).toBeDefined();
+      expect(mockNotificationRepo.save).toHaveBeenCalled();
+    });
+
+    it('allows critical CHECK_IN_REQUEST even if inAppEnabled is false', async () => {
+      mockPreferenceRepo.findOne.mockResolvedValue({
+        userId: 'user_pat_1',
+        inAppEnabled: false,
+      });
+
+      const result = await service.createNotification(
+        'pat_1',
+        'Check-In Required',
+        'Please confirm your check-in',
+        NotificationType.CHECK_IN_REQUEST,
+      );
+
+      expect(result).toBeDefined();
+      expect(mockNotificationRepo.save).toHaveBeenCalled();
+    });
+
+    it('suppresses reminder in-app notification if remindersEnabled is false', async () => {
+      mockPreferenceRepo.findOne.mockResolvedValue({
+        userId: 'user_pat_1',
+        inAppEnabled: true,
+        remindersEnabled: false,
+      });
+
+      const result = await service.createNotification(
+        'pat_1',
+        'Reminder: Upcoming Appointment',
+        'You have an appointment soon',
+        NotificationType.APPOINTMENT_REMINDER,
+      );
+
+      expect(result).toBeNull();
+      expect(mockNotificationRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('isEmailEnabled reflects user email preference correctly', async () => {
+      mockPreferenceRepo.findOne.mockResolvedValueOnce({
+        userId: 'user_pat_1',
+        emailEnabled: false,
+      });
+      const off = await service.isEmailEnabled('user_pat_1');
+      expect(off).toBe(false);
+
+      mockPreferenceRepo.findOne.mockResolvedValueOnce({
+        userId: 'user_pat_1',
+        emailEnabled: true,
+      });
+      const on = await service.isEmailEnabled('user_pat_1');
+      expect(on).toBe(true);
+    });
+  });
