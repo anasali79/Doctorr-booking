@@ -4,6 +4,14 @@
  */
 
 /**
+ * Convert "17:00" → 1020 (minutes from midnight)
+ */
+export function toMinutes(time: string): number {
+    const [h, m] = time.split(':').map(Number);
+    return h * 60 + m;
+}
+
+/**
  * Convert "17:00" → "5:00 PM"
  */
 export function formatTime(time: string): string {

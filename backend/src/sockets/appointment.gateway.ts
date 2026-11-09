@@ -10,8 +10,11 @@ import {
 import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { DataSource } from 'typeorm';
 import { Server, Socket } from 'socket.io';
 import { AppointmentEventPayload } from './dto/appointment-event.payload';
+import { Doctor } from '../doctor/entities/doctor.entity';
+import { Patient } from '../patient/entities/patient.entity';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -83,6 +86,7 @@ export class AppointmentGateway
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly dataSource?: DataSource,
   ) { }
 
   // ─── Connection Lifecycle ──────────────────────────────────────────────────
@@ -146,12 +150,12 @@ export class AppointmentGateway
 
 
   @SubscribeMessage('join_room')
-  handleJoinRoom(
+  async handleJoinRoom(
     @MessageBody() data: { room: string },
     @ConnectedSocket() client: Socket,
-  ): { success: boolean; message: string } {
+  ): Promise<{ success: boolean; message: string }> {
     const { room } = data;
-    const { role } = client.data as { role: string; userId: string };
+    const { role, userId } = client.data as { role: string; userId: string };
 
     if (!room || typeof room !== 'string') {
       return { success: false, message: 'Invalid room name' };
@@ -159,34 +163,53 @@ export class AppointmentGateway
 
     const isDoctor = role === 'DOCTOR';
     const isPatient = role === 'PATIENT';
+    const isAdmin = role === 'ADMIN';
 
     const wantsDoctorRoom = room.startsWith('doctor:');
     const wantsPatientRoom = room.startsWith('patient:');
-
-    if (isDoctor && !wantsDoctorRoom) {
-      this.logger.warn(
-        `[JoinRoom] DOCTOR socket ${client.id} tried to join unauthorized room "${room}"`,
-      );
-      return { success: false, message: 'Doctors may only join doctor rooms' };
-    }
-
-    if (isPatient && !wantsPatientRoom) {
-      this.logger.warn(
-        `[JoinRoom] PATIENT socket ${client.id} tried to join unauthorized room "${room}"`,
-      );
-      return {
-        success: false,
-        message: 'Patients may only join patient rooms',
-      };
-    }
 
     if (!wantsDoctorRoom && !wantsPatientRoom) {
       return { success: false, message: 'Unknown room format' };
     }
 
+    if (isAdmin) {
+      void client.join(room);
+      return { success: true, message: `Admin joined room ${room}` };
+    }
+
+    if (isDoctor) {
+      if (!wantsDoctorRoom) {
+        return { success: false, message: 'Doctors may only join doctor rooms' };
+      }
+      const targetDoctorId = room.slice('doctor:'.length);
+      if (this.dataSource) {
+        const doctor = await this.dataSource.getRepository(Doctor).findOne({
+          where: { userId },
+          select: { id: true },
+        });
+        if (!doctor || doctor.id !== targetDoctorId) {
+          return { success: false, message: 'Unauthorized: You can only subscribe to your own doctor room' };
+        }
+      }
+    } else if (isPatient) {
+      if (!wantsPatientRoom) {
+        return { success: false, message: 'Patients may only join patient rooms' };
+      }
+      const targetPatientId = room.slice('patient:'.length);
+      if (this.dataSource) {
+        const patient = await this.dataSource.getRepository(Patient).findOne({
+          where: { userId },
+          select: { id: true },
+        });
+        if (!patient || patient.id !== targetPatientId) {
+          return { success: false, message: 'Unauthorized: You can only subscribe to your own patient room' };
+        }
+      }
+    }
+
     void client.join(room);
     this.logger.log(
-      `[JoinRoom] Socket ${client.id} (${role}) joined room "${room}"`,
+      `[JoinRoom] Socket ${client.id} (${role}) joined verified room "${room}"`,
     );
     return { success: true, message: `Joined room ${room}` };
   }

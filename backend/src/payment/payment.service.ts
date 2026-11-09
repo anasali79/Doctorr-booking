@@ -11,11 +11,13 @@ import {
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, EntityManager, Not, In, LessThanOrEqual } from 'typeorm';
+import { Repository, DataSource, EntityManager, Not, In, LessThanOrEqual, MoreThan } from 'typeorm';
 import { Payment } from './entities/payment.entity';
 import { Refund } from './entities/refund.entity';
 import { WebhookEvent } from './entities/webhook-event.entity';
 import { Appointment } from '../appointment/entities/appointment.entity';
+import { AppointmentRescheduleRequest } from '../appointment/entities/appointment-reschedule-request.entity';
+import { RescheduleRequestStatus } from '../appointment/enums/reschedule-request-status.enum';
 import { Doctor } from '../doctor/entities/doctor.entity';
 import { Patient } from '../patient/entities/patient.entity';
 import { PaymentStatus } from './enums/payment-status.enum';
@@ -35,7 +37,7 @@ import { AppointmentGateway, SOCKET_EVENTS } from '../sockets/appointment.gatewa
 import { QueueService } from '../appointment/queue.service';
 import { AvailabilityService } from '../doctor/availability.service';
 import { ReminderService } from '../reminder/reminder.service';
-import { getTodayIST, formatDate, formatTime } from '../common/utils/appointment.utils';
+import { getTodayIST, formatDate, formatTime, toMinutes } from '../common/utils/appointment.utils';
 
 const RESERVATION_EXPIRY_MINUTES = 15;
 const CANCEL_CUTOFF_MINUTES = 30;
@@ -139,6 +141,34 @@ export class PaymentService {
       throw new BadRequestException('Consultation fee must be greater than zero for paid booking');
     }
 
+    // ── Pre-flight date/time & doctor availability validations ───────────────
+    const todayStr = getTodayIST();
+    if (dto.date < todayStr) {
+      throw new BadRequestException('Cannot book an appointment for a past date');
+    }
+
+    if (dto.date === todayStr) {
+      const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      const currentMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
+      const slotStartMinutes = toMinutes(dto.startTime);
+      if (slotStartMinutes <= currentMinutes) {
+        throw new BadRequestException('Cannot book an appointment for a past time slot');
+      }
+    }
+
+    // Check future booking window and advance limits
+    if (this.availabilityService?.validateFutureBookingConfig) {
+      await this.availabilityService.validateFutureBookingConfig(doctor, dto.date);
+    }
+
+    // Check doctor leave
+    if (this.availabilityService?.isDoctorOnLeave) {
+      const isOnLeave = await this.availabilityService.isDoctorOnLeave(doctor.id, dto.date);
+      if (isOnLeave) {
+        throw new BadRequestException('Doctor is on leave on this date. Please select another available date.');
+      }
+    }
+
     // Check idempotency key if provided
     if (dto.idempotencyKey) {
       const existingPayment = await this.paymentRepo.findOne({
@@ -180,8 +210,22 @@ export class PaymentService {
         throw new ConflictException('You already have a confirmed appointment with this doctor on this day');
       }
 
-      // 2. Concurrency check: verify slot is not booked or held by an unexpired pending reservation
-      const conflictingBooking = await queryRunner.manager
+      // 2. Determine slot capacity (WAVE / STREAM / standard)
+      const slotCapacityInfo = this.availabilityService?.getSlotCapacity
+        ? await this.availabilityService.getSlotCapacity(
+            dto.doctorId,
+            dto.date,
+            dto.startTime,
+            dto.endTime,
+          )
+        : { maxPatients: 1 };
+      const maxSlotCapacity =
+        slotCapacityInfo?.maxPatients && slotCapacityInfo.maxPatients > 0
+          ? slotCapacityInfo.maxPatients
+          : 1;
+
+      // 3. Concurrency check: verify active appointments in this slot with pessimistic write lock
+      const existingBookingsQuery = queryRunner.manager
         .createQueryBuilder(Appointment, 'a')
         .setLock('pessimistic_write')
         .where('a.doctorId = :doctorId', { doctorId: dto.doctorId })
@@ -195,42 +239,75 @@ export class PaymentService {
             pendingStatus: AppointmentStatus.PENDING_PAYMENT,
             now: new Date(),
           },
-        )
-        .getOne();
+        );
 
-      if (conflictingBooking) {
-        if (
-          conflictingBooking.status === AppointmentStatus.PENDING_PAYMENT &&
-          conflictingBooking.patientId === patient.id &&
-          conflictingBooking.pendingExpiresAt &&
-          new Date(conflictingBooking.pendingExpiresAt) > new Date()
-        ) {
-          // Re-using active pending reservation by the same patient
-          reservedAppointment = conflictingBooking;
-          const existingPendingPayment = await queryRunner.manager.findOne(Payment, {
-            where: {
-              appointmentId: conflictingBooking.id,
-              status: PaymentStatus.PENDING,
-            },
-            order: { createdAt: 'DESC' },
-          });
+      let existingBookings: Appointment[] = [];
+      if (typeof existingBookingsQuery.getMany === 'function') {
+        existingBookings = await existingBookingsQuery.getMany();
+      } else if (typeof existingBookingsQuery.getOne === 'function') {
+        const one = await existingBookingsQuery.getOne();
+        existingBookings = one ? [one] : [];
+      }
 
-          if (existingPendingPayment) {
-            await queryRunner.commitTransaction();
-            return {
-              orderId: existingPendingPayment.orderId,
-              amount: existingPendingPayment.amount,
-              currency: existingPendingPayment.currency,
-              keyId: this.razorpayService.getPublicKey(),
-              appointmentId: reservedAppointment.id,
-              expiresAt: reservedAppointment.pendingExpiresAt,
-            };
-          }
-        } else {
-          throw new ConflictException('This slot is already booked or currently reserved by another patient');
+      // Check if current patient already has an active pending reservation for this slot (idempotent reuse)
+      const myActivePending = existingBookings.find(
+        (b) =>
+          b.patientId === patient.id &&
+          b.status === AppointmentStatus.PENDING_PAYMENT &&
+          b.pendingExpiresAt &&
+          new Date(b.pendingExpiresAt) > new Date(),
+      );
+
+      if (myActivePending) {
+        // Re-using active pending reservation by the same patient
+        reservedAppointment = myActivePending;
+        const existingPendingPayment = await queryRunner.manager.findOne(Payment, {
+          where: {
+            appointmentId: myActivePending.id,
+            status: PaymentStatus.PENDING,
+          },
+          order: { createdAt: 'DESC' },
+        });
+
+        if (existingPendingPayment) {
+          await queryRunner.commitTransaction();
+          return {
+            orderId: existingPendingPayment.orderId,
+            amount: existingPendingPayment.amount,
+            currency: existingPendingPayment.currency,
+            keyId: this.razorpayService.getPublicKey(),
+            appointmentId: reservedAppointment.id,
+            expiresAt: reservedAppointment.pendingExpiresAt,
+          };
         }
       } else {
-        // 3. Create reservation appointment with expiry
+        // Count confirmed appointments and active pending reservations held by OTHER patients
+        const otherBookingsCount = existingBookings.filter(
+          (b) => b.patientId !== patient.id,
+        ).length;
+
+        // Check if pending reschedule requests are reserving this slot
+        let pendingReschedulesCount = 0;
+        try {
+          pendingReschedulesCount = await queryRunner.manager.count(AppointmentRescheduleRequest, {
+            where: {
+              doctorId: dto.doctorId,
+              proposedDate: dto.date,
+              proposedStartTime: dto.startTime,
+              proposedEndTime: dto.endTime,
+              status: RescheduleRequestStatus.PENDING,
+              expiresAt: MoreThan(new Date()),
+            },
+          });
+        } catch {
+          pendingReschedulesCount = 0;
+        }
+
+        if (otherBookingsCount + pendingReschedulesCount >= maxSlotCapacity) {
+          throw new ConflictException('This slot is already booked or currently reserved by another patient');
+        }
+
+        // Create reservation appointment with expiry
         const expiresAt = new Date(Date.now() + RESERVATION_EXPIRY_MINUTES * 60 * 1000);
 
         const appointment = this.appointmentRepo.create({
@@ -739,16 +816,41 @@ export class PaymentService {
       const isNotPending = appt.status !== AppointmentStatus.PENDING_PAYMENT;
 
       // Concurrency & conflict validation (P1 Issue #2)
-      // 1. Check if another confirmed appointment already took this doctor's slot
-      const conflictingSlot = await queryRunner.manager
+      // 1. Check if another confirmed appointment already took this doctor's slot beyond capacity
+      const slotCapacityInfo = this.availabilityService?.getSlotCapacity
+        ? await this.availabilityService.getSlotCapacity(
+            appt.doctorId,
+            appt.date,
+            appt.startTime,
+            appt.endTime,
+          )
+        : { maxPatients: 1 };
+      const maxSlotCapacity =
+        slotCapacityInfo?.maxPatients && slotCapacityInfo.maxPatients > 0
+          ? slotCapacityInfo.maxPatients
+          : 1;
+
+      const otherConfirmedQuery = queryRunner.manager
         .createQueryBuilder(Appointment, 'a')
         .where('a.doctorId = :doctorId', { doctorId: appt.doctorId })
         .andWhere('a.date = :date', { date: appt.date })
         .andWhere('a.startTime = :startTime', { startTime: appt.startTime })
         .andWhere('a.endTime = :endTime', { endTime: appt.endTime })
         .andWhere('a.status = :confirmedStatus', { confirmedStatus: AppointmentStatus.CONFIRMED })
-        .andWhere('a.id != :currentId', { currentId: appt.id })
-        .getOne();
+        .andWhere('a.id != :currentId', { currentId: appt.id });
+
+      let otherConfirmedCount = 0;
+      if (typeof otherConfirmedQuery.getCount === 'function') {
+        otherConfirmedCount = await otherConfirmedQuery.getCount();
+      } else if (typeof otherConfirmedQuery.getMany === 'function') {
+        const list = await otherConfirmedQuery.getMany();
+        otherConfirmedCount = list ? list.length : 0;
+      } else if (typeof otherConfirmedQuery.getOne === 'function') {
+        const one = await otherConfirmedQuery.getOne();
+        otherConfirmedCount = one ? 1 : 0;
+      }
+
+      const isSlotCapacityFull = otherConfirmedCount >= maxSlotCapacity;
 
       // 2. Check if this patient already has a confirmed appointment with this doctor on this day
       const conflictingPatientDayBooking = await queryRunner.manager
@@ -760,7 +862,7 @@ export class PaymentService {
         .andWhere('a.id != :currentId', { currentId: appt.id })
         .getOne();
 
-      const hasConflict = !!(conflictingSlot || conflictingPatientDayBooking);
+      const hasConflict = !!(isSlotCapacityFull || conflictingPatientDayBooking);
 
       // P1 Issue #1: If reservation expired OR status is not pending OR there is any conflict:
       if (isExpired || isNotPending || hasConflict) {
@@ -772,7 +874,7 @@ export class PaymentService {
         if (hasConflict || appt.status === AppointmentStatus.CANCELLED) {
           await queryRunner.rollbackTransaction();
           return this.handleLatePaymentConflict(lockedPayment, appt, paymentId, signature, {
-            reason: conflictingSlot
+            reason: isSlotCapacityFull
               ? 'Slot was taken by another patient while reservation was pending/expired'
               : conflictingPatientDayBooking
               ? 'Patient already has a confirmed appointment with this doctor today'
@@ -1152,11 +1254,12 @@ export class PaymentService {
       }
 
       // Validate cancellation/refund window (> 30 minutes before appointment start)
+      // Exception: bypassCutoff is honored if cancellation is precipitated by a doctor schedule modification
       const appointmentStart = parseDateTimeIST(appointment.date, appointment.startTime);
       const now = new Date();
       const diffMinutes = (appointmentStart.getTime() - now.getTime()) / (1000 * 60);
 
-      if (diffMinutes < CANCEL_CUTOFF_MINUTES) {
+      if (!dto.bypassCutoff && diffMinutes < CANCEL_CUTOFF_MINUTES) {
         throw new BadRequestException(
           `Refunds cannot be requested less than ${CANCEL_CUTOFF_MINUTES} minutes before the appointment.`,
         );

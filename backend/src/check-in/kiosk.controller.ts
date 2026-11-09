@@ -1,14 +1,34 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Headers,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { CheckInService } from './check-in.service';
 import { KioskScanDto } from './dto/kiosk-scan.dto';
 
 /**
- * Public kiosk and QR scan endpoints — no login required.
- * Provides appointment verification, direct check-in, and no-show actions.
+ * Clinic kiosk terminal and QR scan endpoints.
+ * Sensitive administrative/terminal actions (such as direct no-show marking)
+ * require a valid terminal authorization key.
  */
 @Controller('kiosk')
 export class KioskController {
-  constructor(private readonly checkInService: CheckInService) {}
+  constructor(
+    private readonly checkInService: CheckInService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  private verifyTerminalAuthorization(kioskKey?: string): void {
+    const configuredKey = this.configService.get<string>('KIOSK_SECRET_KEY') || 'careup_kiosk_terminal_2026';
+    if (!kioskKey || kioskKey !== configuredKey) {
+      throw new UnauthorizedException('Access denied: Unauthorized clinic kiosk terminal');
+    }
+  }
 
   @Post('scan')
   scan(@Body() dto: KioskScanDto) {
@@ -26,7 +46,11 @@ export class KioskController {
   }
 
   @Post('appointment/:id/no-show')
-  noShow(@Param('id') id: string) {
+  noShow(
+    @Param('id') id: string,
+    @Headers('x-kiosk-key') kioskKey?: string,
+  ) {
+    this.verifyTerminalAuthorization(kioskKey);
     return this.checkInService.kioskDirectNoShow(id);
   }
 }

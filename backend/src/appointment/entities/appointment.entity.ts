@@ -6,12 +6,16 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 import { Doctor } from '../../doctor/entities/doctor.entity';
 import { Patient } from '../../patient/entities/patient.entity';
 import { AppointmentStatus } from '../../common/enums/appointment-status.enum';
 
 @Entity('appointments')
+@Index(['doctorId', 'date', 'status'])
+@Index(['patientId', 'status'])
+@Index(['date', 'startTime'])
 export class Appointment {
   @PrimaryGeneratedColumn('uuid')
   id: string;

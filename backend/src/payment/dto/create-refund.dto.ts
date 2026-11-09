@@ -21,5 +21,8 @@ export class CreateRefundDto {
   @IsOptional()
   @IsString()
   idempotencyKey?: string;
+
+  @IsOptional()
+  bypassCutoff?: boolean;
 }
 
