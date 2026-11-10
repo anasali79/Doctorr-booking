@@ -56,34 +56,34 @@ export function DoctorRescheduleTracker() {
     switch (status) {
       case 'PENDING':
         return (
-          <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-300 font-semibold text-[10px]">
+          <Badge variant="outline" className="bg-amber-100/90 text-amber-950 border-amber-300 font-bold text-[10px] shadow-2xs">
             <Clock className="w-3 h-3 mr-1 text-amber-600 animate-pulse" />
             Awaiting Patient
           </Badge>
         );
       case 'ACCEPTED':
         return (
-          <Badge className="bg-emerald-600 text-white font-semibold text-[10px]">
+          <Badge className="bg-emerald-600 text-white font-bold text-[10px] shadow-2xs">
             <CheckCircle2 className="w-3 h-3 mr-1" />
             Accepted
           </Badge>
         );
       case 'REJECTED':
         return (
-          <Badge variant="outline" className="bg-rose-50 text-rose-800 border-rose-300 font-semibold text-[10px]">
+          <Badge variant="outline" className="bg-rose-100/90 text-rose-950 border-rose-300 font-bold text-[10px] shadow-2xs">
             <XCircle className="w-3 h-3 mr-1 text-rose-600" />
             Declined
           </Badge>
         );
       case 'EXPIRED':
         return (
-          <Badge variant="outline" className="bg-slate-100 text-slate-600 border-slate-300 font-semibold text-[10px]">
+          <Badge variant="outline" className="bg-slate-100 text-slate-800 border-slate-300 font-bold text-[10px] shadow-2xs">
             Expired (Hold Released)
           </Badge>
         );
       case 'CANCELLED':
         return (
-          <Badge variant="outline" className="bg-slate-100 text-slate-600 border-slate-300 font-semibold text-[10px]">
+          <Badge variant="outline" className="bg-slate-100 text-slate-800 border-slate-300 font-bold text-[10px] shadow-2xs">
             Cancelled
           </Badge>
         );

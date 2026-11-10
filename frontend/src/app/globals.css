@@ -98,11 +98,11 @@ html.lenis, html.lenis body {
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 transition-all duration-200;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-2.5 text-sm font-bold text-slate-900 transition-all duration-200;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
   }
   .btn-secondary:hover {
-    @apply border-slate-300 bg-slate-50 text-slate-900;
+    @apply border-slate-400 bg-slate-100 text-slate-950;
     transform: translateY(-1px);
     box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
   }
@@ -121,7 +121,8 @@ html.lenis, html.lenis body {
   }
 
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-5 py-2.5 text-sm font-medium text-rose-700 transition-all duration-200 hover:bg-rose-100 hover:border-rose-300 active:scale-[0.98];
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-rose-300 bg-rose-50 px-5 py-2.5 text-sm font-bold text-rose-800 transition-all duration-200 hover:bg-rose-600 hover:text-white hover:border-rose-600 active:scale-[0.98];
+    box-shadow: 0 1px 3px rgba(225, 29, 72, 0.06);
   }
 
   /* ── Filter Pills ── */

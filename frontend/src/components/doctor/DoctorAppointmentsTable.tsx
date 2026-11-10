@@ -326,48 +326,48 @@ export function DoctorAppointmentsTable({
                               disabled={
                                 loadingId === `${appt.id}-manual-check-in`
                               }
-                              className="px-3 py-1 rounded-full border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 font-semibold text-[11px] flex items-center gap-1 transition-all cursor-pointer shadow-2xs h-auto"
+                              className="px-2.5 py-1 rounded-full border border-amber-400 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer shadow-2xs h-auto"
                               title="Check-in patient into clinic queue"
                             >
                               {loadingId ===
                               `${appt.id}-manual-check-in` ? (
                                 <Loader2 className="w-3 h-3 animate-spin" />
                               ) : (
-                                <CheckCircle className="w-3 h-3" />
+                                <CheckCircle className="w-3 h-3 text-amber-600" />
                               )}
                               <span>Check In</span>
                             </Button>
                             <Button
                               type="button"
                               variant="ghost"
-                              size="iconSm"
                               onClick={() => handleAction(appt.id, 'no-show')}
                               disabled={loadingId === `${appt.id}-no-show`}
-                              className="p-1.5 rounded-full border border-slate-200 hover:bg-slate-100 text-slate-500 text-xs transition-colors cursor-pointer"
+                              className="px-2.5 py-1 rounded-full border border-slate-300 bg-slate-50 hover:bg-slate-200 text-slate-800 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer shadow-2xs h-auto"
                               title="Mark as No Show"
                             >
-                              <UserX className="w-3.5 h-3.5" />
+                              <UserX className="w-3 h-3 text-slate-600" />
+                              <span>No Show</span>
                             </Button>
                             <Button
                               type="button"
                               variant="ghost"
-                              size="iconSm"
                               onClick={() => setReschedulingAppt(appt)}
-                              className="p-1.5 rounded-full border border-blue-200 hover:bg-blue-50 text-[#0066cc] text-xs transition-colors cursor-pointer"
+                              className="px-2.5 py-1 rounded-full border border-blue-300 bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-900 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer shadow-2xs h-auto group"
                               title="Reschedule Appointment"
                             >
-                              <CalendarSync className="w-3.5 h-3.5" />
+                              <CalendarSync className="w-3 h-3 text-blue-600 group-hover:text-white transition-colors" />
+                              <span>Reschedule</span>
                             </Button>
                             <Button
                               type="button"
                               variant="ghost"
-                              size="iconSm"
                               onClick={() => handleCancel(appt.id)}
                               disabled={loadingId === `${appt.id}-cancel`}
-                              className="p-1.5 rounded-full border border-rose-200 hover:bg-rose-50 text-rose-600 text-xs transition-colors cursor-pointer"
+                              className="px-2.5 py-1 rounded-full border border-rose-300 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-800 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer shadow-2xs h-auto group"
                               title="Cancel Appointment"
                             >
-                              <XCircle className="w-3.5 h-3.5" />
+                              <XCircle className="w-3 h-3 text-rose-600 group-hover:text-white transition-colors" />
+                              <span>Cancel</span>
                             </Button>
                           </>
                         )}

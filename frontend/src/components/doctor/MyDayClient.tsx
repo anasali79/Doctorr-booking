@@ -605,32 +605,32 @@ export function MyDayClient({
 
                       // Format Status
                       let statusBadge = (
-                        <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                        <span className="rounded-full bg-slate-100 border border-slate-300 px-2.5 py-1 text-xs font-bold text-slate-800 shadow-2xs">
                           Upcoming
                         </span>
                       );
                       if (appt.status === 'CHECKED_IN') {
                         statusBadge = (
-                          <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-[#0066cc] border border-blue-200">
+                          <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-bold text-blue-900 border border-blue-300 shadow-2xs">
                             Waiting
                           </span>
                         );
                       } else if (appt.status === 'IN_CONSULTATION') {
                         statusBadge = (
-                          <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-semibold text-indigo-700 border border-indigo-200">
+                          <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-bold text-purple-950 border border-purple-300 shadow-2xs">
                             In Consultation
                           </span>
                         );
                       } else if (appt.status === 'COMPLETED') {
                         statusBadge = (
-                          <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 border border-emerald-200">
+                          <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-950 border border-emerald-300 shadow-2xs">
                             Completed
                           </span>
                         );
                       } else if (['NO_SHOW', 'CANCELLED'].includes(appt.status)) {
                         statusBadge = (
-                          <span className="rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-700 border border-rose-200">
-                            No-show
+                          <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-bold text-rose-900 border border-rose-300 shadow-2xs">
+                            {appt.status === 'NO_SHOW' ? 'No-show' : 'Cancelled'}
                           </span>
                         );
                       }
