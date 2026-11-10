@@ -597,7 +597,7 @@ export function AiAssistantDrawer({ role, defaultOpen = false }: AiAssistantDraw
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder="Type here in Hindi, English ya Hinglish..."
                 disabled={isLoading}
-                className="flex-1 rounded-xl border border-zinc-200 bg-zinc-50/80 px-3.5 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500"
+                className="flex-1 rounded-xl border border-zinc-300/80 bg-white px-3.5 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 shadow-2xs focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 focus:outline-hidden dark:border-zinc-700 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-400 dark:focus:border-blue-500 dark:focus:bg-zinc-800"
               />
 
               {/* Single Mic Button (Press to speak single query) */}

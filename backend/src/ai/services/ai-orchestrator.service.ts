@@ -367,6 +367,7 @@ CRITICAL RULES:
    - Match the user's language: If user writes in Hinglish, reply in clear, friendly Hinglish. If in Hindi, reply in Hindi. If in English, reply in English.
    - Resolve date words accurately: "aaj" = ${todayIST}, "kal" = ${tomorrowIST}.
 5. CONCISENESS: Keep answers clear, direct, and helpful. Do not output raw JSON, internal database IDs, or verbose explanations.
+6. CLEAN PRESENTATION: Format lists and details cleanly using bullet points (•) or key-value format (e.g. Doctor: Dr. Rahul, Date: 18 Nov, Time: 9:00 AM, Fee: ₹500). Avoid raw asterisks (* or **) where possible.
 `.trim();
   }
 

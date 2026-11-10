@@ -2,12 +2,14 @@ import React from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getDoctorById } from '@/lib/api/doctors';
+import { getPatientAppointments } from '@/lib/api/patient';
 import { getSession } from '@/lib/auth/session';
 import { Navbar } from '@/components/common/Navbar';
 import { DoctorBookingClient } from '@/components/booking/DoctorBookingClient';
 import { DoctorAvatar } from '@/components/common/DoctorAvatar';
 import { SPECIALIZATION_LABELS } from '@/lib/constants';
 import { formatCurrency } from '@/lib/utils';
+import { Appointment } from '@/types';
 import {
   Award,
   Briefcase,
@@ -27,7 +29,7 @@ interface DoctorProfilePageProps {
 
 export default async function DoctorProfilePage({ params }: DoctorProfilePageProps) {
   const { id } = await params;
-  const { user } = await getSession();
+  const { user, token } = await getSession();
 
   let doctor = null;
   try {
@@ -39,6 +41,21 @@ export default async function DoctorProfilePage({ params }: DoctorProfilePagePro
 
   if (!doctor) {
     notFound();
+  }
+
+  // Fetch logged-in patient's existing active appointments with this doctor
+  let initialUserAppointments: Appointment[] = [];
+  if (user && user.role === 'PATIENT' && token) {
+    try {
+      const apptRes = await getPatientAppointments(token);
+      const allAppts: Appointment[] = apptRes?.data || [];
+      const activeStatuses = ['PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN', 'IN_CONSULTATION'];
+      initialUserAppointments = allAppts.filter(
+        (a) => a.doctorId === id && activeStatuses.includes(a.status),
+      );
+    } catch (err) {
+      console.warn('Could not load patient appointments for doctor page:', err);
+    }
   }
 
   const specLabel = SPECIALIZATION_LABELS[doctor.specialization] || doctor.specialization;
@@ -168,7 +185,11 @@ export default async function DoctorProfilePage({ params }: DoctorProfilePagePro
 
           {/* Right Column: Slot Picker and Booking flow */}
           <div className="lg:col-span-7">
-            <DoctorBookingClient doctor={doctor} user={user} />
+            <DoctorBookingClient
+              doctor={doctor}
+              user={user}
+              initialUserAppointments={initialUserAppointments}
+            />
           </div>
         </div>
       </main>

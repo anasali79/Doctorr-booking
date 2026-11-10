@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatTime, formatDate, formatCurrency, getTodayIST } from '@/lib/utils';
-import { Doctor, Slot, SessionUser } from '@/types';
+import { Doctor, Slot, SessionUser, Appointment } from '@/types';
 import { toast } from 'sonner';
 import {
   Clock,
@@ -34,12 +34,39 @@ import {
 interface DoctorBookingClientProps {
   doctor: Doctor;
   user: SessionUser | null;
+  initialUserAppointments?: Appointment[];
 }
 
-export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) {
+export function DoctorBookingClient({
+  doctor,
+  user,
+  initialUserAppointments = [],
+}: DoctorBookingClientProps) {
   const router = useRouter();
   const todayIST = getTodayIST();
   const maxDays = doctor.maxFutureBookingDays ?? 14;
+
+  const [userAppointments, setUserAppointments] = useState<Appointment[]>(initialUserAppointments);
+
+  const refreshUserAppointments = async () => {
+    if (!user || user.role !== 'PATIENT') return;
+    try {
+      const res = await clientAxios.get<{ data: Appointment[] }>('/api/appointment/my');
+      const allAppts = res.data?.data || [];
+      const activeStatuses = ['PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN', 'IN_CONSULTATION'];
+      const myForDoc = allAppts.filter(
+        (a) => a.doctorId === doctor.id && activeStatuses.includes(a.status),
+      );
+      setUserAppointments(myForDoc);
+    } catch {
+      // ignore
+    }
+  };
+
+  // Check if user has an appointment on a specific date with this doctor
+  const getAppointmentForDate = (dateStr: string) => {
+    return userAppointments.find((a) => a.date === dateStr);
+  };
 
   // Generate available dates strictly from todayIST (Asia/Kolkata date) without UTC drift
   const availableDates: { dateStr: string; label: string; dayName: string; dayNum: string }[] = [];
@@ -68,6 +95,8 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
   const [bookingInProgress, setBookingInProgress] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  const currentDayAppointment = getAppointmentForDate(selectedDate);
 
   // Fetch slots using Axios
   const fetchSlots = async (date: string) => {
@@ -298,27 +327,62 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
         <div className="flex items-center gap-2.5 overflow-x-auto pb-2 scrollbar-none">
           {availableDates.map((item) => {
             const isSelected = selectedDate === item.dateStr;
+            const hasApptOnDate = Boolean(getAppointmentForDate(item.dateStr));
             return (
               <Button
                 key={item.dateStr}
                 type="button"
                 variant="ghost"
                 onClick={() => setSelectedDate(item.dateStr)}
-                className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border py-3 px-4 min-w-[72px] text-center transition-all duration-150 h-auto ${
+                className={`relative flex cursor-pointer flex-col items-center justify-between rounded-2xl border py-2.5 px-3 min-w-[72px] h-[86px] text-center transition-all duration-150 ${
                   isSelected
                     ? 'border-[#0066cc] bg-[#0066cc] text-white shadow-sm hover:bg-[#0055b3] hover:text-white'
                     : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
                 }`}
               >
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                {/* Subtle emerald indicator dot on top right for booked dates */}
+                {hasApptOnDate && (
+                  <span
+                    className={`absolute top-2 right-2 h-2 w-2 rounded-full ${
+                      isSelected ? 'bg-emerald-300 ring-2 ring-[#0066cc]' : 'bg-emerald-500 ring-2 ring-white'
+                    }`}
+                  />
+                )}
+
+                <span
+                  className={`text-[10px] font-bold uppercase tracking-wider ${
+                    isSelected ? 'text-blue-100' : 'text-slate-400'
+                  }`}
+                >
                   {item.dayName}
                 </span>
-                <span className="text-xl font-black mt-1 leading-none">
+
+                <span className="text-xl font-black leading-none my-auto">
                   {item.dayNum}
                 </span>
-                <span className={`text-[11px] font-semibold mt-1.5 ${isSelected ? 'text-white' : 'text-slate-600'}`}>
-                  {item.label}
-                </span>
+
+                <div className="h-5 flex items-center justify-center">
+                  {hasApptOnDate ? (
+                    <span
+                      className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-tight leading-none ${
+                        isSelected
+                          ? 'bg-emerald-400 text-emerald-950 shadow-2xs'
+                          : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-2.5 h-2.5" />
+                      Booked
+                    </span>
+                  ) : (
+                    <span
+                      className={`text-[11px] font-semibold leading-none ${
+                        isSelected ? 'text-white' : 'text-slate-600'
+                      }`}
+                    >
+                      {item.label}
+                    </span>
+                  )}
+                </div>
               </Button>
             );
           })}
@@ -587,6 +651,63 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
   );
 
   function renderSlotButton(slot: Slot, index: number) {
+    const isMyBookedSlot = Boolean(
+      currentDayAppointment &&
+      currentDayAppointment.startTime === slot.startTime &&
+      currentDayAppointment.endTime === slot.endTime,
+    );
+
+    const isBlockedByOtherBookingToday = Boolean(
+      currentDayAppointment && !isMyBookedSlot,
+    );
+
+    if (isMyBookedSlot) {
+      return (
+        <Button
+          key={`${slot.startTime}-${slot.endTime}-${index}`}
+          type="button"
+          variant="ghost"
+          onClick={() => {
+            toast.success('Your Confirmed Appointment', {
+              description: `You have booked this consultation (${formatTime(slot.startTime)} – ${formatTime(slot.endTime)}) with Dr. ${doctor.fullName}.`,
+              action: {
+                label: 'View Visit',
+                onClick: () => router.push('/patient/appointments'),
+              },
+            });
+          }}
+          className="relative flex cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border-2 border-emerald-500 bg-emerald-50/90 py-2.5 px-1.5 text-center transition-all duration-150 h-auto shadow-xs hover:bg-emerald-100 hover:border-emerald-600 active:scale-95 overflow-hidden w-full min-w-0"
+        >
+          <span className="text-[11px] sm:text-xs font-black tracking-tight text-emerald-950 whitespace-nowrap">
+            {formatTime(slot.startTime)} – {formatTime(slot.endTime)}
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[9px] font-bold text-white shadow-2xs">
+            <CheckCircle2 className="w-2.5 h-2.5 shrink-0" />
+            <span>Your Slot {currentDayAppointment?.tokenNumber ? `#${currentDayAppointment.tokenNumber}` : ''}</span>
+          </span>
+        </Button>
+      );
+    }
+
+    if (isBlockedByOtherBookingToday) {
+      return (
+        <Button
+          key={`${slot.startTime}-${slot.endTime}-${index}`}
+          type="button"
+          variant="ghost"
+          disabled
+          className="cursor-not-allowed border-slate-100 bg-slate-100/70 text-slate-400 opacity-60 flex flex-col items-center justify-center gap-1 rounded-2xl border py-2.5 px-2 text-center h-auto"
+        >
+          <span className="text-[11px] sm:text-xs font-bold tracking-tight whitespace-nowrap text-slate-400">
+            {formatTime(slot.startTime)} – {formatTime(slot.endTime)}
+          </span>
+          <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400">
+            Day Reserved
+          </span>
+        </Button>
+      );
+    }
+
     const isBookable =
       slot.status === 'available' ||
       slot.status === 'cancel and available for booking';
@@ -632,6 +753,16 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
   }
 
   function renderStreamSlot(slot: Slot, index: number) {
+    const isMyStreamBooking = Boolean(
+      currentDayAppointment &&
+      currentDayAppointment.startTime >= slot.startTime &&
+      currentDayAppointment.endTime <= slot.endTime,
+    );
+
+    const isBlockedByOtherBookingToday = Boolean(
+      currentDayAppointment && !isMyStreamBooking,
+    );
+
     const isBookable =
       slot.status === 'available' ||
       slot.status === 'cancel and available for booking';
@@ -657,7 +788,9 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
       <div
         key={`stream-slot-${slot.startTime}-${slot.endTime}-${index}`}
         className={`relative overflow-hidden rounded-2xl border transition-all duration-200 p-4 sm:p-5 ${
-          !isFull
+          isMyStreamBooking
+            ? 'border-2 border-emerald-500 bg-gradient-to-br from-emerald-50/90 via-white to-teal-50/40 shadow-sm'
+            : !isFull
             ? 'border-indigo-200 bg-gradient-to-br from-indigo-50/70 via-white to-blue-50/30 hover:border-[#0066cc] hover:shadow-md'
             : 'border-slate-200 bg-slate-50/80 opacity-70'
         }`}
@@ -670,7 +803,12 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
                 <Users className="h-3 w-3" />
                 Stream Consultation Window
               </span>
-              {!isFull ? (
+              {isMyStreamBooking ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-800 border border-emerald-300">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                  You Are Booked In This Stream
+                </span>
+              ) : !isFull ? (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   Available for Booking
@@ -693,7 +831,11 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
             </div>
 
             <p className="text-xs text-slate-600 leading-relaxed">
-              Open streaming consultation session. Patients are accommodated sequentially throughout this window with live token numbers.
+              {isMyStreamBooking
+                ? `You have an active appointment scheduled during this session window${
+                    currentDayAppointment?.tokenNumber ? ` (Token #${currentDayAppointment.tokenNumber})` : ''
+                  }. You can monitor your live queue from your visits page.`
+                : 'Open streaming consultation session. Patients are accommodated sequentially throughout this window with live token numbers.'}
             </p>
           </div>
 
@@ -729,25 +871,45 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
               </div>
             )}
 
-            <Button
-              type="button"
-              disabled={isFull}
-              onClick={() => handleSelectSlot(slot)}
-              className={`w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-xs h-auto ${
-                !isFull
-                  ? 'bg-[#0066cc] text-white hover:bg-[#0055b3] active:scale-95'
-                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-              }`}
-            >
-              {!isFull ? (
-                <span className="flex items-center gap-1.5">
-                  <span>Book in Stream ({formatTime(slot.startTime)} – {formatTime(slot.endTime)})</span>
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </span>
-              ) : (
-                'Stream Session Full'
-              )}
-            </Button>
+            {isMyStreamBooking ? (
+              <Button
+                asChild
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs h-auto"
+              >
+                <Link href="/patient/appointments">
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                  <span>View Visit Ticket</span>
+                </Link>
+              </Button>
+            ) : isBlockedByOtherBookingToday ? (
+              <Button
+                type="button"
+                disabled
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-bold bg-slate-200 text-slate-400 cursor-not-allowed h-auto"
+              >
+                Day Reserved
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                disabled={isFull}
+                onClick={() => handleSelectSlot(slot)}
+                className={`w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-xs h-auto ${
+                  !isFull
+                    ? 'bg-[#0066cc] text-white hover:bg-[#0055b3] active:scale-95'
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                {!isFull ? (
+                  <span className="flex items-center gap-1.5">
+                    <span>Book in Stream ({formatTime(slot.startTime)} – {formatTime(slot.endTime)})</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </span>
+                ) : (
+                  'Stream Session Full'
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </div>
