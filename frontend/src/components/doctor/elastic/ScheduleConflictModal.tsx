@@ -14,11 +14,8 @@ import { extractErrorMessage } from '@/lib/api/axios';
 import {
   elasticSchedulingApi,
   ConflictCheckResult,
-  AffectedAppointment,
-  PreservedAppointment,
 } from '@/lib/api/elastic-scheduling';
 import {
-  Sparkles,
   Calendar,
   Clock,
   Layers,
@@ -28,7 +25,8 @@ import {
   AlertTriangle,
   ArrowRight,
   Loader2,
-  Users,
+  Mail,
+  Send,
 } from 'lucide-react';
 
 interface ScheduleConflictModalProps {
@@ -36,8 +34,6 @@ interface ScheduleConflictModalProps {
   onClose: () => void;
   conflictData: ConflictCheckResult | null;
   shiftData: any;
-  onSelectSmartReschedule: (affectedIds: string[]) => void;
-  onSelectManualReschedule: (affectedAppointment: AffectedAppointment) => void;
   onSuccess?: () => void;
 }
 
@@ -46,8 +42,6 @@ export function ScheduleConflictModal({
   onClose,
   conflictData,
   shiftData,
-  onSelectSmartReschedule,
-  onSelectManualReschedule,
   onSuccess,
 }: ScheduleConflictModalProps) {
   const [activeTab, setActiveTab] = useState<'affected' | 'preserved'>('affected');
@@ -63,12 +57,7 @@ export function ScheduleConflictModal({
   const preservedCount = summary?.preservedCount ?? preservedAppts.length;
   const affectedCount = summary?.affectedCount ?? count;
 
-  const handleStartSmartReschedule = () => {
-    const ids = appts.map((a) => a.appointmentId);
-    onSelectSmartReschedule(ids);
-  };
-
-  const handleConfirmShrink = async () => {
+  const handleApproveShrink = async () => {
     try {
       setApplying(true);
       await elasticSchedulingApi.applyShrink({
@@ -81,8 +70,8 @@ export function ScheduleConflictModal({
         forceIfNoConflicts: true,
       });
 
-      toast.success('Schedule Updated Successfully', {
-        description: `${preservedCount} booking(s) preserved. ${affectedCount} affected patient(s) notified to choose alternative slots.`,
+      toast.success('Schedule Shrink Applied Successfully', {
+        description: `Shift hours updated. ${affectedCount} affected patient(s) have been sent automated reschedule notifications with available alternative slots.`,
       });
 
       if (onSuccess) {
@@ -101,16 +90,20 @@ export function ScheduleConflictModal({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-2xl bg-white border border-slate-200 shadow-2xl rounded-xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
-        {/* Header Alert */}
+        {/* Warning Header */}
         <div className="bg-amber-500 text-white p-5 flex items-start gap-3">
           <ShieldAlert className="w-6 h-6 shrink-0 mt-0.5 text-amber-100" />
           <div>
-            <DialogTitle className="text-lg font-bold text-white">
-              Schedule Shrink Preview (Token-Based Patient Allocation)
+            <DialogTitle className="text-lg font-bold text-white flex items-center gap-2">
+              <span>Schedule Shrink Warning</span>
+              <Badge className="bg-amber-600 text-white border-amber-400 text-xs font-semibold">
+                {affectedCount} Affected
+              </Badge>
             </DialogTitle>
             <p className="text-xs text-amber-100 mt-1 leading-relaxed">
-              Modifying availability retains patients based on their original <strong>FIFO token order</strong>.
-              Preserved patients remain confirmed; patients beyond revised capacity will be notified to select an alternative slot.
+              Shrinking this shift reduces slot capacity. The system will automatically preserve the first{' '}
+              <strong>{preservedCount}</strong> confirmed patient(s) in FIFO token order. The remaining{' '}
+              <strong>{affectedCount}</strong> patient(s) will automatically be sent rescheduling notifications with available slots.
             </p>
           </div>
         </div>
@@ -119,7 +112,7 @@ export function ScheduleConflictModal({
         <div className="px-6 py-3.5 bg-slate-50 border-b border-slate-200 text-xs text-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-xs">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">Original Schedule</span>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">Current Hours</span>
               <span className="font-semibold text-slate-800">
                 {summary?.oldSchedule || `${formatTime(shiftData?.startTime)} – ${formatTime(shiftData?.endTime)}`}
               </span>
@@ -131,7 +124,7 @@ export function ScheduleConflictModal({
             <ArrowRight className="w-4 h-4 text-slate-400 shrink-0 hidden sm:block" />
 
             <div className="bg-white px-3 py-1.5 rounded-lg border border-blue-200 shadow-xs">
-              <span className="text-[10px] uppercase font-bold text-blue-600 block">Revised Schedule</span>
+              <span className="text-[10px] uppercase font-bold text-blue-600 block">Proposed Shrunk Hours</span>
               <span className="font-semibold text-blue-900">
                 {summary?.newSchedule || `${formatTime(shiftData?.newStartTime)} – ${formatTime(shiftData?.newEndTime)}`}
               </span>
@@ -148,7 +141,7 @@ export function ScheduleConflictModal({
             </span>
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
               <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-              {affectedCount} Reschedule
+              {affectedCount} Requires Rescheduling
             </span>
           </div>
         </div>
@@ -185,13 +178,17 @@ export function ScheduleConflictModal({
         <div className="p-6 overflow-y-auto flex-1 space-y-3">
           {activeTab === 'affected' ? (
             <div className="space-y-2">
-              <p className="text-xs text-slate-500 mb-2">
-                These patients exceed the revised capacity or fall in clipped hours. They will receive automated notifications with prioritized alternative slots to choose from.
-              </p>
+              <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
+                <Mail className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <p>
+                  Upon approval, the system will immediately notify these patients via Email, SMS & In-app alert with a list of all your available alternative slots to pick from.
+                </p>
+              </div>
+
               {appts.map((app) => (
                 <div
                   key={app.appointmentId}
-                  className="border border-amber-200 rounded-lg p-3 bg-amber-50/40 hover:border-amber-300 transition-colors flex items-center justify-between gap-3 shadow-xs"
+                  className="border border-amber-200 rounded-lg p-3 bg-white hover:border-amber-300 transition-colors flex items-center justify-between gap-3 shadow-xs"
                 >
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
@@ -209,7 +206,7 @@ export function ScheduleConflictModal({
                         </Badge>
                       )}
                       <Badge variant="outline" className="text-[10px] font-semibold py-0 text-rose-700 border-rose-200 bg-rose-50">
-                        Requires Rescheduling
+                        Will Be Sent Reschedule Options
                       </Badge>
                     </div>
 
@@ -242,17 +239,6 @@ export function ScheduleConflictModal({
                       </span>
                     </div>
                   </div>
-
-                  {/* Individual Manual Reschedule Action */}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onSelectManualReschedule(app)}
-                    className="text-xs shrink-0 border-slate-300 hover:bg-slate-100 text-slate-700"
-                  >
-                    Reschedule Manually
-                  </Button>
                 </div>
               ))}
             </div>
@@ -315,7 +301,7 @@ export function ScheduleConflictModal({
           )}
         </div>
 
-        {/* Resolution Options Footer */}
+        {/* Action Footer */}
         <div className="p-5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
           <Button
             type="button"
@@ -325,37 +311,25 @@ export function ScheduleConflictModal({
             disabled={applying}
             className="text-xs text-slate-600 hover:text-slate-900 order-2 sm:order-1"
           >
-            Cancel Availability Change
+            Cancel / Keep Current Hours
           </Button>
 
           <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end order-1 sm:order-2">
             <Button
               type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleStartSmartReschedule}
+              onClick={handleApproveShrink}
               disabled={applying}
-              className="text-xs border-slate-300 hover:bg-slate-100 text-slate-700 flex items-center gap-1"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-              Smart Reschedule Review
-            </Button>
-
-            <Button
-              type="button"
-              onClick={handleConfirmShrink}
-              disabled={applying}
-              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 flex items-center gap-1.5 shadow-sm"
+              className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold px-4 py-2 flex items-center gap-1.5 shadow-sm"
             >
               {applying ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin text-white" />
-                  Applying Schedule Change...
+                  Applying Schedule Shrink...
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="w-4 h-4 text-blue-200" />
-                  Confirm & Send Alternatives ({affectedCount})
+                  <Send className="w-3.5 h-3.5 text-amber-100" />
+                  Approve & Apply Shrink ({affectedCount} Patients Will Be Notified)
                 </>
               )}
             </Button>

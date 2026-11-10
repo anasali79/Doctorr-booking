@@ -742,7 +742,7 @@ export class ElasticSchedulingService {
       });
       await this.rescheduleRequestRepo.save(req);
 
-      // Dispatch Patient Notification
+      // Dispatch Patient Notification (In-App + Email / SMS / Multi-channel)
       try {
         await this.notificationService.createNotification(
           a.patientId,
@@ -750,6 +750,39 @@ export class ElasticSchedulingService {
           `Your doctor Dr. ${doctor.fullName} has modified their availability, and your appointment on ${formatDate(a.date)} at ${formatTime(a.startTime)} (Token #${a.tokenNumber ?? 'N/A'}) needs to be rescheduled. Please select an available alternative slot or choose to cancel.`,
           NotificationType.SCHEDULE_UPDATE,
         );
+
+        if (this.notificationDispatcher) {
+          const fullAppt = await this.appointmentRepo.findOne({
+            where: { id: a.appointmentId },
+            relations: { patient: { user: true } },
+          });
+          if (fullAppt?.patient?.user) {
+            this.notificationDispatcher.dispatchAsync({
+              eventType: NotificationEventType.RESCHEDULE_PROPOSED_BY_DOCTOR,
+              recipients: [
+                {
+                  id: a.patientId,
+                  userId: fullAppt.patient.user.id,
+                  name: fullAppt.patient.fullName,
+                  email: fullAppt.patient.user.email,
+                  phone: fullAppt.patient.phone || null,
+                  role: 'PATIENT',
+                },
+              ],
+              appointmentId: a.appointmentId,
+              data: {
+                patientName: fullAppt.patient.fullName,
+                doctorName: doctor.fullName,
+                specialization: doctor.specialization,
+                originalDate: a.date,
+                originalStartTime: a.startTime,
+                originalEndTime: a.endTime,
+                tokenNumber: a.tokenNumber,
+                reason: 'Doctor modified clinic schedule availability',
+              },
+            });
+          }
+        }
       } catch (e: any) {
         this.logger.warn(`Failed to dispatch patient notification: ${e.message}`);
       }
