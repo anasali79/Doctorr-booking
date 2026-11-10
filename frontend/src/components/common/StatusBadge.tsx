@@ -13,9 +13,9 @@ export function StatusBadge({ status, className, showDot = true }: StatusBadgePr
   const config = STATUS_CONFIG[status] || {
     label: status,
     bg: 'bg-slate-100 dark:bg-slate-800',
-    text: 'text-slate-700 dark:text-slate-300',
-    border: 'border-slate-200 dark:border-slate-700',
-    dot: 'bg-slate-400',
+    text: 'text-slate-900 dark:text-slate-100 font-bold',
+    border: 'border-slate-300 dark:border-slate-700',
+    dot: 'bg-slate-500',
   };
 
   const isLivePulse = status === 'CHECKED_IN' || status === 'IN_CONSULTATION';
@@ -23,7 +23,7 @@ export function StatusBadge({ status, className, showDot = true }: StatusBadgePr
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border shadow-xs transition-colors',
+        'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border shadow-2xs transition-colors select-none tracking-tight',
         config.bg,
         config.text,
         config.border,

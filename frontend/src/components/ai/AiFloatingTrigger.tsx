@@ -158,6 +158,8 @@ export function AiFloatingTrigger({
 
   if (!position) return null;
 
+  const isNearLeftEdge = (position?.x ?? 0) < 140;
+
   return (
     <div
       style={{
@@ -169,54 +171,67 @@ export function AiFloatingTrigger({
       }}
       className="select-none"
     >
-      <button
-        ref={buttonRef}
-        type="button"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={() => setIsDragging(false)}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        aria-label="Open CareUp AI Voice & Chat Assistant"
-        className={`group relative flex items-center justify-center rounded-2xl bg-gradient-to-tr from-[#0066cc] via-blue-600 to-indigo-600 text-white shadow-xl shadow-blue-600/30 ring-2 ring-white/30 dark:ring-zinc-700/60 transition-transform cursor-grab active:cursor-grabbing ${
-          isDragging ? 'scale-105 opacity-90' : 'hover:scale-110 active:scale-95'
-        } ${isHovered && !isDragging ? 'pr-3 pl-3' : 'w-12 h-12'}`}
-        style={{
-          transitionProperty: isDragging ? 'none' : 'all',
-          transitionDuration: '150ms',
-        }}
-      >
-        {/* Glow ambient pulse backdrop */}
-        <div className="absolute -inset-1 rounded-2xl bg-blue-500/20 blur-md pointer-events-none group-hover:bg-blue-500/30 transition-all" />
-
-        {/* Live Online Ping Indicator */}
-        <span className="absolute -top-1 -right-1 flex h-3 w-3">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-          <span className="relative inline-flex h-3 w-3 rounded-full border-2 border-white bg-emerald-500 dark:border-zinc-900" />
-        </span>
-
-        {/* Core Icon */}
-        <div className="relative flex items-center gap-1.5 pointer-events-none">
-          {isVoiceActive ? (
-            <div className="flex items-center gap-0.5">
-              <span className="h-3 w-0.5 animate-pulse bg-white rounded-full" />
-              <span className="h-4 w-0.5 animate-pulse bg-white rounded-full [animation-delay:0.15s]" />
-              <span className="h-2 w-0.5 animate-pulse bg-white rounded-full [animation-delay:0.3s]" />
-              <Mic className="h-3.5 w-3.5 ml-0.5 text-white" />
-            </div>
-          ) : (
-            <Sparkles className="h-5 w-5 text-white group-hover:rotate-12 transition-transform duration-300" />
-          )}
-
-          {/* Compact Role Tag that gently expands on hover without being bulky */}
-          {isHovered && !isDragging && (
-            <span className="text-xs font-bold tracking-tight whitespace-nowrap pl-0.5 animate-in fade-in slide-in-from-left-1 duration-150">
-              {role === 'DOCTOR' ? 'Doctor AI' : 'Patient AI'}
-            </span>
-          )}
+      <div className="relative">
+        {/* Tooltip Label (Zero layout shift, 100% stable, no jitter) */}
+        <div
+          className={`absolute top-1/2 -translate-y-1/2 pointer-events-none whitespace-nowrap rounded-lg bg-zinc-900/95 dark:bg-zinc-800/95 backdrop-blur-md px-2.5 py-1 text-xs font-semibold text-white shadow-xl border border-white/10 transition-all duration-200 z-10 ${
+            isNearLeftEdge ? 'left-full ml-2.5' : 'right-full mr-2.5'
+          } ${
+            isHovered && !isDragging
+              ? 'opacity-100 scale-100'
+              : 'opacity-0 scale-95 pointer-events-none'
+          }`}
+        >
+          {role === 'DOCTOR' ? 'Doctor AI Voice' : 'Patient AI Voice'}
+          {/* Tooltip Arrow */}
+          <div
+            className={`absolute top-1/2 -translate-y-1/2 border-4 border-transparent ${
+              isNearLeftEdge
+                ? 'right-full border-r-zinc-900/95 dark:border-r-zinc-800/95'
+                : 'left-full border-l-zinc-900/95 dark:border-l-zinc-800/95'
+            }`}
+          />
         </div>
-      </button>
+
+        {/* Floating Action Button (Fixed stable dimensions w-12 h-12) */}
+        <button
+          ref={buttonRef}
+          type="button"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={() => setIsDragging(false)}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+          aria-label="Open CareUp AI Voice & Chat Assistant"
+          className={`relative flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#0066cc] via-blue-600 to-indigo-600 text-white shadow-xl shadow-blue-600/30 ring-2 ring-white/30 dark:ring-zinc-700/60 transition-transform cursor-grab active:cursor-grabbing ${
+            isDragging ? 'scale-105 opacity-90' : 'hover:scale-105 active:scale-95'
+          }`}
+        >
+          {/* Glow ambient pulse backdrop */}
+          <div className="absolute -inset-1 rounded-2xl bg-blue-500/20 blur-md pointer-events-none group-hover:bg-blue-500/35 transition-all" />
+
+          {/* Live Online Ping Indicator */}
+          <span className="absolute -top-1 -right-1 flex h-3 w-3">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex h-3 w-3 rounded-full border-2 border-white bg-emerald-500 dark:border-zinc-900" />
+          </span>
+
+          {/* Core Icon */}
+          <div className="relative flex items-center justify-center pointer-events-none">
+            {isVoiceActive ? (
+              <div className="flex items-center gap-0.5">
+                <span className="h-3 w-0.5 animate-pulse bg-white rounded-full" />
+                <span className="h-4 w-0.5 animate-pulse bg-white rounded-full [animation-delay:0.15s]" />
+                <span className="h-2 w-0.5 animate-pulse bg-white rounded-full [animation-delay:0.3s]" />
+                <Mic className="h-3.5 w-3.5 ml-0.5 text-white" />
+              </div>
+            ) : (
+              <Sparkles className="h-5 w-5 text-white transition-transform duration-200" />
+            )}
+          </div>
+        </button>
+      </div>
     </div>
   );
 }

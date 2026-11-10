@@ -73,10 +73,10 @@ export function AiQuickActions({ role, onSelect, disabled }: AiQuickActionsProps
             type="button"
             disabled={disabled}
             onClick={() => onSelect(item.prompt)}
-            className="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50/70 px-2.5 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100/80 active:scale-95 disabled:opacity-50 transition-all cursor-pointer dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300"
+            className="group inline-flex items-center gap-1.5 rounded-full border border-blue-200/80 bg-blue-50/80 px-3 py-1.5 text-[11px] font-semibold text-blue-800 shadow-2xs hover:bg-blue-600 hover:text-white hover:border-blue-600 active:scale-95 disabled:opacity-40 transition-all cursor-pointer dark:border-blue-800/70 dark:bg-blue-950/60 dark:text-blue-200 dark:hover:bg-blue-600 dark:hover:text-white dark:hover:border-blue-500"
           >
-            <Icon className="h-3 w-3 text-blue-500" />
-            <span>{item.label}</span>
+            <Icon className="h-3 w-3 text-blue-600 dark:text-blue-400 group-hover:text-white transition-colors" />
+            <span className="group-hover:text-white transition-colors">{item.label}</span>
           </button>
         );
       })}

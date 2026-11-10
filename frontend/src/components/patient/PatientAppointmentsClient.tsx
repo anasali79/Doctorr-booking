@@ -791,20 +791,20 @@ export function PatientAppointmentsClient({
                   <div className="pt-2 border-t border-black/[0.06] flex items-center gap-2">
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant="outline"
                       onClick={() => openRescheduleModal(appt)}
-                      className="btn-secondary flex-1 !py-2 text-xs h-auto"
+                      className="flex-1 py-2 px-3 text-xs font-bold rounded-xl border border-slate-300 bg-white text-slate-800 hover:bg-slate-100 hover:text-slate-950 hover:border-slate-400 shadow-2xs h-auto flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                     >
-                      <RefreshCw className="w-3 h-3" />
+                      <RefreshCw className="w-3.5 h-3.5 text-slate-600" />
                       <span>Reschedule</span>
                     </Button>
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant="outline"
                       onClick={() => setCancellingId(appt.id)}
-                      className="btn-danger flex-1 !py-2 text-xs h-auto"
+                      className="group flex-1 py-2 px-3 text-xs font-bold rounded-xl border border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-600 hover:text-white hover:border-rose-600 shadow-2xs h-auto flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                     >
-                      <XCircle className="w-3 h-3" />
+                      <XCircle className="w-3.5 h-3.5 text-rose-600 group-hover:text-white transition-colors" />
                       <span>Cancel</span>
                     </Button>
                   </div>

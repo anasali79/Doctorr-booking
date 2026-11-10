@@ -183,17 +183,17 @@ export function PatientPaymentsClient() {
     }
     switch (status) {
       case 'COMPLETED':
-        return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">Paid</Badge>;
+        return <Badge className="bg-emerald-100/90 text-emerald-950 border-emerald-300 font-bold shadow-2xs">Paid</Badge>;
       case 'REFUNDED':
-        return <Badge className="bg-purple-50 text-purple-700 border-purple-200">Refunded</Badge>;
+        return <Badge className="bg-purple-100/90 text-purple-950 border-purple-300 font-bold shadow-2xs">Refunded</Badge>;
       case 'PARTIALLY_REFUNDED':
-        return <Badge className="bg-amber-50 text-amber-700 border-amber-200">Partially Refunded</Badge>;
+        return <Badge className="bg-amber-100/90 text-amber-950 border-amber-300 font-bold shadow-2xs">Partially Refunded</Badge>;
       case 'PENDING':
-        return <Badge className="bg-blue-50 text-blue-700 border-blue-200">Pending</Badge>;
+        return <Badge className="bg-blue-100/90 text-blue-950 border-blue-300 font-bold shadow-2xs">Pending</Badge>;
       case 'FAILED':
-        return <Badge className="bg-rose-50 text-rose-700 border-rose-200">Failed</Badge>;
+        return <Badge className="bg-rose-100/90 text-rose-950 border-rose-300 font-bold shadow-2xs">Failed</Badge>;
       default:
-        return <Badge className="bg-slate-100 text-slate-700 border-slate-200">{status}</Badge>;
+        return <Badge className="bg-slate-100 text-slate-800 border-slate-300 font-bold shadow-2xs">{status}</Badge>;
     }
   };
 

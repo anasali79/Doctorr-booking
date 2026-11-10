@@ -31,6 +31,87 @@ interface AiMessageListProps {
   confirmationLoadingId: string | null;
 }
 
+function renderInlineFormatting(text: string, isUser: boolean) {
+  // Matches **bold**
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
+      const boldText = part.slice(2, -2).trim();
+      return (
+        <strong
+          key={index}
+          className={
+            isUser
+              ? 'font-bold text-white'
+              : 'font-semibold text-zinc-900 dark:text-zinc-50'
+          }
+        >
+          {boldText}
+        </strong>
+      );
+    }
+    // Remove any remaining stray single asterisks
+    const cleaned = part.replace(/(^|\s)\*(\S)/g, '$1$2').replace(/(\S)\*(\s|$)/g, '$1$2');
+    return <React.Fragment key={index}>{cleaned}</React.Fragment>;
+  });
+}
+
+function renderFormattedMessage(content: string, isUser: boolean) {
+  if (isUser) {
+    return <div className="whitespace-pre-wrap">{content}</div>;
+  }
+
+  const lines = content.split('\n');
+  const elements: React.ReactNode[] = [];
+  let currentList: { text: string; num?: string }[] = [];
+
+  const flushList = (key: number) => {
+    if (currentList.length === 0) return;
+    elements.push(
+      <ul key={`list-${key}`} className="my-2 space-y-1.5 pl-1">
+        {currentList.map((item, i) => (
+          <li key={i} className="flex items-start gap-2 text-sm">
+            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500 dark:bg-blue-400" />
+            <span className="flex-1 leading-relaxed">
+              {renderInlineFormatting(item.text, false)}
+            </span>
+          </li>
+        ))}
+      </ul>,
+    );
+    currentList = [];
+  };
+
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+
+    // Check if line is a bullet (*, -, •) or numbered list item
+    const bulletMatch = trimmed.match(/^([*•\-]|(\d+\.))\s+(.*)$/);
+    if (bulletMatch) {
+      currentList.push({ text: bulletMatch[3], num: bulletMatch[2] });
+      return;
+    }
+
+    // Flush any pending list before normal paragraph
+    flushList(index);
+
+    if (!trimmed) {
+      elements.push(<div key={`space-${index}`} className="h-1.5" />);
+      return;
+    }
+
+    elements.push(
+      <p key={`p-${index}`} className="leading-relaxed">
+        {renderInlineFormatting(line, false)}
+      </p>,
+    );
+  });
+
+  flushList(lines.length);
+
+  return <div className="space-y-1 text-sm">{elements}</div>;
+}
+
 export function AiMessageList({
   messages,
   isLoading,
@@ -78,13 +159,13 @@ export function AiMessageList({
             )}
 
             <div
-              className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-xs ${
+              className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-xs ${
                 isUser
                   ? 'bg-blue-600 text-white rounded-tr-xs'
-                  : 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800/90 dark:text-zinc-100 rounded-tl-xs border border-zinc-200/60 dark:border-zinc-700/60'
+                  : 'bg-white text-zinc-900 dark:bg-zinc-800/95 dark:text-zinc-100 rounded-tl-xs border border-zinc-200/80 dark:border-zinc-700/80'
               }`}
             >
-              <div className="whitespace-pre-wrap">{msg.content}</div>
+              {renderFormattedMessage(msg.content, isUser)}
 
               {/* Confirmation card if required */}
               {!isUser && msg.requiresConfirmation && msg.confirmationId && (
