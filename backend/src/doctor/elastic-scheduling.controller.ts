@@ -125,6 +125,20 @@ export class ElasticSchedulingController {
     };
   }
 
+  @Get('patient/reschedule-requests/:id/alternatives')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PATIENT)
+  async getPatientRescheduleAlternatives(
+    @CurrentUser() user: { id: string },
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+  ) {
+    const data = await this.elasticSchedulingService.getPatientRescheduleAlternatives(user.id, id);
+    return {
+      message: 'Available alternative slots retrieved successfully',
+      data,
+    };
+  }
+
   @Post('patient/reschedule-requests/:id/accept')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.PATIENT)

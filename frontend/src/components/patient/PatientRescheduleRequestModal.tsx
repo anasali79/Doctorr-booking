@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
@@ -17,6 +16,8 @@ import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import {
   elasticSchedulingApi,
   RescheduleRequestRecord,
+  PatientAlternativesResult,
+  PatientAlternativeSlot,
 } from '@/lib/api/elastic-scheduling';
 import { Slot } from '@/types';
 import {
@@ -24,13 +25,12 @@ import {
   Calendar,
   Clock,
   CheckCircle2,
-  XCircle,
   RotateCcw,
   Loader2,
   ArrowRight,
   ShieldAlert,
-  CreditCard,
-  User,
+  Sparkles,
+  ChevronRight,
 } from 'lucide-react';
 
 interface PatientRescheduleRequestModalProps {
@@ -47,48 +47,92 @@ export function PatientRescheduleRequestModal({
   onSuccess,
 }: PatientRescheduleRequestModalProps) {
   const [submitting, setSubmitting] = useState<boolean>(false);
-  const [showAlternativePicker, setShowAlternativePicker] = useState<boolean>(false);
+  const [showCustomDatePicker, setShowCustomDatePicker] = useState<boolean>(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState<boolean>(false);
 
-  // Alternative picker state
+  // Prioritized alternatives state
+  const [loadingAlternatives, setLoadingAlternatives] = useState<boolean>(false);
+  const [alternativesData, setAlternativesData] = useState<PatientAlternativesResult | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<{
+    date: string;
+    startTime: string;
+    endTime: string;
+    schedulingType?: string;
+  } | null>(null);
+
+  // Custom date picker fallback state
   const todayStr = getTodayIST();
-  const [altDate, setAltDate] = useState<string>(todayStr);
-  const [altSlots, setAltSlots] = useState<Slot[]>([]);
-  const [loadingAltSlots, setLoadingAltSlots] = useState<boolean>(false);
-  const [selectedAltSlot, setSelectedAltSlot] = useState<Slot | null>(null);
+  const [customDate, setCustomDate] = useState<string>(todayStr);
+  const [customSlots, setCustomSlots] = useState<Slot[]>([]);
+  const [loadingCustomSlots, setLoadingCustomSlots] = useState<boolean>(false);
 
   // Cancellation state
-  const [cancelReason, setCancelReason] = useState<string>('Cannot make proposed reschedule time');
+  const [cancelReason, setCancelReason] = useState<string>('Doctor schedule changed');
 
+  // Load prioritized alternatives on open
   useEffect(() => {
-    if (request) {
-      setAltDate(request.proposedDate >= todayStr ? request.proposedDate : todayStr);
-      setShowAlternativePicker(false);
+    if (!isOpen || !request) {
+      setAlternativesData(null);
+      setSelectedSlot(null);
+      setShowCustomDatePicker(false);
       setShowCancelConfirm(false);
-      setSelectedAltSlot(null);
+      return;
     }
-  }, [request, todayStr]);
 
-  // Load alternative slots when alternative picker is opened or date changes
+    let isMounted = true;
+    const fetchAlternatives = async () => {
+      try {
+        setLoadingAlternatives(true);
+        const data = await elasticSchedulingApi.getPatientAlternatives(request.id);
+        if (isMounted) {
+          setAlternativesData(data);
+          // If doctor specifically held a new proposed slot with a token, pre-select it
+          if (
+            request.proposedTokenNumber &&
+            request.proposedStartTime &&
+            request.proposedDate &&
+            request.proposedStartTime !== request.originalStartTime
+          ) {
+            setSelectedSlot({
+              date: request.proposedDate,
+              startTime: request.proposedStartTime,
+              endTime: request.proposedEndTime,
+              schedulingType: request.proposedSchedulingType,
+            });
+          }
+        }
+      } catch {
+        // Fallback gracefully if alternatives endpoint has an issue
+      } finally {
+        if (isMounted) setLoadingAlternatives(false);
+      }
+    };
+
+    fetchAlternatives();
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, request]);
+
+  // Load custom date slots when custom date picker is active
   useEffect(() => {
-    if (!isOpen || !showAlternativePicker || !request) return;
+    if (!isOpen || !showCustomDatePicker || !request) return;
 
     let cancelled = false;
     const fetchSlots = async () => {
       try {
-        setLoadingAltSlots(true);
-        setSelectedAltSlot(null);
+        setLoadingCustomSlots(true);
         const res = await clientAxios.get<{ data: Slot[] }>(
           `/api/doctor/${request.doctorId}/slots-proxy`,
-          { params: { date: altDate } },
+          { params: { date: customDate } },
         );
         if (!cancelled) {
-          setAltSlots(res.data?.data || []);
+          setCustomSlots(res.data?.data || []);
         }
       } catch {
-        if (!cancelled) setAltSlots([]);
+        if (!cancelled) setCustomSlots([]);
       } finally {
-        if (!cancelled) setLoadingAltSlots(false);
+        if (!cancelled) setLoadingCustomSlots(false);
       }
     };
 
@@ -96,57 +140,36 @@ export function PatientRescheduleRequestModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, showAlternativePicker, request, altDate]);
+  }, [isOpen, showCustomDatePicker, request, customDate]);
 
   if (!request) return null;
 
   const doctorName = request.doctor?.fullName || 'Your Doctor';
   const origDate = formatDate(request.originalDate);
-  const origTime = formatTime(request.originalStartTime);
-  const propDate = formatDate(request.proposedDate);
-  const propTime = `${formatTime(request.proposedStartTime)} – ${formatTime(request.proposedEndTime)}`;
+  const origTime = `${formatTime(request.originalStartTime)} – ${formatTime(request.originalEndTime)}`;
 
-  // Action 1: Confirm Appointment
-  const handleConfirmProposed = async () => {
-    try {
-      setSubmitting(true);
-      await elasticSchedulingApi.patientAccept(request.id);
-      toast.success('Appointment Confirmed!', {
-        description: `Your appointment with Dr. ${doctorName} is confirmed for ${propDate} at ${formatTime(request.proposedStartTime)}.`,
-      });
-      onSuccess();
-      onClose();
-    } catch (err: unknown) {
-      toast.error('Failed to confirm proposed appointment', {
-        description: extractErrorMessage(err),
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Action 2: Choose Another Slot
-  const handleConfirmAlternative = async () => {
-    if (!selectedAltSlot) {
-      toast.error('Please select an available slot');
+  // Confirm selected slot (either prioritized or custom)
+  const handleConfirmSelectedSlot = async () => {
+    if (!selectedSlot) {
+      toast.error('Please select an alternative slot');
       return;
     }
 
     try {
       setSubmitting(true);
       await elasticSchedulingApi.patientChooseAlternative(request.id, {
-        date: altDate,
-        startTime: selectedAltSlot.startTime,
-        endTime: selectedAltSlot.endTime,
+        date: selectedSlot.date,
+        startTime: selectedSlot.startTime,
+        endTime: selectedSlot.endTime,
       });
 
-      toast.success('Alternative Slot Confirmed!', {
-        description: `Appointment rescheduled to ${formatDate(altDate)} at ${formatTime(selectedAltSlot.startTime)}.`,
+      toast.success('Appointment Rescheduled Successfully!', {
+        description: `Your appointment is confirmed for ${formatDate(selectedSlot.date)} at ${formatTime(selectedSlot.startTime)}.`,
       });
       onSuccess();
       onClose();
     } catch (err: unknown) {
-      toast.error('Failed to select alternative slot', {
+      toast.error('Failed to reschedule appointment', {
         description: extractErrorMessage(err),
       });
     } finally {
@@ -154,14 +177,14 @@ export function PatientRescheduleRequestModal({
     }
   };
 
-  // Action 3: Cancel Appointment with Refund
+  // Cancel Appointment with Refund
   const handleCancelAppointment = async () => {
     try {
       setSubmitting(true);
       const res = await elasticSchedulingApi.patientCancel(request.id, cancelReason);
       toast.success('Appointment Cancelled', {
         description: res.refund
-          ? 'Your appointment has been cancelled and refund initiated.'
+          ? 'Your appointment has been cancelled and full refund initiated.'
           : 'Your appointment has been cancelled.',
       });
       onSuccess();
@@ -175,6 +198,11 @@ export function PatientRescheduleRequestModal({
     }
   };
 
+  const sameDay = alternativesData?.alternatives?.sameDay || [];
+  const nextDay = alternativesData?.alternatives?.nextDay || [];
+  const futureDates = alternativesData?.alternatives?.futureDates || [];
+  const totalSlots = (alternativesData?.totalAvailableSlots ?? (sameDay.length + nextDay.length + futureDates.length));
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-xl bg-white border border-slate-200 shadow-2xl rounded-xl max-h-[92vh] flex flex-col p-0 overflow-hidden">
@@ -183,131 +211,271 @@ export function PatientRescheduleRequestModal({
           <div className="flex items-center gap-2.5">
             <Clock className="w-5 h-5 text-blue-200 shrink-0" />
             <DialogTitle className="text-base font-bold text-white">
-              Appointment Rescheduling Request
+              Appointment Rescheduling Required
             </DialogTitle>
           </div>
           <p className="text-xs text-blue-100 mt-1 leading-relaxed">
-            Your appointment with <strong>Dr. {doctorName}</strong>, originally scheduled for{' '}
-            <strong>{origDate} at {origTime}</strong>, needs to be rescheduled because the doctor has
+            Your appointment with <strong>Dr. {doctorName}</strong> originally booked for{' '}
+            <strong>{origDate} at {origTime}</strong> needs to be rescheduled because the doctor has
             updated their clinic availability.
           </p>
         </div>
 
         <div className="p-5 overflow-y-auto flex-1 space-y-4">
-          {!showAlternativePicker && !showCancelConfirm ? (
+          {!showCustomDatePicker && !showCancelConfirm ? (
             <>
-              {/* Proposal Comparison Card */}
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
-                  Proposed Replacement Time
+              {/* Original Appointment Card */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                  Original Appointment Details
                 </span>
-
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white p-3.5 rounded-lg border border-slate-200 shadow-xs">
-                  <div>
-                    <div className="text-xs text-slate-400 line-through font-mono">
-                      Original: {origDate} at {origTime}
-                    </div>
-                    <div className="text-base font-bold text-blue-700 font-mono mt-0.5 flex items-center gap-2">
-                      <span>{propDate}</span>
-                      <span>•</span>
-                      <span>{propTime}</span>
-                    </div>
-                    {request.proposedTokenNumber && (
-                      <span className="text-xs text-slate-600 font-medium">
-                        Token Number: #{request.proposedTokenNumber}
-                      </span>
-                    )}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 text-xs text-slate-700">
+                    <span className="flex items-center gap-1 font-mono">
+                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                      {origDate}
+                    </span>
+                    <span className="flex items-center gap-1 font-mono font-medium text-slate-900">
+                      <Clock className="w-3.5 h-3.5 text-blue-500" />
+                      {origTime}
+                    </span>
                   </div>
-
-                  <Badge className="bg-emerald-50 text-emerald-800 border-emerald-300 font-semibold text-xs shrink-0">
-                    <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-600" />
-                    Slot Temporarily Reserved
-                  </Badge>
+                  {request.appointmentId && (
+                    <Badge variant="outline" className="text-[10px] font-bold py-0 text-blue-700 border-blue-200 bg-blue-50">
+                      Token #{request.proposedTokenNumber || '—'}
+                    </Badge>
+                  )}
                 </div>
-
                 {request.doctorReason && (
-                  <p className="text-xs text-slate-500 italic">
+                  <p className="text-xs text-slate-500 italic pt-1">
                     Doctor note: &ldquo;{request.doctorReason}&rdquo;
                   </p>
                 )}
               </div>
 
-              {/* 3 Main Action Choices */}
-              <div className="space-y-2.5 pt-2">
-                <p className="text-xs font-semibold text-slate-700">
-                  Please choose how you would like to proceed:
+              {/* Instructions */}
+              <div>
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Select an Available Alternative Slot
+                </h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Choose a suitable time below to confirm your rescheduled appointment immediately:
                 </p>
+              </div>
 
-                {/* Option 1: Confirm */}
-                <button
-                  type="button"
-                  onClick={handleConfirmProposed}
-                  disabled={submitting}
-                  className="w-full p-3.5 rounded-xl border-2 border-blue-500 bg-blue-50/60 hover:bg-blue-100/70 transition-all text-left flex items-center justify-between group"
-                >
-                  <div className="space-y-0.5">
-                    <span className="font-bold text-sm text-blue-900 block group-hover:text-blue-950">
-                      1. Confirm Proposed Appointment
-                    </span>
-                    <span className="text-xs text-blue-700 block">
-                      Accept {propDate} at {formatTime(request.proposedStartTime)}
+              {/* Loading indicator */}
+              {loadingAlternatives ? (
+                <div className="p-8 text-center text-xs text-slate-400">
+                  <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
+                  Finding available slots with Dr. {doctorName}...
+                </div>
+              ) : totalSlots === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-500 bg-slate-50 rounded-lg border border-dashed border-slate-200 space-y-2">
+                  <AlertCircle className="w-5 h-5 text-amber-500 mx-auto" />
+                  <p>No nearby automatic slots found for this doctor.</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCustomDatePicker(true)}
+                    className="text-xs"
+                  >
+                    Browse Other Dates
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3.5">
+                  {/* Priority 1: Same Day */}
+                  {sameDay.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                        <span className="text-xs font-bold text-emerald-900 uppercase tracking-wider">
+                          Priority 1: Same Day ({formatDate(sameDay[0].date)})
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {sameDay.map((slot, idx) => {
+                          const isSelected =
+                            selectedSlot?.date === slot.date &&
+                            selectedSlot?.startTime === slot.startTime;
+                          return (
+                            <button
+                              key={`same-${idx}`}
+                              type="button"
+                              onClick={() => setSelectedSlot(slot)}
+                              className={`p-3 rounded-lg border text-left text-xs transition-all flex items-center justify-between ${
+                                isSelected
+                                  ? 'border-blue-600 bg-blue-50/90 ring-2 ring-blue-500/30 shadow-xs'
+                                  : 'border-slate-200 bg-white hover:border-blue-300'
+                              }`}
+                            >
+                              <div>
+                                <div className="font-mono font-semibold text-slate-900">
+                                  {formatTime(slot.startTime)} – {formatTime(slot.endTime)}
+                                </div>
+                                <div className="text-[10px] text-emerald-700 font-medium mt-0.5">
+                                  {slot.availableCapacity} seat(s) available
+                                </div>
+                              </div>
+                              {isSelected && <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Priority 2: Next Day */}
+                  {nextDay.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-blue-500" />
+                        <span className="text-xs font-bold text-blue-900 uppercase tracking-wider">
+                          Priority 2: Next Day ({formatDate(nextDay[0].date)})
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {nextDay.map((slot, idx) => {
+                          const isSelected =
+                            selectedSlot?.date === slot.date &&
+                            selectedSlot?.startTime === slot.startTime;
+                          return (
+                            <button
+                              key={`next-${idx}`}
+                              type="button"
+                              onClick={() => setSelectedSlot(slot)}
+                              className={`p-3 rounded-lg border text-left text-xs transition-all flex items-center justify-between ${
+                                isSelected
+                                  ? 'border-blue-600 bg-blue-50/90 ring-2 ring-blue-500/30 shadow-xs'
+                                  : 'border-slate-200 bg-white hover:border-blue-300'
+                              }`}
+                            >
+                              <div>
+                                <div className="font-mono font-semibold text-slate-900">
+                                  {formatTime(slot.startTime)} – {formatTime(slot.endTime)}
+                                </div>
+                                <div className="text-[10px] text-blue-700 font-medium mt-0.5">
+                                  {slot.availableCapacity} seat(s) available
+                                </div>
+                              </div>
+                              {isSelected && <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Priority 3: Subsequent Days */}
+                  {futureDates.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-slate-400" />
+                        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Priority 3: Upcoming Dates
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {futureDates.map((slot, idx) => {
+                          const isSelected =
+                            selectedSlot?.date === slot.date &&
+                            selectedSlot?.startTime === slot.startTime;
+                          return (
+                            <button
+                              key={`future-${idx}`}
+                              type="button"
+                              onClick={() => setSelectedSlot(slot)}
+                              className={`p-3 rounded-lg border text-left text-xs transition-all flex items-center justify-between ${
+                                isSelected
+                                  ? 'border-blue-600 bg-blue-50/90 ring-2 ring-blue-500/30 shadow-xs'
+                                  : 'border-slate-200 bg-white hover:border-blue-300'
+                              }`}
+                            >
+                              <div>
+                                <div className="text-[11px] font-semibold text-slate-800">
+                                  {formatDate(slot.date)}
+                                </div>
+                                <div className="font-mono text-slate-600 text-xs mt-0.5">
+                                  {formatTime(slot.startTime)} – {formatTime(slot.endTime)}
+                                </div>
+                              </div>
+                              {isSelected && <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Selection Confirmation Bar */}
+              {selectedSlot && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-blue-600 block">Selected Replacement Slot</span>
+                    <span className="font-semibold">
+                      {formatDate(selectedSlot.date)} at {formatTime(selectedSlot.startTime)} – {formatTime(selectedSlot.endTime)}
                     </span>
                   </div>
-                  <ArrowRight className="w-4 h-4 text-blue-600 group-hover:translate-x-1 transition-transform" />
-                </button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleConfirmSelectedSlot}
+                    disabled={submitting}
+                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4"
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                        Confirming...
+                      </>
+                    ) : (
+                      'Confirm This Slot'
+                    )}
+                  </Button>
+                </div>
+              )}
 
-                {/* Option 2: Choose Another Slot */}
-                <button
+              {/* Alternative Actions */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                <Button
                   type="button"
-                  onClick={() => setShowAlternativePicker(true)}
-                  disabled={submitting}
-                  className="w-full p-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition-all text-left flex items-center justify-between"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowCustomDatePicker(true)}
+                  className="text-xs text-slate-600 hover:text-slate-900"
                 >
-                  <div className="space-y-0.5">
-                    <span className="font-bold text-sm text-slate-900 block">
-                      2. Choose Another Available Slot
-                    </span>
-                    <span className="text-xs text-slate-500 block">
-                      Browse open dates and times that better suit your schedule
-                    </span>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-slate-400" />
-                </button>
+                  Browse Custom Date →
+                </Button>
 
-                {/* Option 3: Cancel Appointment */}
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setShowCancelConfirm(true)}
-                  disabled={submitting}
-                  className="w-full p-3.5 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 transition-all text-left flex items-center justify-between text-rose-800"
+                  className="text-xs text-rose-600 hover:text-rose-800 hover:bg-rose-50"
                 >
-                  <div className="space-y-0.5">
-                    <span className="font-bold text-sm text-rose-900 block">
-                      3. Cancel Appointment & Refund
-                    </span>
-                    <span className="text-xs text-rose-600 block">
-                      Cancel booking with full refund to original payment method
-                    </span>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-rose-400" />
-                </button>
+                  Cancel Appointment & Refund
+                </Button>
               </div>
             </>
-          ) : showAlternativePicker ? (
-            /* Alternative Slot Picker View */
+          ) : showCustomDatePicker ? (
+            /* Custom Date Picker View */
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                  Browse Alternative Openings
+                  Pick a Custom Date
                 </span>
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => setShowAlternativePicker(false)}
+                  onClick={() => setShowCustomDatePicker(false)}
                   className="text-xs text-slate-600"
                 >
-                  ← Back to Proposal
+                  ← Back to Recommendations
                 </Button>
               </div>
 
@@ -318,44 +486,50 @@ export function PatientRescheduleRequestModal({
                 <Input
                   type="date"
                   min={todayStr}
-                  value={altDate}
-                  onChange={(e) => setAltDate(e.target.value)}
+                  value={customDate}
+                  onChange={(e) => setCustomDate(e.target.value)}
                   className="font-mono text-sm"
                 />
               </div>
 
               <div>
                 <span className="block text-xs font-semibold text-slate-700 mb-2">
-                  Available Slots on {formatDate(altDate)}
+                  Available Slots on {formatDate(customDate)}
                 </span>
 
-                {loadingAltSlots ? (
+                {loadingCustomSlots ? (
                   <div className="p-8 text-center text-xs text-slate-400">
                     <Loader2 className="w-4 h-4 animate-spin mx-auto mb-1 text-blue-600" />
                     Finding available slots...
                   </div>
-                ) : altSlots.length === 0 ? (
+                ) : customSlots.length === 0 ? (
                   <div className="p-6 text-center text-xs text-slate-500 bg-slate-50 rounded-lg border border-dashed border-slate-200">
                     No open slots found on this date. Please try another date.
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-56 overflow-y-auto p-1">
-                    {altSlots
+                    {customSlots
                       .filter(
                         (s) =>
                           (s.status === 'available' || s.status === 'cancel and available for booking') &&
-                          !(altDate === request.originalDate && s.startTime === request.originalStartTime),
+                          !(customDate === request.originalDate && s.startTime === request.originalStartTime),
                       )
                       .map((s, idx) => {
                         const isSelected =
-                          selectedAltSlot?.startTime === s.startTime &&
-                          selectedAltSlot?.endTime === s.endTime;
+                          selectedSlot?.date === customDate &&
+                          selectedSlot?.startTime === s.startTime;
 
                         return (
                           <button
                             key={idx}
                             type="button"
-                            onClick={() => setSelectedAltSlot(s)}
+                            onClick={() =>
+                              setSelectedSlot({
+                                date: customDate,
+                                startTime: s.startTime,
+                                endTime: s.endTime,
+                              })
+                            }
                             className={`p-2.5 rounded-lg border text-left text-xs transition-all flex flex-col justify-between ${
                               isSelected
                                 ? 'border-blue-600 bg-blue-50/80 ring-2 ring-blue-500/30 font-semibold'
@@ -375,40 +549,25 @@ export function PatientRescheduleRequestModal({
                 )}
               </div>
 
-              {selectedAltSlot && (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 font-mono">
-                  Selected: {formatDate(altDate)} at {formatTime(selectedAltSlot.startTime)} – {formatTime(selectedAltSlot.endTime)}
+              {selectedSlot && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-blue-600 block">Selected Slot</span>
+                    <span className="font-semibold">
+                      {formatDate(selectedSlot.date)} at {formatTime(selectedSlot.startTime)} – {formatTime(selectedSlot.endTime)}
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleConfirmSelectedSlot}
+                    disabled={submitting}
+                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4"
+                  >
+                    Confirm This Slot
+                  </Button>
                 </div>
               )}
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowAlternativePicker(false)}
-                  disabled={submitting}
-                  className="text-xs"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={submitting || !selectedAltSlot}
-                  onClick={handleConfirmAlternative}
-                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4"
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
-                      Confirming...
-                    </>
-                  ) : (
-                    'Confirm Selected Opening'
-                  )}
-                </Button>
-              </div>
             </div>
           ) : (
             /* Cancel Appointment View */
@@ -506,4 +665,3 @@ export function PatientRescheduleRequestModal({
     </Dialog>
   );
 }
-

@@ -182,6 +182,40 @@ describe('AvailabilityService - Wave & Stream Scheduling', () => {
         status: 'available',
       });
     });
+
+    it('should auto-align slotDuration to 30m and calculate revised capacity 3 when a 60m Wave shift is shrunk to 30m window', async () => {
+      // Shift in DB with 09:00-09:30 window, 60m duration, maxPatients 5
+      recurringRepo.find.mockResolvedValueOnce([
+        {
+          id: 'rec-wave-shrunk',
+          doctorId: mockDoctor.id,
+          dayOfWeek: DayOfWeek.WEDNESDAY,
+          startTime: '09:00',
+          endTime: '09:30',
+          slotDuration: 60,
+          schedulingType: SchedulingType.WAVE,
+          maxPatients: 5,
+        },
+      ]);
+      customRepo.find.mockResolvedValueOnce([]);
+      appointmentRepo.find.mockResolvedValueOnce([
+        { id: 'app-w1', startTime: '09:00', endTime: '09:30', status: AppointmentStatus.CONFIRMED },
+        { id: 'app-w2', startTime: '09:00', endTime: '09:30', status: AppointmentStatus.CONFIRMED },
+        { id: 'app-w3', startTime: '09:00', endTime: '09:30', status: AppointmentStatus.CONFIRMED },
+      ]);
+
+      const slots = await service.getAvailableSlots(mockDoctor.id!, '2026-11-25');
+
+      expect(slots).toHaveLength(1);
+      expect(slots[0]).toMatchObject({
+        startTime: '09:00',
+        endTime: '09:30',
+        maxPatients: 3,
+        bookedCount: 3,
+        availableCount: 0,
+        status: 'booked',
+      });
+    });
   });
 
   describe('Stream Scheduling Workflow', () => {
@@ -206,7 +240,7 @@ describe('AvailabilityService - Wave & Stream Scheduling', () => {
       ]);
 
       // 2026-11-10 is Tuesday
-      const slots = await service.getAvailableSlots(mockDoctor.id!, '2026-11-10');
+      const slots = await service.getAvailableSlots(mockDoctor.id!, '2026-11-17');
 
       expect(slots).toHaveLength(1);
       expect(slots[0]).toMatchObject({
@@ -238,7 +272,7 @@ describe('AvailabilityService - Wave & Stream Scheduling', () => {
         { id: 'app-s2', startTime: '14:00', endTime: '16:00', status: AppointmentStatus.CONFIRMED },
       ]);
 
-      const slots = await service.getAvailableSlots(mockDoctor.id!, '2026-11-10');
+      const slots = await service.getAvailableSlots(mockDoctor.id!, '2026-11-17');
 
       expect(slots).toHaveLength(1);
       expect(slots[0]).toMatchObject({
