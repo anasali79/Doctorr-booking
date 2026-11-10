@@ -354,6 +354,17 @@ export class AvailabilityService {
       } else {
         const dur = override.slotDuration ?? 15;
         const sType = override.schedulingType ?? SchedulingType.STREAM;
+        const winMins = toMinutes(override.endTime) - toMinutes(override.startTime);
+        const effectiveDur =
+          sType === SchedulingType.WAVE && winMins > 0 && dur > winMins ? winMins : dur;
+        let effectiveMaxPatients =
+          override.maxPatients ?? (sType === SchedulingType.WAVE ? 3 : 10);
+        if (sType === SchedulingType.WAVE && winMins > 0 && dur > winMins) {
+          effectiveMaxPatients = Math.max(
+            1,
+            Math.round(((override.maxPatients || 3) * winMins) / dur),
+          );
+        }
 
         let dividedSlots: DividedSlotWithBookings[] = [];
 
@@ -361,10 +372,10 @@ export class AvailabilityService {
           const waveSlots = this.divideIntoSlots(
             override.startTime,
             override.endTime,
-            dur,
+            effectiveDur,
             override.bufferTime ?? 0,
           );
-          const maxPatients = override.maxPatients || 3;
+          const maxPatients = effectiveMaxPatients;
           dividedSlots = waveSlots.map((ws) => {
             const matchingApps = (appsByDate[cleanOverrideDate] || []).filter(
               (app) =>
@@ -431,9 +442,9 @@ export class AvailabilityService {
           endTime: override.endTime,
           schedulingType: sType,
           dividedSlots,
-          slotDuration: dur,
+          slotDuration: effectiveDur,
           bufferTime: override.bufferTime ?? 0,
-          maxPatients: override.maxPatients ?? (sType === SchedulingType.WAVE ? 3 : 10),
+          maxPatients: effectiveMaxPatients,
         };
 
         customMap[cleanOverrideDate].slots.push(slotObj);
@@ -493,6 +504,17 @@ export class AvailabilityService {
             slots: dateRecurringSlots.map((s) => {
               const dur = s.slotDuration ?? 15;
               const sType = s.schedulingType ?? SchedulingType.STREAM;
+              const winMins = toMinutes(s.endTime) - toMinutes(s.startTime);
+              const effectiveDur =
+                sType === SchedulingType.WAVE && winMins > 0 && dur > winMins ? winMins : dur;
+              let effectiveMaxPatients =
+                s.maxPatients ?? (sType === SchedulingType.WAVE ? 3 : 10);
+              if (sType === SchedulingType.WAVE && winMins > 0 && dur > winMins) {
+                effectiveMaxPatients = Math.max(
+                  1,
+                  Math.round(((s.maxPatients || 3) * winMins) / dur),
+                );
+              }
 
               let dividedSlots: DividedSlotWithBookings[] = [];
 
@@ -500,10 +522,10 @@ export class AvailabilityService {
                 const waveSlots = this.divideIntoSlots(
                   s.startTime,
                   s.endTime,
-                  dur,
+                  effectiveDur,
                   s.bufferTime ?? 0,
                 );
-                const maxPatients = s.maxPatients || 3;
+                const maxPatients = effectiveMaxPatients;
                 dividedSlots = waveSlots.map((ws) => {
                   const matchingApps = (appsByDate[dateStr] || []).filter(
                     (app) =>
@@ -570,9 +592,9 @@ export class AvailabilityService {
                 endTime: s.endTime,
                 schedulingType: sType,
                 dividedSlots,
-                slotDuration: dur,
+                slotDuration: effectiveDur,
                 bufferTime: s.bufferTime ?? 0,
-                maxPatients: s.maxPatients ?? (sType === SchedulingType.WAVE ? 3 : 10),
+                maxPatients: effectiveMaxPatients,
               };
 
               return slotObj;
@@ -1416,6 +1438,17 @@ export class AvailabilityService {
         slots: customSlots.map((s) => {
           const dur = s.slotDuration ?? 15;
           const sType = s.schedulingType ?? SchedulingType.STREAM;
+          const winMins = toMinutes(s.endTime) - toMinutes(s.startTime);
+          const effectiveDur =
+            sType === SchedulingType.WAVE && winMins > 0 && dur > winMins ? winMins : dur;
+          let effectiveMaxPatients =
+            s.maxPatients ?? (sType === SchedulingType.WAVE ? 3 : 10);
+          if (sType === SchedulingType.WAVE && winMins > 0 && dur > winMins) {
+            effectiveMaxPatients = Math.max(
+              1,
+              Math.round(((s.maxPatients || 3) * winMins) / dur),
+            );
+          }
 
           let dividedSlots: Array<{
             startTime: string;
@@ -1430,10 +1463,10 @@ export class AvailabilityService {
             const waveSlots = this.divideIntoSlots(
               s.startTime,
               s.endTime,
-              dur,
+              effectiveDur,
               s.bufferTime ?? 0,
             );
-            const maxPatients = s.maxPatients || 3;
+            const maxPatients = effectiveMaxPatients;
             dividedSlots = waveSlots.map((ws) => {
               const bookedCount = appointments.filter(
                 (app) =>
@@ -1483,9 +1516,9 @@ export class AvailabilityService {
             endTime: s.endTime,
             schedulingType: sType,
             dividedSlots,
-            slotDuration: dur,
+            slotDuration: effectiveDur,
             bufferTime: s.bufferTime ?? 0,
-            maxPatients: s.maxPatients ?? (sType === SchedulingType.WAVE ? 3 : 10),
+            maxPatients: effectiveMaxPatients,
           };
 
           return slotObj;
@@ -1506,6 +1539,17 @@ export class AvailabilityService {
         slots: recurringSlots.map((s) => {
           const dur = s.slotDuration ?? 15;
           const sType = s.schedulingType ?? SchedulingType.STREAM;
+          const winMins = toMinutes(s.endTime) - toMinutes(s.startTime);
+          const effectiveDur =
+            sType === SchedulingType.WAVE && winMins > 0 && dur > winMins ? winMins : dur;
+          let effectiveMaxPatients =
+            s.maxPatients ?? (sType === SchedulingType.WAVE ? 3 : 10);
+          if (sType === SchedulingType.WAVE && winMins > 0 && dur > winMins) {
+            effectiveMaxPatients = Math.max(
+              1,
+              Math.round(((s.maxPatients || 3) * winMins) / dur),
+            );
+          }
 
           let dividedSlots: Array<{
             startTime: string;
@@ -1520,10 +1564,10 @@ export class AvailabilityService {
             const waveSlots = this.divideIntoSlots(
               s.startTime,
               s.endTime,
-              dur,
+              effectiveDur,
               s.bufferTime ?? 0,
             );
-            const maxPatients = s.maxPatients || 3;
+            const maxPatients = effectiveMaxPatients;
             dividedSlots = waveSlots.map((ws) => {
               const bookedCount = appointments.filter(
                 (app) =>
@@ -1573,9 +1617,9 @@ export class AvailabilityService {
             endTime: s.endTime,
             schedulingType: sType,
             dividedSlots,
-            slotDuration: dur,
+            slotDuration: effectiveDur,
             bufferTime: s.bufferTime ?? 0,
-            maxPatients: s.maxPatients ?? (sType === SchedulingType.WAVE ? 3 : 10),
+            maxPatients: effectiveMaxPatients,
           };
 
           return slotObj;
@@ -1919,13 +1963,23 @@ export class AvailabilityService {
     for (const interval of intervals) {
       if (interval.schedulingType === SchedulingType.WAVE) {
         const slotDur = durationInput ?? interval.slotDuration ?? 30;
+        const winMins = toMinutes(interval.endTime) - toMinutes(interval.startTime);
+        const effectiveDur =
+          winMins > 0 && slotDur > winMins ? winMins : slotDur;
         const generated = this.divideIntoSlots(
           interval.startTime,
           interval.endTime,
-          slotDur,
+          effectiveDur,
           interval.bufferTime ?? 0,
         );
-        const waveCapacity = interval.maxPatients && interval.maxPatients > 0 ? interval.maxPatients : 3;
+        let waveCapacity =
+          interval.maxPatients && interval.maxPatients > 0 ? interval.maxPatients : 3;
+        if (winMins > 0 && slotDur > winMins) {
+          waveCapacity = Math.max(
+            1,
+            Math.round((waveCapacity * winMins) / slotDur),
+          );
+        }
         for (const slot of generated) {
           candidateSlots.push({
             ...slot,
