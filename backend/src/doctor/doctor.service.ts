@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -9,6 +10,7 @@ import { Repository, SelectQueryBuilder, In } from 'typeorm';
 import { Doctor } from './entities/doctor.entity';
 import { RecurringAvailability } from './entities/recurring-availability.entity';
 import { DoctorVerification } from './entities/doctor-verification.entity';
+import { VerificationStatus } from '../common/enums/verification-status.enum';
 import { Appointment } from '../appointment/entities/appointment.entity';
 import { Patient } from '../patient/entities/patient.entity';
 import { AppointmentStatus } from '../common/enums/appointment-status.enum';
@@ -118,18 +120,10 @@ export class DoctorService {
         a.status !== AppointmentStatus.RESCHEDULED,
     );
 
-    // Ensure sequential real tokens for today's appointments
-    const sortedToday = todayAppointments.sort((a, b) =>
+    // Sort today's appointments chronologically
+    const sortedToday = [...todayAppointments].sort((a, b) =>
       a.startTime.localeCompare(b.startTime),
     );
-    sortedToday.forEach((appt, idx) => {
-      if (!appt.tokenNumber || appt.tokenNumber <= 0) {
-        appt.tokenNumber = idx + 1;
-        this.appointmentRepository
-          .update(appt.id, { tokenNumber: idx + 1 })
-          .catch(() => {});
-      }
-    });
 
     const upcoming = allAppointments.filter(
       (a) =>
@@ -167,15 +161,13 @@ export class DoctorService {
           noShow: noShow.length,
           totalPatients: uniquePatients.size,
         },
-        todayAppointments: todayAppointments
-          .sort((a, b) => a.startTime.localeCompare(b.startTime))
-          .map((appt) => ({
-            id: appt.id,
-            date: appt.date,
-            startTime: appt.startTime,
-            endTime: appt.endTime,
-            status: appt.status,
-            tokenNumber: appt.tokenNumber,
+        todayAppointments: sortedToday.map((appt, idx) => ({
+          id: appt.id,
+          date: appt.date,
+          startTime: appt.startTime,
+          endTime: appt.endTime,
+          status: appt.status,
+          tokenNumber: appt.tokenNumber ?? idx + 1,
             queuePosition: appt.queuePosition,
             estimatedWaitTime: appt.estimatedWaitTime,
             checkedInAt: appt.checkedInAt,
@@ -201,6 +193,16 @@ export class DoctorService {
     }
 
     const qb = this.doctorRepository.createQueryBuilder('doctor');
+
+    // Bug #14 Fix: Public discovery only shows APPROVED verified doctors by default
+    if (!query.includeUnverified) {
+      qb.innerJoin(
+        DoctorVerification,
+        'verification',
+        'verification.doctorId = doctor.id AND verification.status = :approvedStatus',
+        { approvedStatus: VerificationStatus.APPROVED },
+      );
+    }
 
     if (query.specialization) {
       qb.andWhere('LOWER(doctor.specialization) = :specialization', {
@@ -587,6 +589,12 @@ export class DoctorService {
       order: { date: 'DESC', startTime: 'DESC' },
     });
 
+    if (appointments.length === 0) {
+      throw new ForbiddenException(
+        'Access denied: You can only access medical records for patients who have scheduled consultations with you.',
+      );
+    }
+
     const completedVisits = appointments.filter(
       (a) => a.status === AppointmentStatus.COMPLETED,
     ).length;
@@ -701,13 +709,23 @@ export class DoctorService {
       basicHealthInfo?: string;
     },
   ) {
-    await this.findByUserIdOrFail(userId);
+    const doctor = await this.findByUserIdOrFail(userId);
 
     const patient = await this.patientRepository.findOne({
       where: { id: patientId },
     });
     if (!patient) {
       throw new NotFoundException('Patient record not found');
+    }
+
+    const hasConsultation = await this.appointmentRepository.findOne({
+      where: { doctorId: doctor.id, patientId: patient.id },
+    });
+
+    if (!hasConsultation) {
+      throw new ForbiddenException(
+        'Access denied: You can only update medical records for patients who have consulted with you.',
+      );
     }
 
     if (dto.allergies !== undefined) patient.allergies = dto.allergies;
