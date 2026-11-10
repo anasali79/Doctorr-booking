@@ -1601,12 +1601,24 @@ export class AvailabilityService {
     let startMin = toMinutes(startTime);
     const endMin = toMinutes(endTime);
 
-    while (startMin + durationMinutes <= endMin) {
+    const totalSpan = endMin - startMin;
+    if (totalSpan <= 0) return slots;
+
+    // Resilience Guard: If shift window is shorter than durationMinutes (e.g. 30m window but 60m duration set),
+    // clamp duration to totalSpan so at least one valid slot covers the doctor's shift!
+    const effectiveDuration =
+      durationMinutes > totalSpan && totalSpan > 0
+        ? totalSpan
+        : durationMinutes > 0
+        ? durationMinutes
+        : 15;
+
+    while (startMin + effectiveDuration <= endMin) {
       slots.push({
         startTime: toTimeString(startMin),
-        endTime: toTimeString(startMin + durationMinutes),
+        endTime: toTimeString(startMin + effectiveDuration),
       });
-      startMin += durationMinutes + bufferTime;
+      startMin += effectiveDuration + bufferTime;
     }
 
     return slots;

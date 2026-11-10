@@ -671,6 +671,8 @@ export class ElasticSchedulingService {
       });
     }
 
+    const newWinMins = toMinutes(dto.newEndTime) - toMinutes(dto.newStartTime);
+
     let savedShift: any;
     if (dto.shiftType === ShiftType.RECURRING) {
       const shift = await this.recurringRepo.findOne({
@@ -681,6 +683,18 @@ export class ElasticSchedulingService {
       shift.endTime = dto.newEndTime;
       if (dto.newMaxPatients) shift.maxPatients = dto.newMaxPatients;
       if (dto.newSlotDuration) shift.slotDuration = dto.newSlotDuration;
+
+      // Auto-align: when shift window shrunk below current slotDuration in WAVE scheduling,
+      // clamp slotDuration to new window and update maxPatients to revised capacity
+      if (shift.schedulingType === SchedulingType.WAVE) {
+        if (!shift.slotDuration || shift.slotDuration > newWinMins) {
+          shift.slotDuration = newWinMins;
+        }
+        if (conflicts.revisedCapacity) {
+          shift.maxPatients = conflicts.revisedCapacity;
+        }
+      }
+
       savedShift = await this.recurringRepo.save(shift);
     } else {
       const shift = await this.customRepo.findOne({
@@ -691,6 +705,18 @@ export class ElasticSchedulingService {
       shift.endTime = dto.newEndTime;
       if (dto.newMaxPatients) shift.maxPatients = dto.newMaxPatients;
       if (dto.newSlotDuration) shift.slotDuration = dto.newSlotDuration;
+
+      // Auto-align: when shift window shrunk below current slotDuration in WAVE scheduling,
+      // clamp slotDuration to new window and update maxPatients to revised capacity
+      if (shift.schedulingType === SchedulingType.WAVE) {
+        if (!shift.slotDuration || shift.slotDuration > newWinMins) {
+          shift.slotDuration = newWinMins;
+        }
+        if (conflicts.revisedCapacity) {
+          shift.maxPatients = conflicts.revisedCapacity;
+        }
+      }
+
       savedShift = await this.customRepo.save(shift);
     }
 
@@ -723,6 +749,44 @@ export class ElasticSchedulingService {
         { status: RescheduleRequestStatus.CANCELLED },
       );
 
+      // Look for a genuine alternative opening outside the shrunken shift
+      let initialProposedDate = a.date;
+      let initialProposedStart = a.startTime;
+      let initialProposedEnd = a.endTime;
+
+      try {
+        const sameDaySlots = await this.availabilityService.getAvailableSlots(doctor.id, a.date);
+        const altSameDay = sameDaySlots.find(
+          (s) =>
+            (s.status === 'available' || s.status === 'cancel and available for booking') &&
+            (s.availableCount ?? 1) > 0 &&
+            !timesOverlap(s.startTime, s.endTime, dto.newStartTime, dto.newEndTime),
+        );
+
+        if (altSameDay) {
+          initialProposedDate = a.date;
+          initialProposedStart = altSameDay.startTime;
+          initialProposedEnd = altSameDay.endTime;
+        } else {
+          const [ay, am, ad] = a.date.split('-').map(Number);
+          const nextD = new Date(Date.UTC(ay, am - 1, ad + 1));
+          const nextDateStr = nextD.toISOString().split('T')[0];
+          const nextDaySlots = await this.availabilityService.getAvailableSlots(doctor.id, nextDateStr);
+          const altNextDay = nextDaySlots.find(
+            (s) =>
+              (s.status === 'available' || s.status === 'cancel and available for booking') &&
+              (s.availableCount ?? 1) > 0,
+          );
+          if (altNextDay) {
+            initialProposedDate = nextDateStr;
+            initialProposedStart = altNextDay.startTime;
+            initialProposedEnd = altNextDay.endTime;
+          }
+        }
+      } catch {
+        // Fallback gracefully
+      }
+
       const req = this.rescheduleRequestRepo.create({
         appointmentId: a.appointmentId,
         doctorId: doctor.id,
@@ -732,9 +796,9 @@ export class ElasticSchedulingService {
         originalDate: a.date,
         originalStartTime: a.startTime,
         originalEndTime: a.endTime,
-        proposedDate: a.date,
-        proposedStartTime: dto.newStartTime,
-        proposedEndTime: dto.newEndTime,
+        proposedDate: initialProposedDate,
+        proposedStartTime: initialProposedStart,
+        proposedEndTime: initialProposedEnd,
         proposedTokenNumber: null, // Patient selects own slot!
         proposedSchedulingType: a.schedulingType as SchedulingType,
         expiresAt: defaultExpiry,

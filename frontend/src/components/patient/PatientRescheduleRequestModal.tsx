@@ -86,8 +86,13 @@ export function PatientRescheduleRequestModal({
         const data = await elasticSchedulingApi.getPatientAlternatives(request.id);
         if (isMounted) {
           setAlternativesData(data);
-          // If there's already a single proposed slot, pre-select or keep as default
-          if (request.proposedStartTime && request.proposedDate) {
+          // If doctor specifically held a new proposed slot with a token, pre-select it
+          if (
+            request.proposedTokenNumber &&
+            request.proposedStartTime &&
+            request.proposedDate &&
+            request.proposedStartTime !== request.originalStartTime
+          ) {
             setSelectedSlot({
               date: request.proposedDate,
               startTime: request.proposedStartTime,

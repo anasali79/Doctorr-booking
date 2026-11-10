@@ -17,6 +17,7 @@ import {
   CreditCard,
   CheckCircle2,
   Clock,
+  Calendar,
   FileText,
   Sparkles,
 } from 'lucide-react';
@@ -432,26 +433,57 @@ export function PatientAppointmentsClient({
                       </p>
                     </div>
                   </div>
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
-                    Slot Held For You
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                      req.proposedTokenNumber
+                        ? 'bg-blue-100 text-blue-800 border-blue-300'
+                        : 'bg-amber-100 text-amber-800 border-amber-300'
+                    }`}
+                  >
+                    {req.proposedTokenNumber ? 'Slot Held For You' : 'Rescheduling Required'}
                   </span>
                 </div>
 
-                <div className="space-y-1.5 text-xs text-zinc-700 bg-blue-50/40 p-2.5 rounded-xl border border-blue-100">
+                <div
+                  className={`space-y-1.5 text-xs rounded-xl border p-2.5 ${
+                    req.proposedTokenNumber
+                      ? 'bg-blue-50/40 border-blue-100 text-zinc-700'
+                      : 'bg-amber-50/50 border-amber-200 text-amber-950'
+                  }`}
+                >
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Current Slot:</span>
+                    <span className="text-slate-500">Current Slot:</span>
                     <span className="font-semibold text-slate-700 line-through">
                       {formatDate(req.originalDate)} at {formatTime(req.originalStartTime)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between font-bold text-blue-900">
-                    <span className="flex items-center gap-1 text-blue-700">
-                      <Clock className="w-3.5 h-3.5 text-blue-600" /> Proposed Slot:
-                    </span>
-                    <span>
-                      {formatDate(req.proposedDate)} at {formatTime(req.proposedStartTime)}
-                    </span>
-                  </div>
+
+                  {req.proposedTokenNumber ? (
+                    <div className="flex items-center justify-between font-bold text-blue-900">
+                      <span className="flex items-center gap-1 text-blue-700">
+                        <Clock className="w-3.5 h-3.5 text-blue-600" /> Proposed Slot:
+                      </span>
+                      <span>
+                        {formatDate(req.proposedDate)} at {formatTime(req.proposedStartTime)}
+                      </span>
+                    </div>
+                  ) : req.proposedStartTime && req.proposedStartTime !== req.originalStartTime ? (
+                    <div className="flex items-center justify-between font-bold text-amber-900">
+                      <span className="flex items-center gap-1 text-amber-700">
+                        <Clock className="w-3.5 h-3.5 text-amber-600" /> Suggested Alternative:
+                      </span>
+                      <span>
+                        {formatDate(req.proposedDate)} at {formatTime(req.proposedStartTime)}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between text-xs text-amber-900 font-semibold pt-0.5">
+                      <span className="flex items-center gap-1 text-amber-700">
+                        <Clock className="w-3.5 h-3.5 text-amber-600" /> Status:
+                      </span>
+                      <span>Doctor hours updated. Select a new slot.</span>
+                    </div>
+                  )}
                 </div>
 
                 <Button
@@ -459,8 +491,10 @@ export function PatientAppointmentsClient({
                   onClick={() => setActiveRescheduleRequest(req)}
                   className="w-full bg-[#0066cc] hover:bg-[#0052a3] text-white font-bold text-xs h-9 rounded-xl shadow-xs flex items-center justify-center gap-2"
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Review & Respond to Proposal</span>
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>
+                    {req.proposedTokenNumber ? 'Review & Respond to Proposal' : 'Choose Replacement Slot'}
+                  </span>
                 </Button>
               </div>
             ))}
