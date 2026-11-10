@@ -2042,6 +2042,13 @@ export function UnifiedDoctorScheduleClient({
         shiftData={conflictShiftContext}
         onSelectSmartReschedule={handleSelectSmartReschedule}
         onSelectManualReschedule={handleSelectManualReschedule}
+        onSuccess={() => {
+          setConflictModalOpen(false);
+          setConflictShiftContext(null);
+          setConflictData(null);
+          refreshFullSchedule();
+          setActiveTab('rescheduling');
+        }}
       />
 
       <SmartReschedulePreviewModal

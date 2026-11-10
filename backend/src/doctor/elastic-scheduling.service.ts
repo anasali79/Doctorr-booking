@@ -329,7 +329,7 @@ export class ElasticSchedulingService {
   }
 
   // ───────────────────────────────────────────────────────────────────────────
-  // PHASE 2: ELASTIC SCHEDULE SHRINKING & CONFLICT DETECTION
+  // PHASE 2: ELASTIC SCHEDULE SHRINKING & TOKEN-BASED CONFLICT DETECTION
   // ───────────────────────────────────────────────────────────────────────────
   async checkShrinkConflicts(userId: string, dto: CheckShrinkConflictDto) {
     const doctor = await this.findDoctorByUserId(userId);
@@ -342,6 +342,9 @@ export class ElasticSchedulingService {
 
     let oldStartTime: string;
     let oldEndTime: string;
+    let oldDuration: number;
+    let oldMaxPatients: number;
+    let schedulingType: SchedulingType;
     let targetDayOfWeek: DayOfWeek | null = null;
     let targetDate: string | null = null;
 
@@ -354,6 +357,9 @@ export class ElasticSchedulingService {
       }
       oldStartTime = shift.startTime;
       oldEndTime = shift.endTime;
+      oldDuration = shift.slotDuration || (shift.schedulingType === SchedulingType.WAVE ? 30 : 15);
+      oldMaxPatients = shift.maxPatients || (shift.schedulingType === SchedulingType.WAVE ? 3 : 10);
+      schedulingType = shift.schedulingType || SchedulingType.STREAM;
       targetDayOfWeek = shift.dayOfWeek;
     } else {
       const shift = await this.customRepo.findOne({
@@ -364,6 +370,9 @@ export class ElasticSchedulingService {
       }
       oldStartTime = shift.startTime;
       oldEndTime = shift.endTime;
+      oldDuration = shift.slotDuration || (shift.schedulingType === SchedulingType.WAVE ? 30 : 15);
+      oldMaxPatients = shift.maxPatients || (shift.schedulingType === SchedulingType.WAVE ? 3 : 10);
+      schedulingType = shift.schedulingType || SchedulingType.STREAM;
       targetDate = typeof shift.date === 'string'
         ? shift.date.split('T')[0]
         : (shift.date as any) instanceof Date
@@ -378,8 +387,10 @@ export class ElasticSchedulingService {
     const isShrunkEnd = newEndMins < oldEndMins;
     const isExpandedStart = newStartMins < oldStartMins;
     const isExpandedEnd = newEndMins > oldEndMins;
+    const isCapacityShrunk = dto.newMaxPatients !== undefined && dto.newMaxPatients < oldMaxPatients;
+    const isDurationChanged = dto.newSlotDuration !== undefined && dto.newSlotDuration !== oldDuration;
 
-    if (!isShrunkStart && !isShrunkEnd && !isExpandedStart && !isExpandedEnd) {
+    if (!isShrunkStart && !isShrunkEnd && !isExpandedStart && !isExpandedEnd && !isCapacityShrunk && !isDurationChanged) {
       throw new BadRequestException('No schedule change detected');
     }
 
@@ -437,45 +448,50 @@ export class ElasticSchedulingService {
     }
 
     const isCombined = (isShrunkStart || isShrunkEnd) && (isExpandedStart || isExpandedEnd);
-    const operation = isCombined ? 'COMBINED' : (isShrunkStart || isShrunkEnd ? 'SHRINK' : 'EXPANSION');
+    const operation = isCombined
+      ? 'COMBINED'
+      : isCapacityShrunk && !isShrunkStart && !isShrunkEnd
+      ? 'CAPACITY_REDUCTION'
+      : (isShrunkStart || isShrunkEnd ? 'SHRINK' : 'EXPANSION');
+
+    // Calculate revised capacity per slot/session
+    const revisedDuration = dto.newSlotDuration || oldDuration;
+    let revisedCapacity: number;
+    if (dto.newMaxPatients !== undefined && dto.newMaxPatients > 0) {
+      revisedCapacity = dto.newMaxPatients;
+    } else if (dto.newSlotDuration !== undefined && dto.newSlotDuration !== oldDuration) {
+      revisedCapacity = Math.max(1, Math.round((oldMaxPatients * revisedDuration) / oldDuration));
+    } else {
+      const oldWindow = oldEndMins - oldStartMins;
+      const newWindow = newEndMins - newStartMins;
+      if (oldDuration >= oldWindow && newWindow < oldWindow) {
+        revisedCapacity = Math.max(1, Math.round((oldMaxPatients * newWindow) / oldWindow));
+      } else {
+        revisedCapacity = oldMaxPatients;
+      }
+    }
 
     const todayStr = getTodayIST();
-    let conflictingAppointments: Appointment[] = [];
+    const datesToScan: string[] = [];
 
     if (dto.shiftType === ShiftType.CUSTOM && targetDate) {
-      // Custom shift: appointments on this specific date
-      const apptsOnDate = await this.appointmentRepo.find({
-        where: {
-          doctorId: doctor.id,
-          date: targetDate,
-          status: In([AppointmentStatus.CONFIRMED, AppointmentStatus.CHECKED_IN]),
-        },
-        relations: { patient: true },
-      });
-
-      conflictingAppointments = apptsOnDate.filter((app) =>
-        clippedIntervals.some((clip) => timesOverlap(app.startTime, app.endTime, clip.start, clip.end)),
-      );
+      datesToScan.push(targetDate);
     } else if (dto.shiftType === ShiftType.RECURRING && targetDayOfWeek) {
-      // Recurring shift: scan upcoming dates for this dayOfWeek for the next 30 days
       const [startYear, startMonth, startDay] = todayStr.split('-').map(Number);
-      const datesToScan: string[] = [];
-
-      // Check dates in the next 30 days matching targetDayOfWeek
+      const rawDates: string[] = [];
       for (let i = 0; i < 30; i++) {
         const d = new Date(Date.UTC(startYear, startMonth - 1, startDay + i));
         const dateStr = d.toISOString().split('T')[0];
         if (getDayOfWeekFromDate(dateStr) === targetDayOfWeek) {
-          datesToScan.push(dateStr);
+          rawDates.push(dateStr);
         }
       }
 
-      if (datesToScan.length > 0) {
-        // Exclude dates that have custom overrides (because custom overrides supersede recurring availability)
+      if (rawDates.length > 0) {
         const customOverrides = await this.customRepo
           .createQueryBuilder('ca')
           .where('ca.doctorId = :doctorId', { doctorId: doctor.id })
-          .andWhere('ca.date IN (:...dates)', { dates: datesToScan })
+          .andWhere('ca.date IN (:...dates)', { dates: rawDates })
           .getMany();
 
         const customDatesSet = new Set(
@@ -487,27 +503,121 @@ export class ElasticSchedulingService {
                 : String(c.date),
           ),
         );
-
-        const activeRecurringDates = datesToScan.filter((d) => !customDatesSet.has(d));
-
-        if (activeRecurringDates.length > 0) {
-          const apptsOnDates = await this.appointmentRepo.find({
-            where: {
-              doctorId: doctor.id,
-              date: In(activeRecurringDates),
-              status: In([AppointmentStatus.CONFIRMED, AppointmentStatus.CHECKED_IN]),
-            },
-            relations: { patient: true },
-          });
-
-          conflictingAppointments = apptsOnDates.filter((app) =>
-            clippedIntervals.some((clip) => timesOverlap(app.startTime, app.endTime, clip.start, clip.end)),
-          );
+        for (const rd of rawDates) {
+          if (!customDatesSet.has(rd)) {
+            datesToScan.push(rd);
+          }
         }
       }
     }
 
-    const affectedAppointments = conflictingAppointments.map((app) => ({
+    const allPreserved: Appointment[] = [];
+    const allAffected: Array<{ app: Appointment; reason: string }> = [];
+
+    if (datesToScan.length > 0) {
+      const appointments = await this.appointmentRepo.find({
+        where: {
+          doctorId: doctor.id,
+          date: In(datesToScan),
+          status: In([AppointmentStatus.CONFIRMED, AppointmentStatus.CHECKED_IN]),
+        },
+        relations: { patient: true },
+        order: { tokenNumber: 'ASC', createdAt: 'ASC' },
+      });
+
+      for (const dStr of datesToScan) {
+        const dayAppts = appointments.filter(
+          (a) => a.date === dStr && timesOverlap(a.startTime, a.endTime, oldStartTime, oldEndTime),
+        );
+
+        if (dayAppts.length === 0) continue;
+
+        if (schedulingType === SchedulingType.WAVE) {
+          // Token-based Wave Allocation
+          const overlapsRevised = dayAppts.filter((a) =>
+            timesOverlap(a.startTime, a.endTime, dto.newStartTime, dto.newEndTime),
+          );
+          const outsideRevised = dayAppts.filter(
+            (a) => !timesOverlap(a.startTime, a.endTime, dto.newStartTime, dto.newEndTime),
+          );
+
+          for (const outApp of outsideRevised) {
+            allAffected.push({
+              app: outApp,
+              reason: 'Shift hours removed from clinic schedule',
+            });
+          }
+
+          // Sort deterministically by tokenNumber ASC, then createdAt ASC
+          overlapsRevised.sort((a, b) => {
+            const tA = a.tokenNumber ?? 999999;
+            const tB = b.tokenNumber ?? 999999;
+            if (tA !== tB) return tA - tB;
+            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          });
+
+          // Preserve eligible patients up to revisedCapacity in token order
+          const preservedForDay = overlapsRevised.slice(0, revisedCapacity);
+          const affectedForDay = overlapsRevised.slice(revisedCapacity);
+
+          allPreserved.push(...preservedForDay);
+          for (const affApp of affectedForDay) {
+            allAffected.push({
+              app: affApp,
+              reason: `Token #${affApp.tokenNumber ?? 'N/A'} exceeds revised slot capacity (${revisedCapacity})`,
+            });
+          }
+        } else {
+          // STREAM scheduling
+          const withinWindow = dayAppts.filter((a) => {
+            const aStart = toMinutes(a.startTime);
+            const aEnd = toMinutes(a.endTime);
+            return aStart >= newStartMins && aEnd <= newEndMins;
+          });
+          const outsideWindow = dayAppts.filter((a) => {
+            const aStart = toMinutes(a.startTime);
+            const aEnd = toMinutes(a.endTime);
+            return aStart < newStartMins || aEnd > newEndMins;
+          });
+
+          for (const outApp of outsideWindow) {
+            allAffected.push({
+              app: outApp,
+              reason: 'Appointment time falls outside revised stream session window',
+            });
+          }
+
+          const streamPreserved = withinWindow.slice(0, revisedCapacity);
+          const streamAffected = withinWindow.slice(revisedCapacity);
+
+          allPreserved.push(...streamPreserved);
+          for (const affApp of streamAffected) {
+            allAffected.push({
+              app: affApp,
+              reason: `Exceeds revised session capacity (${revisedCapacity})`,
+            });
+          }
+        }
+      }
+    }
+
+    const affectedAppointments = allAffected.map((item) => ({
+      appointmentId: item.app.id,
+      doctorId: item.app.doctorId,
+      patientId: item.app.patientId,
+      patientName: item.app.patient?.fullName || 'Patient',
+      patientPhone: item.app.patient?.phone || '',
+      date: item.app.date,
+      startTime: item.app.startTime,
+      endTime: item.app.endTime,
+      tokenNumber: item.app.tokenNumber ?? null,
+      schedulingType: item.app.tokenNumber !== null ? 'WAVE' : 'STREAM',
+      paymentStatus: item.app.paymentStatus || 'UNPAID',
+      reasonForVisit: item.app.reasonForVisit ?? null,
+      reason: item.reason,
+    }));
+
+    const preservedAppointments = allPreserved.map((app) => ({
       appointmentId: app.id,
       doctorId: app.doctorId,
       patientId: app.patientId,
@@ -528,6 +638,18 @@ export class ElasticSchedulingService {
       clippedIntervals,
       expandedIntervals,
       operation,
+      revisedCapacity,
+      totalOldCapacity: oldMaxPatients,
+      summary: {
+        oldSchedule: `${oldStartTime} – ${oldEndTime}`,
+        newSchedule: `${dto.newStartTime} – ${dto.newEndTime}`,
+        oldCapacity: oldMaxPatients,
+        newCapacity: revisedCapacity,
+        preservedCount: preservedAppointments.length,
+        affectedCount: affectedAppointments.length,
+        cancelledCount: 0,
+      },
+      preservedAppointments,
       affectedAppointments,
     };
   }
@@ -541,12 +663,15 @@ export class ElasticSchedulingService {
         message: 'Schedule Conflict Detected! Your updated availability affects existing appointments.',
         conflictCount: conflicts.conflictCount,
         affectedAppointments: conflicts.affectedAppointments,
+        preservedAppointments: conflicts.preservedAppointments,
         clippedIntervals: conflicts.clippedIntervals,
         expandedIntervals: conflicts.expandedIntervals,
         operation: conflicts.operation,
+        summary: conflicts.summary,
       });
     }
 
+    let savedShift: any;
     if (dto.shiftType === ShiftType.RECURRING) {
       const shift = await this.recurringRepo.findOne({
         where: { id: dto.shiftId, doctorId: doctor.id },
@@ -554,8 +679,83 @@ export class ElasticSchedulingService {
       if (!shift) throw new NotFoundException('Shift not found');
       shift.startTime = dto.newStartTime;
       shift.endTime = dto.newEndTime;
-      const saved = await this.recurringRepo.save(shift);
+      if (dto.newMaxPatients) shift.maxPatients = dto.newMaxPatients;
+      if (dto.newSlotDuration) shift.slotDuration = dto.newSlotDuration;
+      savedShift = await this.recurringRepo.save(shift);
+    } else {
+      const shift = await this.customRepo.findOne({
+        where: { id: dto.shiftId, doctorId: doctor.id },
+      });
+      if (!shift) throw new NotFoundException('Custom shift not found');
+      shift.startTime = dto.newStartTime;
+      shift.endTime = dto.newEndTime;
+      if (dto.newMaxPatients) shift.maxPatients = dto.newMaxPatients;
+      if (dto.newSlotDuration) shift.slotDuration = dto.newSlotDuration;
+      savedShift = await this.customRepo.save(shift);
+    }
 
+    // 1. Update PRESERVED appointments if shift time boundaries shifted
+    for (const p of conflicts.preservedAppointments) {
+      const appt = await this.appointmentRepo.findOne({
+        where: { id: p.appointmentId },
+      });
+      if (appt) {
+        let modified = false;
+        if (toMinutes(appt.startTime) < toMinutes(dto.newStartTime)) {
+          appt.startTime = dto.newStartTime;
+          modified = true;
+        }
+        if (toMinutes(appt.endTime) > toMinutes(dto.newEndTime)) {
+          appt.endTime = dto.newEndTime;
+          modified = true;
+        }
+        if (modified) {
+          await this.appointmentRepo.save(appt);
+        }
+      }
+    }
+
+    // 2. Create PENDING Reschedule Requests for AFFECTED appointments
+    const defaultExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    for (const a of conflicts.affectedAppointments) {
+      await this.rescheduleRequestRepo.update(
+        { appointmentId: a.appointmentId, status: RescheduleRequestStatus.PENDING },
+        { status: RescheduleRequestStatus.CANCELLED },
+      );
+
+      const req = this.rescheduleRequestRepo.create({
+        appointmentId: a.appointmentId,
+        doctorId: doctor.id,
+        patientId: a.patientId,
+        rescheduleMethod: RescheduleMethod.SMART,
+        status: RescheduleRequestStatus.PENDING,
+        originalDate: a.date,
+        originalStartTime: a.startTime,
+        originalEndTime: a.endTime,
+        proposedDate: a.date,
+        proposedStartTime: dto.newStartTime,
+        proposedEndTime: dto.newEndTime,
+        proposedTokenNumber: null, // Patient selects own slot!
+        proposedSchedulingType: a.schedulingType as SchedulingType,
+        expiresAt: defaultExpiry,
+        doctorReason: 'Doctor modified clinic schedule availability',
+      });
+      await this.rescheduleRequestRepo.save(req);
+
+      // Dispatch Patient Notification
+      try {
+        await this.notificationService.createNotification(
+          a.patientId,
+          'Appointment Rescheduling Required',
+          `Your doctor Dr. ${doctor.fullName} has modified their availability, and your appointment on ${formatDate(a.date)} at ${formatTime(a.startTime)} (Token #${a.tokenNumber ?? 'N/A'}) needs to be rescheduled. Please select an available alternative slot or choose to cancel.`,
+          NotificationType.SCHEDULE_UPDATE,
+        );
+      } catch (e: any) {
+        this.logger.warn(`Failed to dispatch patient notification: ${e.message}`);
+      }
+    }
+
+      // Doctor Notification
       try {
         const notifTitle =
           conflicts.operation === 'COMBINED'
@@ -563,7 +763,7 @@ export class ElasticSchedulingService {
             : conflicts.operation === 'EXPANSION'
             ? 'Schedule Expanded'
             : 'Schedule Reduction Completed';
-        const notifMsg = `Your ${shift.dayOfWeek} shift was updated to ${dto.newStartTime}–${dto.newEndTime}.`;
+        const notifMsg = `Your shift was updated to ${dto.newStartTime}–${dto.newEndTime}. ${conflicts.summary.preservedCount} appointment(s) preserved, ${conflicts.summary.affectedCount} patient(s) notified to select alternative slots.`;
         await this.notificationService.createDoctorNotification(
           doctor.id,
           notifTitle,
@@ -574,40 +774,29 @@ export class ElasticSchedulingService {
         this.logger.warn(`Failed to dispatch notification: ${err.message}`);
       }
 
+      const zeroConflicts = conflicts.conflictCount === 0;
       return {
+        success: true,
         message:
           conflicts.operation === 'COMBINED'
-            ? 'Combined schedule adjustment completed successfully with zero conflicts.'
+            ? zeroConflicts
+              ? 'Combined schedule adjustment completed successfully with zero conflicts.'
+              : 'Combined schedule adjustment completed successfully.'
             : conflicts.operation === 'EXPANSION'
             ? 'Schedule expansion completed successfully.'
-            : 'Schedule shrinking completed successfully with zero conflicts.',
-        shift: saved,
+            : zeroConflicts
+            ? 'Schedule shrinking completed successfully with zero conflicts.'
+            : 'Schedule shrinking completed successfully with token-based allocation.',
+        shift: savedShift,
         operation: conflicts.operation,
+        preservedCount: conflicts.summary.preservedCount,
+        affectedCount: conflicts.summary.affectedCount,
+        summary: conflicts.summary,
+        preservedAppointments: conflicts.preservedAppointments,
+        affectedAppointments: conflicts.affectedAppointments,
         expandedIntervals: conflicts.expandedIntervals,
         clippedIntervals: conflicts.clippedIntervals,
       };
-    } else {
-      const shift = await this.customRepo.findOne({
-        where: { id: dto.shiftId, doctorId: doctor.id },
-      });
-      if (!shift) throw new NotFoundException('Custom shift not found');
-      shift.startTime = dto.newStartTime;
-      shift.endTime = dto.newEndTime;
-      const saved = await this.customRepo.save(shift);
-
-      return {
-        message:
-          conflicts.operation === 'COMBINED'
-            ? 'Custom shift combined adjustment completed successfully with zero conflicts.'
-            : conflicts.operation === 'EXPANSION'
-            ? 'Custom shift expansion completed successfully.'
-            : 'Custom shift shrinking completed successfully with zero conflicts.',
-        shift: saved,
-        operation: conflicts.operation,
-        expandedIntervals: conflicts.expandedIntervals,
-        clippedIntervals: conflicts.clippedIntervals,
-      };
-    }
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -1844,6 +2033,141 @@ export class ElasticSchedulingService {
       appointment: appt,
       refund: refundResult?.data || null,
       request,
+    };
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // PATIENT ALTERNATIVE SLOTS DISCOVERY (PRIORITY 1: SAME DAY, 2: NEXT DAY, 3: SUBSEQUENT)
+  // ───────────────────────────────────────────────────────────────────────────
+  async getPatientRescheduleAlternatives(userId: string, requestId: string) {
+    const patient = await this.findPatientByUserId(userId);
+
+    const request = await this.rescheduleRequestRepo.findOne({
+      where: { id: requestId, patientId: patient.id },
+      relations: { doctor: { user: true }, appointment: true },
+    });
+
+    if (!request) {
+      throw new NotFoundException(`Rescheduling request ${requestId} not found`);
+    }
+
+    const doctor =
+      request.doctor || (await this.doctorRepo.findOne({ where: { id: request.doctorId } }));
+    if (!doctor) {
+      throw new NotFoundException(`Doctor ${request.doctorId} not found`);
+    }
+
+    const originalApt =
+      request.appointment ||
+      (await this.appointmentRepo.findOne({
+        where: { id: request.appointmentId },
+        relations: { doctor: true },
+      }));
+
+    if (!originalApt) {
+      throw new NotFoundException(`Original appointment ${request.appointmentId} not found`);
+    }
+
+    const todayStr = getTodayIST();
+    const origDate = request.originalDate;
+
+    // Doctor max future horizon
+    const maxFutureDays = doctor.allowFutureBooking
+      ? (doctor.maxFutureBookingDays && doctor.maxFutureBookingDays > 0 ? doctor.maxFutureBookingDays : 14)
+      : 7;
+
+    // Check dates on which patient already has active bookings with this doctor
+    const patientBookedDates = new Set<string>();
+    const patientExistingAppts = await this.appointmentRepo.find({
+      where: {
+        patientId: patient.id,
+        doctorId: doctor.id,
+        status: In([AppointmentStatus.CONFIRMED, AppointmentStatus.CHECKED_IN]),
+      },
+      select: { id: true, date: true },
+    });
+    for (const ea of patientExistingAppts) {
+      if (ea.id !== request.appointmentId) {
+        patientBookedDates.add(ea.date);
+      }
+    }
+
+    // Helper to get available slots on a date
+    const getSlotsForDate = async (targetDate: string, priority: 'SAME_DAY' | 'NEXT_DAY' | 'SUBSEQUENT') => {
+      if (targetDate < todayStr) return [];
+      if (patientBookedDates.has(targetDate)) return [];
+
+      // Check doctor leave
+      const leave = await this.leaveRepo.findOne({
+        where: { doctorId: doctor.id, date: targetDate },
+      });
+      if (leave) return [];
+
+      try {
+        const availableSlots = await this.availabilityService.getAvailableSlots(doctor.id, targetDate);
+        return availableSlots
+          .filter(
+            (s) =>
+              (s.status === 'available' || s.status === 'cancel and available for booking') &&
+              (s.availableCount ?? 1) > 0,
+          )
+          .map((s) => ({
+            date: targetDate,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            availableCount: s.availableCount ?? 1,
+            maxPatients: s.maxPatients || (s.schedulingType === SchedulingType.WAVE ? 3 : 10),
+            schedulingType: s.schedulingType || SchedulingType.STREAM,
+            priority,
+          }));
+      } catch {
+        return [];
+      }
+    };
+
+    // Priority 1: Same day (original appointment date, if not in the past)
+    const priority1SameDay = origDate >= todayStr ? await getSlotsForDate(origDate, 'SAME_DAY') : [];
+
+    // Priority 2: Next day
+    const [origY, origM, origD] = (origDate >= todayStr ? origDate : todayStr).split('-').map(Number);
+    const nextDayDate = new Date(Date.UTC(origY, origM - 1, origD + 1));
+    const nextDayStr = nextDayDate.toISOString().split('T')[0];
+    const priority2NextDay = await getSlotsForDate(nextDayStr, 'NEXT_DAY');
+
+    // Priority 3: Subsequent Dates up to maxFutureDays
+    const priority3Subsequent: any[] = [];
+    for (let dayOffset = 2; dayOffset <= maxFutureDays; dayOffset++) {
+      const futureDate = new Date(Date.UTC(origY, origM - 1, origD + dayOffset));
+      const fStr = futureDate.toISOString().split('T')[0];
+      const slots = await getSlotsForDate(fStr, 'SUBSEQUENT');
+      priority3Subsequent.push(...slots);
+    }
+
+    const totalAlternativesCount =
+      priority1SameDay.length + priority2NextDay.length + priority3Subsequent.length;
+
+    return {
+      requestId: request.id,
+      doctorId: doctor.id,
+      doctorName: doctor.fullName,
+      specialization: doctor.specialization,
+      originalAppointment: {
+        appointmentId: request.appointmentId,
+        date: request.originalDate,
+        startTime: request.originalStartTime,
+        endTime: request.originalEndTime,
+        tokenNumber: request.appointment?.tokenNumber ?? null,
+      },
+      priority1SameDay,
+      priority2NextDay,
+      priority3Subsequent,
+      totalAlternativesCount,
+      alternatives: {
+        sameDay: priority1SameDay,
+        nextDay: priority2NextDay,
+        futureDates: priority3Subsequent,
+      },
+      totalAvailableSlots: totalAlternativesCount,
     };
   }
 

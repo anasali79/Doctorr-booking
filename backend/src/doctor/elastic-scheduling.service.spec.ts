@@ -133,6 +133,7 @@ describe('ElasticSchedulingService', () => {
     rescheduleRepoMock = {
       create: jest.fn().mockImplementation((dto) => ({ ...dto, id: 'req-uuid-1' })),
       save: jest.fn().mockImplementation((r) => Promise.resolve({ ...r, id: r.id || 'req-uuid-1' })),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
       findOne: jest.fn().mockResolvedValue(null),
       find: jest.fn().mockResolvedValue([]),
       createQueryBuilder: jest.fn().mockReturnValue({
@@ -627,6 +628,291 @@ describe('ElasticSchedulingService', () => {
       expect(staleRequest.status).toBe(RescheduleRequestStatus.EXPIRED);
       expect(rescheduleRepoMock.save).toHaveBeenCalledWith(staleRequest);
       expect(notificationServiceMock.createDoctorNotification).toHaveBeenCalled();
+    });
+  });
+
+  describe('Token-Based Patient Allocation (Mentor Approved Logic)', () => {
+    const waveShift: CustomAvailability = {
+      id: 'custom-wave-1',
+      doctorId: 'doc-uuid-1',
+      date: '2026-11-16',
+      startTime: '09:00',
+      endTime: '10:00',
+      slotDuration: 60,
+      schedulingType: SchedulingType.WAVE,
+      bufferTime: 0,
+      maxPatients: 5,
+    } as any;
+
+    const fiveAppointments = [
+      {
+        id: 'appt-1',
+        doctorId: 'doc-uuid-1',
+        patientId: 'pat-1',
+        date: '2026-11-16',
+        startTime: '09:00',
+        endTime: '10:00',
+        tokenNumber: 1,
+        schedulingType: SchedulingType.WAVE,
+        status: AppointmentStatus.CONFIRMED,
+        paymentStatus: 'PAID',
+        createdAt: new Date('2026-11-10T08:00:00Z'),
+        patient: { fullName: 'Patient A', phone: '+919000000001', user: { id: 'user-pat-1' } },
+        doctor: { fullName: 'Dr. Gregory House' },
+      },
+      {
+        id: 'appt-2',
+        doctorId: 'doc-uuid-1',
+        patientId: 'pat-2',
+        date: '2026-11-16',
+        startTime: '09:00',
+        endTime: '10:00',
+        tokenNumber: 2,
+        schedulingType: SchedulingType.WAVE,
+        status: AppointmentStatus.CONFIRMED,
+        paymentStatus: 'PAID',
+        createdAt: new Date('2026-11-10T08:05:00Z'),
+        patient: { fullName: 'Patient B', phone: '+919000000002', user: { id: 'user-pat-2' } },
+        doctor: { fullName: 'Dr. Gregory House' },
+      },
+      {
+        id: 'appt-3',
+        doctorId: 'doc-uuid-1',
+        patientId: 'pat-3',
+        date: '2026-11-16',
+        startTime: '09:00',
+        endTime: '10:00',
+        tokenNumber: 3,
+        schedulingType: SchedulingType.WAVE,
+        status: AppointmentStatus.CONFIRMED,
+        paymentStatus: 'PAID',
+        createdAt: new Date('2026-11-10T08:10:00Z'),
+        patient: { fullName: 'Patient C', phone: '+919000000003', user: { id: 'user-pat-3' } },
+        doctor: { fullName: 'Dr. Gregory House' },
+      },
+      {
+        id: 'appt-4',
+        doctorId: 'doc-uuid-1',
+        patientId: 'pat-4',
+        date: '2026-11-16',
+        startTime: '09:00',
+        endTime: '10:00',
+        tokenNumber: 4,
+        schedulingType: SchedulingType.WAVE,
+        status: AppointmentStatus.CONFIRMED,
+        paymentStatus: 'PAID',
+        createdAt: new Date('2026-11-10T08:15:00Z'),
+        patient: { fullName: 'Patient D', phone: '+919000000004', user: { id: 'user-pat-4' } },
+        doctor: { fullName: 'Dr. Gregory House' },
+      },
+      {
+        id: 'appt-5',
+        doctorId: 'doc-uuid-1',
+        patientId: 'pat-5',
+        date: '2026-11-16',
+        startTime: '09:00',
+        endTime: '10:00',
+        tokenNumber: 5,
+        schedulingType: SchedulingType.WAVE,
+        status: AppointmentStatus.CONFIRMED,
+        paymentStatus: 'PAID',
+        createdAt: new Date('2026-11-10T08:20:00Z'),
+        patient: { fullName: 'Patient E', phone: '+919000000005', user: { id: 'user-pat-5' } },
+        doctor: { fullName: 'Dr. Gregory House' },
+      },
+    ];
+
+    it('Mentor Case A: should preserve Tokens 1, 2, 3 and mark Tokens 4, 5 as affected when shrinking 60m to 30m', async () => {
+      customRepoMock.findOne.mockResolvedValue({ ...waveShift });
+      appointmentRepoMock.find.mockResolvedValue([...fiveAppointments]);
+
+      // Check conflicts
+      const result = await service.checkShrinkConflicts('user-doc-1', {
+        shiftType: ShiftType.CUSTOM,
+        shiftId: 'custom-wave-1',
+        newStartTime: '09:00',
+        newEndTime: '09:30',
+      });
+
+      // Duration shrunk from 60m to 30m -> revised capacity = round((5 * 30)/60) = 3
+      expect(result.revisedCapacity).toBe(3);
+      expect(result.summary.preservedCount).toBe(3);
+      expect(result.summary.affectedCount).toBe(2);
+
+      // Preserved must be tokens 1, 2, 3 in order
+      expect(result.preservedAppointments.map((p) => p.tokenNumber)).toEqual([1, 2, 3]);
+      // Affected must be tokens 4, 5
+      expect(result.affectedAppointments.map((a) => a.tokenNumber)).toEqual([4, 5]);
+
+      // Apply shrink
+      const applyResult = await service.applyShrink('user-doc-1', {
+        shiftType: ShiftType.CUSTOM,
+        shiftId: 'custom-wave-1',
+        newStartTime: '09:00',
+        newEndTime: '09:30',
+        forceIfNoConflicts: true,
+      });
+
+      expect(applyResult.success).toBe(true);
+      expect(applyResult.preservedCount).toBe(3);
+      expect(applyResult.affectedCount).toBe(2);
+
+      // Verify reschedule requests created with proposedTokenNumber: null (patient autonomy)
+      expect(rescheduleRepoMock.save).toHaveBeenCalled();
+      const savedRequests = rescheduleRepoMock.save.mock.calls.map((call) => call[0]);
+      for (const req of savedRequests) {
+        if (req && req.appointmentId) {
+          expect(req.proposedTokenNumber).toBeNull();
+        }
+      }
+    });
+
+    it('Case B: should preserve Tokens 1, 2, 3 and shift boundaries when shrinking start time 09:00-10:00 to 09:30-10:00', async () => {
+      customRepoMock.findOne.mockResolvedValue({ ...waveShift });
+      appointmentRepoMock.find.mockResolvedValue([...fiveAppointments]);
+
+      const result = await service.checkShrinkConflicts('user-doc-1', {
+        shiftType: ShiftType.CUSTOM,
+        shiftId: 'custom-wave-1',
+        newStartTime: '09:30',
+        newEndTime: '10:00',
+      });
+
+      expect(result.revisedCapacity).toBe(3);
+      expect(result.preservedAppointments.map((p) => p.tokenNumber)).toEqual([1, 2, 3]);
+      expect(result.affectedAppointments.map((a) => a.tokenNumber)).toEqual([4, 5]);
+
+      // Apply shrink
+      const applyResult = await service.applyShrink('user-doc-1', {
+        shiftType: ShiftType.CUSTOM,
+        shiftId: 'custom-wave-1',
+        newStartTime: '09:30',
+        newEndTime: '10:00',
+        forceIfNoConflicts: true,
+      });
+
+      expect(applyResult.preservedCount).toBe(3);
+      expect(applyResult.affectedCount).toBe(2);
+
+      // Preserved appointments must have their startTime realigned to the new start boundary '09:30'
+      const savedAppts = appointmentRepoMock.save.mock.calls.map((c) => c[0]);
+      const preservedSaved = savedAppts.filter((a) => ['appt-1', 'appt-2', 'appt-3'].includes(a.id));
+      for (const a of preservedSaved) {
+        expect(a.startTime).toBe('09:30');
+      }
+    });
+
+    it('Case D: should preserve Tokens 1, 2, 3 and affect Tokens 4, 5 when doctor explicitly reduces capacity from 5 to 3', async () => {
+      customRepoMock.findOne.mockResolvedValue({ ...waveShift });
+      appointmentRepoMock.find.mockResolvedValue([...fiveAppointments]);
+
+      const result = await service.checkShrinkConflicts('user-doc-1', {
+        shiftType: ShiftType.CUSTOM,
+        shiftId: 'custom-wave-1',
+        newStartTime: '09:00',
+        newEndTime: '10:00',
+        newMaxPatients: 3,
+      });
+
+      expect(result.revisedCapacity).toBe(3);
+      expect(result.summary.preservedCount).toBe(3);
+      expect(result.summary.affectedCount).toBe(2);
+      expect(result.preservedAppointments.map((p) => p.tokenNumber)).toEqual([1, 2, 3]);
+      expect(result.affectedAppointments.map((a) => a.tokenNumber)).toEqual([4, 5]);
+    });
+
+    it('Case E: should shrink cleanly with 0 conflicts when slot has zero bookings', async () => {
+      customRepoMock.findOne.mockResolvedValue({ ...waveShift });
+      appointmentRepoMock.find.mockResolvedValue([]);
+
+      const result = await service.checkShrinkConflicts('user-doc-1', {
+        shiftType: ShiftType.CUSTOM,
+        shiftId: 'custom-wave-1',
+        newStartTime: '09:00',
+        newEndTime: '09:30',
+      });
+
+      expect(result.hasConflicts).toBe(false);
+      expect(result.summary.preservedCount).toBe(0);
+      expect(result.summary.affectedCount).toBe(0);
+    });
+
+    it('Case F: should preserve all bookings when booked count (2) is within revised capacity (3)', async () => {
+      customRepoMock.findOne.mockResolvedValue({ ...waveShift });
+      appointmentRepoMock.find.mockResolvedValue([fiveAppointments[0], fiveAppointments[1]]);
+
+      const result = await service.checkShrinkConflicts('user-doc-1', {
+        shiftType: ShiftType.CUSTOM,
+        shiftId: 'custom-wave-1',
+        newStartTime: '09:00',
+        newEndTime: '09:30',
+      });
+
+      expect(result.hasConflicts).toBe(false);
+      expect(result.revisedCapacity).toBe(3);
+      expect(result.summary.preservedCount).toBe(2);
+      expect(result.summary.affectedCount).toBe(0);
+      expect(result.preservedAppointments.map((p) => p.tokenNumber)).toEqual([1, 2]);
+    });
+
+    it('Multi-tier alternative slots: should return prioritized same day, next day, and future slots for patient', async () => {
+      const mockReq = {
+        id: 'req-multi-1',
+        appointmentId: 'appt-4',
+        patientId: 'pat-4',
+        doctorId: 'doc-uuid-1',
+        originalDate: '2026-11-16',
+        originalStartTime: '09:00',
+        originalEndTime: '10:00',
+        status: RescheduleRequestStatus.PENDING,
+        expiresAt: new Date(Date.now() + 86400000),
+        doctorReason: 'Schedule shrunk',
+        doctor: { ...mockDoctor },
+        appointment: { ...fiveAppointments[3], doctor: { ...mockDoctor } },
+      };
+
+      rescheduleRepoMock.findOne.mockResolvedValue(mockReq);
+      patientRepoMock.findOne.mockResolvedValue({ id: 'pat-4', userId: 'user-pat-4' });
+      appointmentRepoMock.findOne.mockResolvedValue(fiveAppointments[3]);
+
+      // Mock available slots for same day
+      availabilityServiceMock.getAvailableSlots.mockImplementation(async (docId, date) => {
+        if (date === '2026-11-16') {
+          return [
+            {
+              startTime: '11:00',
+              endTime: '12:00',
+              schedulingType: SchedulingType.WAVE,
+              availableCount: 3,
+              maxPatients: 5,
+              bookedCount: 2,
+              status: 'available',
+            },
+          ];
+        } else if (date === '2026-11-17') {
+          return [
+            {
+              startTime: '10:00',
+              endTime: '11:00',
+              schedulingType: SchedulingType.WAVE,
+              availableCount: 4,
+              maxPatients: 5,
+              bookedCount: 1,
+              status: 'available',
+            },
+          ];
+        }
+        return [];
+      });
+
+      const alternatives = await service.getPatientRescheduleAlternatives('user-pat-4', 'req-multi-1');
+
+      expect(alternatives.requestId).toBe('req-multi-1');
+      expect(alternatives.originalAppointment.tokenNumber).toBe(4);
+      expect(alternatives.alternatives.sameDay.length).toBe(1);
+      expect(alternatives.alternatives.sameDay[0].startTime).toBe('11:00');
+      expect(alternatives.alternatives.nextDay.length).toBe(1);
+      expect(alternatives.alternatives.nextDay[0].startTime).toBe('10:00');
     });
   });
 });

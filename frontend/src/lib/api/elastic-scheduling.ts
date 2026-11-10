@@ -15,13 +15,71 @@ export interface AffectedAppointment {
   reasonForVisit: string | null;
 }
 
+export interface PreservedAppointment {
+  appointmentId: string;
+  patientId: string;
+  patientName: string;
+  patientPhone: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  tokenNumber: number | null;
+  schedulingType: 'WAVE' | 'STREAM';
+  status: string;
+}
+
 export interface ConflictCheckResult {
   hasConflicts: boolean;
   conflictCount: number;
   clippedIntervals: Array<{ start: string; end: string }>;
   expandedIntervals?: Array<{ start: string; end: string }>;
   operation?: 'EXPANSION' | 'SHRINK' | 'COMBINED';
+  summary?: {
+    oldSchedule: string;
+    newSchedule: string;
+    oldCapacity: number;
+    newCapacity: number;
+    preservedCount: number;
+    affectedCount: number;
+    cancelledCount: number;
+  };
+  revisedCapacity?: number;
+  totalOldCapacity?: number;
+  preservedAppointments?: PreservedAppointment[];
   affectedAppointments: AffectedAppointment[];
+}
+
+export interface PatientAlternativeSlot {
+  date: string;
+  startTime: string;
+  endTime: string;
+  schedulingType: 'WAVE' | 'STREAM';
+  availableCapacity: number;
+  maxCapacity: number;
+  currentBookings: number;
+  label: string;
+}
+
+export interface PatientAlternativesResult {
+  requestId: string;
+  originalAppointment: {
+    id: string;
+    doctorName: string;
+    doctorSpecialization?: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    tokenNumber: number | null;
+    schedulingType: string;
+  };
+  doctorReason?: string | null;
+  expiresAt: string;
+  alternatives: {
+    sameDay: PatientAlternativeSlot[];
+    nextDay: PatientAlternativeSlot[];
+    futureDates: PatientAlternativeSlot[];
+  };
+  totalAvailableSlots: number;
 }
 
 export interface ShrinkShiftContext {
@@ -119,6 +177,8 @@ export const elasticSchedulingApi = {
     shiftId: string;
     newStartTime: string;
     newEndTime: string;
+    newMaxPatients?: number;
+    newSlotDuration?: number;
   }): Promise<ConflictCheckResult> => {
     const res = await clientAxios.post<ConflictCheckResult>(
       '/api/doctor/elastic-schedule/shrink/check',
@@ -132,6 +192,8 @@ export const elasticSchedulingApi = {
     shiftId: string;
     newStartTime: string;
     newEndTime: string;
+    newMaxPatients?: number;
+    newSlotDuration?: number;
     forceIfNoConflicts?: boolean;
   }) => {
     const res = await clientAxios.post('/api/doctor/elastic-schedule/shrink/apply', data);
@@ -256,6 +318,13 @@ export const elasticSchedulingApi = {
       '/api/patient/reschedule-requests/pending',
     );
     return res.data?.data || [];
+  },
+
+  getPatientAlternatives: async (requestId: string): Promise<PatientAlternativesResult> => {
+    const res = await clientAxios.get<{ success: boolean; data: PatientAlternativesResult }>(
+      `/api/patient/reschedule-requests/${requestId}/alternatives`,
+    );
+    return res.data?.data;
   },
 
   patientAccept: async (requestId: string, notes?: string) => {
