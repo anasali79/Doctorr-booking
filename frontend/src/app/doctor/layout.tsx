@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth/session';
 import { getDoctorProfile } from '@/lib/api/doctors';
 import { DoctorSocketProvider } from '@/components/doctor/DoctorSocketProvider';
 import { DoctorSidebarLayout } from '@/components/doctor/DoctorSidebarLayout';
+import { AiAssistantDrawer } from '@/components/ai/AiAssistantDrawer';
 
 export default async function DoctorLayout({
   children,
@@ -36,6 +37,9 @@ export default async function DoctorLayout({
           {children}
         </div>
       )}
+
+      {/* Free AI Doctor Assistant */}
+      <AiAssistantDrawer role="DOCTOR" />
     </div>
   );
 }
