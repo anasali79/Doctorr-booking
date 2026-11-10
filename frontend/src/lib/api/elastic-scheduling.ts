@@ -19,6 +19,8 @@ export interface ConflictCheckResult {
   hasConflicts: boolean;
   conflictCount: number;
   clippedIntervals: Array<{ start: string; end: string }>;
+  expandedIntervals?: Array<{ start: string; end: string }>;
+  operation?: 'EXPANSION' | 'SHRINK' | 'COMBINED';
   affectedAppointments: AffectedAppointment[];
 }
 

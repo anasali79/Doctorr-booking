@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -52,7 +53,8 @@ export class PrescriptionController {
       'appointmentId',
       new ParseUUIDPipe({
         version: '4',
-        exceptionFactory: () => new Error('Invalid appointment ID format'),
+        exceptionFactory: () =>
+          new BadRequestException('Invalid appointment ID format'),
       }),
     )
     appointmentId: string,
@@ -109,7 +111,8 @@ export class PrescriptionController {
       'id',
       new ParseUUIDPipe({
         version: '4',
-        exceptionFactory: () => new Error('Invalid prescription ID format'),
+        exceptionFactory: () =>
+          new BadRequestException('Invalid prescription ID format'),
       }),
     )
     id: string,

@@ -28,20 +28,58 @@ export class AuthController {
     private readonly configService: ConfigService,
   ) {}
 
+  private getAllowedOrigins(): string[] {
+    const configuredOrigins = [
+      this.configService.get<string>('FRONTEND_URL'),
+      this.configService.get<string>('CLIENT_BASE_URL'),
+      ...(this.configService.get<string>('CLIENT_URL') || '').split(','),
+    ]
+      .filter((u): u is string => Boolean(u && u.trim()))
+      .map((u) => u.trim().replace(/\/+$/, ''));
+
+    // Default canonical origins
+    return Array.from(
+      new Set([
+        ...configuredOrigins,
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'https://doctorbook-five.vercel.app',
+      ]),
+    );
+  }
+
   private extractClientOrigin(req: Request): string | undefined {
+    const allowed = this.getAllowedOrigins();
+
     const origin = req.headers['origin'] as string | undefined;
-    if (origin && !origin.includes('onrender.com') && !origin.includes(':3001')) {
-      return origin.trim().replace(/\/+$/, '');
+    if (origin) {
+      const normalized = origin.trim().replace(/\/+$/, '');
+      if (
+        allowed.includes(normalized) ||
+        normalized.endsWith('.vercel.app') ||
+        normalized.includes('localhost:') ||
+        normalized.includes('127.0.0.1:')
+      ) {
+        return normalized;
+      }
     }
+
     const referer = req.headers['referer'] as string | undefined;
     if (referer) {
       try {
         const u = new URL(referer);
-        if (!u.hostname.includes('onrender.com') && u.port !== '3001') {
-          return `${u.protocol}//${u.host}`.replace(/\/+$/, '');
+        const refOrigin = `${u.protocol}//${u.host}`.replace(/\/+$/, '');
+        if (
+          allowed.includes(refOrigin) ||
+          refOrigin.endsWith('.vercel.app') ||
+          refOrigin.includes('localhost:') ||
+          refOrigin.includes('127.0.0.1:')
+        ) {
+          return refOrigin;
         }
       } catch {}
     }
+
     return undefined;
   }
 

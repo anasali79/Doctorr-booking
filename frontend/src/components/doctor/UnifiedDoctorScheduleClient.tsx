@@ -412,8 +412,8 @@ export function UnifiedDoctorScheduleClient({
         startTime,
         endTime,
         schedulingType,
-        slotDuration: Number(slotDuration),
-        bufferTime: Number(bufferTime),
+        slotDuration: schedulingType === 'WAVE' ? Number(slotDuration) : undefined,
+        bufferTime: schedulingType === 'WAVE' ? Number(bufferTime) : 0,
         maxPatients: Number(maxPatients),
         allowFutureBooking,
         maxFutureBookingDays: allowFutureBooking ? Number(maxFutureBookingDays) : null,
@@ -537,8 +537,8 @@ export function UnifiedDoctorScheduleClient({
         date: overrideDate,
         startTime: overrideStartTime,
         endTime: overrideEndTime,
-        slotDuration: Number(overrideDuration),
-        bufferTime: Number(overrideBuffer),
+        slotDuration: overrideSchedulingType === 'WAVE' ? Number(overrideDuration) : undefined,
+        bufferTime: overrideSchedulingType === 'WAVE' ? Number(overrideBuffer) : 0,
         schedulingType: overrideSchedulingType,
         maxPatients: Number(overrideMaxPatients),
       });
@@ -921,45 +921,6 @@ export function UnifiedDoctorScheduleClient({
                 </div>
               </div>
 
-              {/* Slot Duration & Buffer Time */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Slot Duration (mins)
-                  </label>
-                  <Select value={String(slotDuration)} onValueChange={(val) => setSlotDuration(Number(val))}>
-                    <SelectTrigger className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600 h-auto">
-                      <SelectValue placeholder="Slot Duration" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="10">10 minutes</SelectItem>
-                      <SelectItem value="15">15 minutes</SelectItem>
-                      <SelectItem value="20">20 minutes</SelectItem>
-                      <SelectItem value="30">30 minutes</SelectItem>
-                      <SelectItem value="45">45 minutes</SelectItem>
-                      <SelectItem value="60">60 minutes</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Buffer Time (mins)
-                  </label>
-                  <Select value={String(bufferTime)} onValueChange={(val) => setBufferTime(Number(val))}>
-                    <SelectTrigger className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600 h-auto">
-                      <SelectValue placeholder="Buffer Time" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="0">0 mins (No buffer)</SelectItem>
-                      <SelectItem value="5">5 minutes</SelectItem>
-                      <SelectItem value="10">10 minutes</SelectItem>
-                      <SelectItem value="15">15 minutes</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
               {/* Capacity Model: WAVE vs STREAM */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
@@ -1003,6 +964,47 @@ export function UnifiedDoctorScheduleClient({
                   </div>
                 )}
               </div>
+
+              {/* Slot Duration & Buffer Time - Only for WAVE scheduling */}
+              {schedulingType === 'WAVE' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Slot Duration (mins)
+                    </label>
+                    <Select value={String(slotDuration)} onValueChange={(val) => setSlotDuration(Number(val))}>
+                      <SelectTrigger className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600 h-auto">
+                        <SelectValue placeholder="Slot Duration" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10 minutes</SelectItem>
+                        <SelectItem value="15">15 minutes</SelectItem>
+                        <SelectItem value="20">20 minutes</SelectItem>
+                        <SelectItem value="30">30 minutes</SelectItem>
+                        <SelectItem value="45">45 minutes</SelectItem>
+                        <SelectItem value="60">60 minutes</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Buffer Time (mins)
+                    </label>
+                    <Select value={String(bufferTime)} onValueChange={(val) => setBufferTime(Number(val))}>
+                      <SelectTrigger className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600 h-auto">
+                        <SelectValue placeholder="Buffer Time" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">0 mins (No buffer)</SelectItem>
+                        <SelectItem value="5">5 minutes</SelectItem>
+                        <SelectItem value="10">10 minutes</SelectItem>
+                        <SelectItem value="15">15 minutes</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
 
               {/* Advance Booking Policy */}
               <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3.5 space-y-3">

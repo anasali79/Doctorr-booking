@@ -37,7 +37,8 @@ export function middleware(request: NextRequest) {
     pathname === '/login' ||
     pathname === '/signup' ||
     pathname === '/forgot-password' ||
-    pathname === '/reset-password';
+    pathname === '/reset-password' ||
+    pathname === '/verify-email';
   const isDoctorRoute = pathname.startsWith('/doctor');
   const isPatientRoute = pathname.startsWith('/patient');
 
@@ -88,5 +89,14 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/patient/:path*', '/doctor/:path*', '/admin/:path*', '/login', '/signup'],
+  matcher: [
+    '/patient/:path*',
+    '/doctor/:path*',
+    '/admin/:path*',
+    '/login',
+    '/signup',
+    '/forgot-password',
+    '/reset-password',
+    '/verify-email',
+  ],
 };

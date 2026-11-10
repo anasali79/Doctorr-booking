@@ -305,29 +305,52 @@ export class AppointmentService {
     startTime: string,
     endTime: string,
     maxPatients: number,
+    excludeAppointmentId?: string,
   ): Promise<void> {
-    const confirmedCount = await manager.count(Appointment, {
-      where: {
-        doctorId,
-        date,
-        startTime,
-        endTime,
-        status: AppointmentStatus.CONFIRMED,
-      },
-    });
+    const qb = manager
+      .createQueryBuilder(Appointment, 'a')
+      .where('a.doctorId = :doctorId', { doctorId })
+      .andWhere('a.date = :date', { date })
+      .andWhere('a.startTime = :startTime', { startTime })
+      .andWhere('a.endTime = :endTime', { endTime })
+      .andWhere(
+        `(a.status = :confirmedStatus OR (a.status = :pendingStatus AND a.pendingExpiresAt > :now))`,
+        {
+          confirmedStatus: AppointmentStatus.CONFIRMED,
+          pendingStatus: AppointmentStatus.PENDING_PAYMENT,
+          now: new Date(),
+        },
+      );
 
-    const pendingCount = await manager.count(AppointmentRescheduleRequest, {
-      where: {
-        doctorId,
-        proposedDate: date,
-        proposedStartTime: startTime,
-        proposedEndTime: endTime,
-        status: RescheduleRequestStatus.PENDING,
-        expiresAt: MoreThan(new Date()),
-      },
-    });
+    if (excludeAppointmentId) {
+      qb.andWhere('a.id != :excludeAppointmentId', { excludeAppointmentId });
+    }
 
-    if (confirmedCount + pendingCount >= maxPatients) {
+    let activeBookingsCount = 0;
+    if (typeof qb.getCount === 'function') {
+      activeBookingsCount = await qb.getCount();
+    } else if (typeof qb.getMany === 'function') {
+      const list = await qb.getMany();
+      activeBookingsCount = list ? list.length : 0;
+    }
+
+    let pendingCount = 0;
+    try {
+      pendingCount = await manager.count(AppointmentRescheduleRequest, {
+        where: {
+          doctorId,
+          proposedDate: date,
+          proposedStartTime: startTime,
+          proposedEndTime: endTime,
+          status: RescheduleRequestStatus.PENDING,
+          expiresAt: MoreThan(new Date()),
+        },
+      });
+    } catch {
+      pendingCount = 0;
+    }
+
+    if (activeBookingsCount + pendingCount >= maxPatients) {
       throw new ConflictException('This slot is already booked or temporarily reserved');
     }
   }
@@ -363,7 +386,7 @@ export class AppointmentService {
     const doctor = await this.doctorRepo.findOne({ where: { id: dto.doctorId } });
     if (!doctor) throw new NotFoundException(`Doctor with ID ${dto.doctorId} not found`);
 
-    await this.validateBookingWindow(dto.doctorId, dto.date, dto.startTime);
+    await this.validateBookingWindow(dto.doctorId, dto.date, dto.startTime, dto.endTime);
 
     const patientHasBookingOnDay = await this.appointmentRepo.findOne({
       where: {
@@ -534,6 +557,118 @@ export class AppointmentService {
     return {
       message: 'Appointment booked successfully',
       data: this.toPatientAppointmentResponse(fullAppointment),
+    };
+  }
+
+  async createWalkInAppointment(
+    userId: string,
+    dto: {
+      fullName: string;
+      phone: string;
+      age?: number;
+      gender?: string;
+      reason?: string;
+    },
+  ) {
+    const doctor = await this.getDoctorByUserId(userId);
+    const todayStr = getTodayIST();
+
+    const now = new Date();
+    const nowIST = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const startHour = String(nowIST.getHours()).padStart(2, '0');
+    const startMin = String(nowIST.getMinutes()).padStart(2, '0');
+    const startTime = `${startHour}:${startMin}`;
+
+    const endMinutes = nowIST.getHours() * 60 + nowIST.getMinutes() + 15;
+    const endH = String(Math.floor(endMinutes / 60) % 24).padStart(2, '0');
+    const endM = String(endMinutes % 60).padStart(2, '0');
+    const endTime = `${endH}:${endM}`;
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction('SERIALIZABLE');
+
+    let savedAppt: Appointment;
+    try {
+      let patient = await queryRunner.manager.findOne(Patient, {
+        where: { phone: dto.phone },
+      });
+
+      if (!patient) {
+        const userRepo = queryRunner.manager.getRepository(this.dataSource.getMetadata('User').target);
+        const dummyEmail = `walkin_${Date.now()}_${Math.random().toString(36).substring(2, 7)}@careup.local`;
+        const newUser = userRepo.create({
+          name: dto.fullName,
+          email: dummyEmail,
+          password: 'WALKIN_PATIENT_NO_PASSWORD',
+          role: 'PATIENT',
+          isEmailVerified: true,
+        });
+        const savedUser: any = await queryRunner.manager.save(newUser);
+
+        patient = this.patientRepo.create({
+          userId: savedUser.id,
+          fullName: dto.fullName,
+          phone: dto.phone,
+          age: dto.age ?? 30,
+          gender: dto.gender ?? 'OTHER',
+          basicHealthInfo: dto.reason || 'Walk-in Consultation',
+        });
+        patient = await queryRunner.manager.save(patient);
+      }
+
+      const tokenNumber = await this.assignTokenNumber(
+        queryRunner.manager,
+        doctor.id,
+        todayStr,
+      );
+
+      const appointment = this.appointmentRepo.create({
+        doctorId: doctor.id,
+        patientId: patient.id,
+        date: todayStr,
+        startTime,
+        endTime,
+        status: AppointmentStatus.CHECKED_IN,
+        paymentStatus: 'PAID',
+        tokenNumber,
+        checkedInAt: new Date(),
+        reasonForVisit: dto.reason || 'Walk-in Consultation',
+      });
+
+      savedAppt = await queryRunner.manager.save(appointment);
+      await this.queueService.recalculateQueue(doctor.id, todayStr, queryRunner.manager);
+      await queryRunner.commitTransaction();
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
+
+    await this.queueService.broadcastQueueStatus(doctor.id, todayStr, this.dataSource.manager);
+
+    const fullAppointment = await this.appointmentRepo.findOne({
+      where: { id: savedAppt.id },
+      relations: { doctor: true, patient: { user: true } },
+    });
+
+    this.appointmentGateway?.emitAppointmentEvent(SOCKET_EVENTS.CHECKED_IN, {
+      appointmentId: savedAppt.id,
+      patientId: savedAppt.patientId,
+      doctorId: savedAppt.doctorId,
+      status: savedAppt.status,
+      updatedAt: new Date().toISOString(),
+      patientName: dto.fullName,
+      date: savedAppt.date,
+      startTime: savedAppt.startTime,
+      endTime: savedAppt.endTime,
+    });
+
+    return {
+      success: true,
+      message: 'Walk-in patient registered and added to live queue successfully',
+      data: fullAppointment,
     };
   }
 
@@ -1041,7 +1176,7 @@ export class AppointmentService {
       throw new BadRequestException('Cannot reschedule to the same date and time slot');
     }
 
-    this.validateFutureDateTime(dto.date, dto.startTime);
+    await this.validateFutureDateTime(appointment.doctorId, dto.date, dto.startTime, dto.endTime);
 
     const doctor = await this.doctorRepo.findOne({ where: { id: appointment.doctorId } });
     if (!doctor) throw new NotFoundException(`Doctor with ID ${appointment.doctorId} not found`);
@@ -1177,6 +1312,7 @@ export class AppointmentService {
         dto.startTime,
         dto.endTime,
         effectiveReschedCap,
+        appointment.id,
       );
 
       appToLock.status = AppointmentStatus.RESCHEDULED;
@@ -1618,7 +1754,7 @@ export class AppointmentService {
       throw new BadRequestException('Cannot reschedule to the same date and time slot');
     }
 
-    this.validateFutureDateTime(dto.date, dto.startTime);
+    await this.validateFutureDateTime(appointment.doctorId, dto.date, dto.startTime, dto.endTime);
 
     // ── Doctor leave check ──────────────────────────────────────────────────
     const leaveOnRescheduleDate = await this.leaveRepo.findOne({
@@ -1713,6 +1849,7 @@ export class AppointmentService {
         dto.startTime,
         dto.endTime,
         effectiveDocReschedCap,
+        appointment.id,
       );
 
       appToLock.status = AppointmentStatus.RESCHEDULED;
@@ -1910,7 +2047,12 @@ export class AppointmentService {
     };
   }
 
-  private validateFutureDateTime(date: string, startTime: string): void {
+  private async validateFutureDateTime(
+    doctorId: string,
+    date: string,
+    startTime: string,
+    endTime?: string,
+  ): Promise<void> {
     assertValidDateFormat(date);
     assertValidTimeFormat(startTime);
 
@@ -1921,13 +2063,37 @@ export class AppointmentService {
     if (date === todayStr) {
       const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
       const currentMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
-      const [h, m] = startTime.split(':').map(Number);
-      if (h * 60 + m <= currentMinutes) {
-        throw new BadRequestException('Cannot book appointment for a past time slot');
+
+      let isStream = false;
+      if (endTime && this.availabilityService?.getSlotCapacity) {
+        try {
+          const cap = await this.availabilityService.getSlotCapacity(doctorId, date, startTime, endTime);
+          isStream = cap?.schedulingType === 'STREAM';
+        } catch {
+          isStream = false;
+        }
+      }
+
+      if (isStream && endTime) {
+        const [eh, em] = endTime.split(':').map(Number);
+        if (eh * 60 + em <= currentMinutes) {
+          throw new BadRequestException('Cannot book appointment for a past time slot');
+        }
+      } else {
+        const [h, m] = startTime.split(':').map(Number);
+        if (h * 60 + m <= currentMinutes) {
+          throw new BadRequestException('Cannot book appointment for a past time slot');
+        }
       }
     }
   }
-  private async validateBookingWindow(doctorId: string, date: string, startTime: string): Promise<void> {
+
+  private async validateBookingWindow(
+    doctorId: string,
+    date: string,
+    startTime: string,
+    endTime?: string,
+  ): Promise<void> {
     assertValidDateFormat(date);
     assertValidTimeFormat(startTime);
 
@@ -1977,10 +2143,27 @@ export class AppointmentService {
     const currentMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
 
     if (date === todayStr) {
-      const [h, m] = startTime.split(':').map(Number);
-      const slotMinutes = h * 60 + m;
-      if (slotMinutes <= currentMinutes) {
-        throw new BadRequestException('Cannot book an appointment for a past time slot');
+      let isStream = false;
+      if (endTime && this.availabilityService?.getSlotCapacity) {
+        try {
+          const cap = await this.availabilityService.getSlotCapacity(doctorId, date, startTime, endTime);
+          isStream = cap?.schedulingType === 'STREAM';
+        } catch {
+          isStream = false;
+        }
+      }
+
+      if (isStream && endTime) {
+        const [eh, em] = endTime.split(':').map(Number);
+        if (eh * 60 + em <= currentMinutes) {
+          throw new BadRequestException('Cannot book an appointment for a past time slot');
+        }
+      } else {
+        const [h, m] = startTime.split(':').map(Number);
+        const slotMinutes = h * 60 + m;
+        if (slotMinutes <= currentMinutes) {
+          throw new BadRequestException('Cannot book an appointment for a past time slot');
+        }
       }
     }
     if (date !== todayStr) {

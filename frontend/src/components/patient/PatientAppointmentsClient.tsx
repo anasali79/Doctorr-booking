@@ -138,6 +138,21 @@ export function PatientAppointmentsClient({
   const nowIST = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
   const currentMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
 
+  const toMinutes = (timeStr?: string): number => {
+    if (!timeStr) return 0;
+    const [hh, mm] = timeStr.split(':').map((v) => parseInt(v, 10));
+    return (isNaN(hh) ? 0 : hh) * 60 + (isNaN(mm) ? 0 : mm);
+  };
+
+  const isSlotPastToday = (a: Appointment) => {
+    if (a.date < todayStr) return true;
+    if (a.date === todayStr && a.status === 'CONFIRMED') {
+      const slotEnd = a.endTime ? toMinutes(a.endTime) : toMinutes(a.startTime) + 30;
+      return slotEnd < currentMinutes;
+    }
+    return false;
+  };
+
   const pendingList = appointments.filter(
     (a) =>
       a.status === 'PENDING_PAYMENT' &&
@@ -148,13 +163,13 @@ export function PatientAppointmentsClient({
   const upcomingList = appointments.filter(
     (a) =>
       ['CONFIRMED', 'CHECKED_IN', 'IN_CONSULTATION'].includes(a.status) &&
-      a.date >= todayStr,
+      !isSlotPastToday(a),
   );
 
   const pastList = appointments.filter(
     (a) =>
       ['COMPLETED', 'NO_SHOW'].includes(a.status) ||
-      (['CONFIRMED', 'CHECKED_IN', 'IN_CONSULTATION'].includes(a.status) && a.date < todayStr),
+      (['CONFIRMED', 'CHECKED_IN', 'IN_CONSULTATION'].includes(a.status) && isSlotPastToday(a)),
   );
 
   const cancelledList = appointments.filter(

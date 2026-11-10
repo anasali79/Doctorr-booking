@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Loader2,
   Info,
+  Sparkles,
 } from 'lucide-react';
 
 interface ElasticAvailabilityModalProps {
@@ -118,18 +119,11 @@ export function ElasticAvailabilityModal({
       return;
     }
 
-    if (analysis.isMixed) {
-      toast.error('Mixed boundary change', {
-        description: 'Please expand or shrink one boundary at a time to ensure safe booking management.',
-      });
-      return;
-    }
-
     try {
       setLoading(true);
 
       if (analysis.isExpansion) {
-        // Phase 1: Elastic Expansion
+        // Phase 1: Pure Elastic Expansion
         await elasticSchedulingApi.expandSchedule({
           shiftType: shift.shiftType,
           shiftId: shift.id,
@@ -142,8 +136,9 @@ export function ElasticAvailabilityModal({
         });
         onSuccess();
         onClose();
-      } else if (analysis.isShrinking) {
-        // Phase 2: Check for shrinking conflicts first
+      } else if (analysis.isShrinking || analysis.isMixed) {
+        // Phase 2: Elastic Shrinking or Combined Adjustment
+        // Check for conflicts on any clipped boundaries first
         const conflicts = await elasticSchedulingApi.checkShrinkConflicts({
           shiftType: shift.shiftType,
           shiftId: shift.id,
@@ -152,7 +147,7 @@ export function ElasticAvailabilityModal({
         });
 
         if (conflicts.hasConflicts) {
-          // Case B: Confirmed appointments affected
+          // Confirmed appointments affected in the clipped window
           onClose();
           onConflictDetected(conflicts, {
             ...shift,
@@ -160,7 +155,7 @@ export function ElasticAvailabilityModal({
             newEndTime,
           });
         } else {
-          // Case A: Zero conflicts, apply immediately
+          // Zero conflicts, apply immediately
           await elasticSchedulingApi.applyShrink({
             shiftType: shift.shiftType,
             shiftId: shift.id,
@@ -169,8 +164,15 @@ export function ElasticAvailabilityModal({
             forceIfNoConflicts: true,
           });
 
-          toast.success('Hours Reduced Successfully', {
-            description: `Shift updated to ${formatTime(newStartTime)} – ${formatTime(newEndTime)} without conflicts.`,
+          const successTitle = analysis.isMixed
+            ? 'Combined Schedule Adjusted Successfully'
+            : 'Hours Reduced Successfully';
+          const successDesc = analysis.isMixed
+            ? `Hours updated to ${formatTime(newStartTime)} – ${formatTime(newEndTime)}. Expanded slots opened and reduced boundaries safely applied without conflicts.`
+            : `Shift updated to ${formatTime(newStartTime)} – ${formatTime(newEndTime)} without conflicts.`;
+
+          toast.success(successTitle, {
+            description: successDesc,
           });
           onSuccess();
           onClose();
@@ -289,12 +291,47 @@ export function ElasticAvailabilityModal({
               )}
 
               {analysis.isMixed && (
-                <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-xs text-rose-800 flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-semibold">Mixed Adjustment:</span> Please adjust either the
-                    start time or end time separately to preserve clean booking boundaries.
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900">
+                  <div className="font-semibold flex items-center gap-1.5 mb-1 text-blue-900">
+                    <Sparkles className="w-4 h-4 text-blue-600" />
+                    Combined Adjustment Detected (Expansion + Shrink)
                   </div>
+                  <p className="text-blue-800 leading-relaxed">
+                    Adjusting hours to{' '}
+                    <strong>
+                      {formatTime(newStartTime)} – {formatTime(newEndTime)}
+                    </strong>
+                    .
+                  </p>
+                  <ul className="mt-1.5 list-disc list-inside text-blue-800 space-y-0.5">
+                    {analysis.startExpanded && (
+                      <li>
+                        <span className="font-semibold text-emerald-800">Expansion:</span> Morning extended earlier by{' '}
+                        {analysis.startDelta} (new slots opened).
+                      </li>
+                    )}
+                    {analysis.endExpanded && (
+                      <li>
+                        <span className="font-semibold text-emerald-800">Expansion:</span> Evening extended later by{' '}
+                        {analysis.endDelta} (new slots opened).
+                      </li>
+                    )}
+                    {analysis.startShrunk && (
+                      <li>
+                        <span className="font-semibold text-amber-800">Shrinking:</span> Morning reduced by{' '}
+                        {analysis.startDelta} (conflict scan will run).
+                      </li>
+                    )}
+                    {analysis.endShrunk && (
+                      <li>
+                        <span className="font-semibold text-amber-800">Shrinking:</span> Evening reduced by{' '}
+                        {analysis.endDelta} (conflict scan will run).
+                      </li>
+                    )}
+                    <li className="font-medium text-blue-950">
+                      Existing bookings are strictly protected. If bookings fall in the reduced period, you can easily reschedule them.
+                    </li>
+                  </ul>
                 </div>
               )}
             </>
@@ -320,14 +357,20 @@ export function ElasticAvailabilityModal({
             <Button
               type="submit"
               size="sm"
-              disabled={loading || !analysis?.isValid || analysis?.isMixed}
-              className="bg-blue-600 hover:bg-blue-700 text-white min-w-[120px]"
+              disabled={loading || !analysis?.isValid || analysis?.isUnchanged}
+              className="bg-blue-600 hover:bg-blue-700 text-white min-w-[130px]"
             >
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
                   Verifying...
                 </>
+              ) : analysis?.isExpansion ? (
+                'Expand Schedule'
+              ) : analysis?.isShrinking ? (
+                'Reduce Hours'
+              ) : analysis?.isMixed ? (
+                'Apply Combined'
               ) : (
                 'Apply Adjustment'
               )}

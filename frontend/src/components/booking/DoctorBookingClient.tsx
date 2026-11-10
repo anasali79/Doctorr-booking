@@ -62,6 +62,7 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
 
   const [selectedDate, setSelectedDate] = useState<string>(availableDates[0]?.dateStr || todayIST);
   const [slots, setSlots] = useState<Slot[]>([]);
+  const [slotsMessage, setSlotsMessage] = useState<string>('');
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [onLeave, setOnLeave] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
@@ -82,11 +83,13 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
 
       setSlots(res.data.data || []);
       setOnLeave(Boolean(res.data.onLeave));
+      setSlotsMessage(res.data.message || '');
     } catch (err: unknown) {
       const msg = extractErrorMessage(err);
       toast.error('Could not load consultation slots', { description: msg });
       setSlots([]);
       setOnLeave(false);
+      setSlotsMessage('');
     } finally {
       setLoadingSlots(false);
     }
@@ -219,23 +222,10 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
           rzp.open();
           return;
         } else {
-          // Fallback in environments where razorpay script is blocked / sandbox test
-          toast.info('Direct Booking Sandbox', {
-            description: 'Finalizing appointment confirmation in test sandbox mode.',
+          toast.error('Payment Gateway Unavailable', {
+            description: 'Could not load secure Razorpay checkout. Please check your internet connection or disable ad-blockers and try again.',
           });
-          await clientAxios.post('/api/payment/verify', {
-            orderId: orderData.orderId,
-            paymentId: `pay_mock_${Date.now()}`,
-            signature: `mock_sig_${Date.now()}`,
-            appointmentId: orderData.appointmentId,
-          });
-
-          toast.success('Appointment Confirmed!', {
-            description: `Reserved with ${doctor.fullName} on ${formatDate(selectedDate)} at ${formatTime(selectedSlot.startTime)}`,
-          });
-          setShowConfirmModal(false);
-          router.push('/patient/dashboard');
-          router.refresh();
+          setBookingInProgress(false);
           return;
         }
       }
@@ -376,10 +366,12 @@ export function DoctorBookingClient({ doctor, user }: DoctorBookingClientProps) 
           <div className="py-12 text-center rounded-3xl bg-zinc-50 p-6 space-y-2 border border-black/[0.06]">
             <Clock className="w-8 h-8 text-zinc-400 mx-auto" />
             <h3 className="text-sm font-bold text-zinc-900">
-              No Slots Scheduled
+              {slotsMessage || 'No Slots Scheduled'}
             </h3>
             <p className="text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed">
-              There are no consultation slots configured for this date. Please select an upcoming date.
+              {slotsMessage && slotsMessage.toLowerCase().includes('elapsed')
+                ? 'All consultation slots for today have already passed. Please select an upcoming date from the calendar.'
+                : 'There are no consultation slots configured for this date. Please select an upcoming date.'}
             </p>
           </div>
         ) : (

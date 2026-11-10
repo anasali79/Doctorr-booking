@@ -29,19 +29,19 @@ export async function POST(req: NextRequest) {
       secure: process.env.NODE_ENV === 'production',
     };
 
-    // Store admin_token, token, and SESSION_COOKIE_NAME
+    // Store admin_token, token, and SESSION_COOKIE_NAME securely
     response.cookies.set({
       ...cookieOptions,
       name: 'admin_token',
       value: backendRes.token,
-      httpOnly: false,
+      httpOnly: true,
     });
 
     response.cookies.set({
       ...cookieOptions,
       name: 'token',
       value: backendRes.token,
-      httpOnly: false,
+      httpOnly: true,
     });
 
     response.cookies.set({

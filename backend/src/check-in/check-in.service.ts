@@ -22,6 +22,17 @@ import { NotificationType } from '../notification/enums/notification-type.enum';
 import { NotificationDispatcher } from '../notification/notification.dispatcher';
 import { NotificationEventType } from '../notification/enums/notification-event-type.enum';
 
+function normalizeDateStr(dateVal: string | Date | unknown): string {
+  if (!dateVal) return '';
+  if (typeof dateVal === 'string') {
+    return dateVal.split('T')[0];
+  }
+  if (dateVal instanceof Date) {
+    return dateVal.toISOString().split('T')[0];
+  }
+  return String(dateVal).split('T')[0];
+}
+
 @Injectable()
 export class CheckInService {
   constructor(
@@ -140,10 +151,11 @@ export class CheckInService {
     }
 
     // ── Date validations ──────────────────────────────────────────────────────
-    if (appointment.date > todayStr) {
+    const apptDateStr = normalizeDateStr(appointment.date);
+    if (apptDateStr > todayStr) {
       throw new BadRequestException('Check-in allowed only on appointment date');
     }
-    if (appointment.date < todayStr) {
+    if (apptDateStr < todayStr) {
       throw new BadRequestException('Appointment expired');
     }
 
@@ -476,7 +488,8 @@ export class CheckInService {
       }
 
       const todayStr = getTodayIST();
-      if (appointment.date > todayStr) {
+      const apptDateStr = normalizeDateStr(appointment.date);
+      if (apptDateStr > todayStr) {
         throw new BadRequestException('Cannot mark a future appointment as no-show');
       }
 
@@ -528,7 +541,8 @@ export class CheckInService {
     }
 
     const todayStr = getTodayIST();
-    if (appointment.date !== todayStr) {
+    const apptDateStr = normalizeDateStr(appointment.date);
+    if (apptDateStr !== todayStr) {
       throw new BadRequestException(
         'Check-in is only allowed on the appointment date',
       );
@@ -744,6 +758,11 @@ export class CheckInService {
       },
     });
 
+    const rawPhone = appointment.patient?.phone ?? '';
+    const maskedPhone = rawPhone.length > 4
+      ? `${rawPhone.slice(0, 2)}******${rawPhone.slice(-2)}`
+      : rawPhone;
+
     return {
       success: true,
       data: {
@@ -754,7 +773,7 @@ export class CheckInService {
         doctorQualification: appointment.doctor?.qualification ?? '',
         consultationFee: appointment.doctor?.consultationFee ?? 0,
         patientName: appointment.patient?.fullName ?? 'Patient',
-        patientPhone: appointment.patient?.phone ?? '',
+        patientPhone: maskedPhone,
         date: appointment.date,
         startTime: appointment.startTime,
         endTime: appointment.endTime,
@@ -807,10 +826,11 @@ export class CheckInService {
     }
 
     const todayStr = getTodayIST();
-    if (appointment.date > todayStr) {
-      throw new BadRequestException(`Check-in is only allowed on the appointment date (${appointment.date}).`);
+    const apptDateStr = normalizeDateStr(appointment.date);
+    if (apptDateStr > todayStr) {
+      throw new BadRequestException(`Check-in is only allowed on the appointment date (${apptDateStr}).`);
     }
-    if (appointment.date < todayStr) {
+    if (apptDateStr < todayStr) {
       throw new BadRequestException('Appointment date has passed and is expired.');
     }
 

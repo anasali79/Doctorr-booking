@@ -392,6 +392,75 @@ describe('PaymentConfirmation & Expiry Handling (P1 Fixes)', () => {
       expect(testAppt.status).toBe(AppointmentStatus.CONFIRMED);
       expect((testAppt as any).tokenNumber).toBe(1);
     });
+
+    it('6. Multi-capacity slot: second patient confirms normally when 1 patient confirmed and capacity is 2', async () => {
+      const now = new Date();
+      const futureExpiresAt = new Date(now.getTime() + 10 * 60 * 1000);
+
+      const patient2Appt = {
+        id: 'appt_patient_2',
+        doctorId: 'doc_1',
+        patientId: 'pat_2',
+        date: '2026-11-23',
+        startTime: '09:00',
+        endTime: '09:30',
+        status: AppointmentStatus.PENDING_PAYMENT,
+        pendingExpiresAt: futureExpiresAt,
+        tokenNumber: null,
+      };
+
+      const patient2Payment = {
+        id: 'pay_patient_2',
+        appointmentId: 'appt_patient_2',
+        amount: 50000,
+        amountRefunded: 0,
+        status: PaymentStatus.PENDING,
+        paymentId: null,
+      } as any;
+
+      const mockQueryRunner = {
+        connect: jest.fn(),
+        startTransaction: jest.fn(),
+        commitTransaction: jest.fn(),
+        rollbackTransaction: jest.fn(),
+        release: jest.fn(),
+        manager: {
+          findOne: jest.fn((entity, options) => {
+            if (entity === Appointment) return Promise.resolve(patient2Appt);
+            if (entity === Payment) return Promise.resolve(patient2Payment);
+            return Promise.resolve(null);
+          }),
+          find: jest.fn().mockResolvedValue([{ tokenNumber: 1 }]), // Patient 1 has token 1
+          save: jest.fn((entity) => Promise.resolve(entity)),
+          createQueryBuilder: jest.fn(() => ({
+            where: jest.fn().mockReturnThis(),
+            andWhere: jest.fn().mockReturnThis(),
+            getCount: jest.fn().mockResolvedValue(1), // 1 existing confirmed appointment
+            getOne: jest.fn().mockResolvedValue(null), // no duplicate patient day booking
+          })),
+        },
+      };
+
+      const availabilityService = (service as any).availabilityService;
+      availabilityService.getSlotCapacity = jest.fn().mockResolvedValue({
+        maxPatients: 2,
+        schedulingType: 'WAVE',
+      });
+
+      jest.spyOn(mockDataSource, 'createQueryRunner').mockReturnValue(mockQueryRunner as any);
+
+      const result = await service.confirmAppointmentPaymentTransaction({
+        payment: patient2Payment,
+        paymentId: 'pay_rzp_patient2',
+        signature: 'sig_p2',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('confirmed successfully');
+      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+      expect(patient2Appt.status).toBe(AppointmentStatus.CONFIRMED);
+      expect((patient2Appt as any).tokenNumber).toBe(2);
+    });
   });
 
   describe('Calendar Date Validation (Issue #5 Fixes)', () => {

@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       ...cookieOptions,
       name: 'jwt',
       value: backendRes.token,
-      httpOnly: false,
+      httpOnly: true,
     });
 
     // 2. Store as 'token' cookie (standard NestJS strategy & Socket header)
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
       ...cookieOptions,
       name: 'token',
       value: backendRes.token,
-      httpOnly: false,
+      httpOnly: true,
     });
 
     // 3. Store as 'access_token' (httpOnly Next.js session)
