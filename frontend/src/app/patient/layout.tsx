@@ -4,6 +4,7 @@ import { getPatientProfile } from '@/lib/api/patient';
 import { getUnreadCount } from '@/lib/api/notifications';
 import { Navbar } from '@/components/common/Navbar';
 import { PatientSocketProvider } from '@/components/patient/PatientSocketProvider';
+import { AiAssistantDrawer } from '@/components/ai/AiAssistantDrawer';
 
 export default async function PatientLayout({
   children,
@@ -37,6 +38,9 @@ export default async function PatientLayout({
           children
         )}
       </main>
+
+      {/* Free AI Patient Assistant */}
+      <AiAssistantDrawer role="PATIENT" />
     </div>
   );
 }
