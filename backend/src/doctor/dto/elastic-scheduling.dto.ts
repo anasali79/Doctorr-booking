@@ -2,11 +2,13 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -59,6 +61,16 @@ export class CheckShrinkConflictDto {
     message: 'newEndTime must be in HH:MM format',
   })
   newEndTime: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  newMaxPatients?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  newSlotDuration?: number;
 }
 
 export class ApplyShrinkDto {
@@ -81,6 +93,16 @@ export class ApplyShrinkDto {
     message: 'newEndTime must be in HH:MM format',
   })
   newEndTime: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  newMaxPatients?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  newSlotDuration?: number;
 
   @IsBoolean()
   @IsOptional()
@@ -107,6 +129,11 @@ export class ShrinkShiftContextDto {
     message: 'newEndTime must be in HH:MM format',
   })
   newEndTime: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  newMaxPatients?: number;
 
   @IsOptional()
   @IsString()
