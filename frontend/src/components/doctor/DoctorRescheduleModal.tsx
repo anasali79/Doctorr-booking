@@ -141,8 +141,8 @@ export function DoctorRescheduleModal({
       const slots2: RawSlot[] = parseSlotData(res2);
       const slots3: RawSlot[] = parseSlotData(res3);
 
-      const now = new Date();
-      const currentHoursMin = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      const currentHoursMin = `${String(nowIST.getHours()).padStart(2, '0')}:${String(nowIST.getMinutes()).padStart(2, '0')}`;
 
       const filterValidSlots = (slots: RawSlot[], dateStr: string): RawSlot[] => {
         return slots.filter((s) => {
@@ -287,8 +287,8 @@ export function DoctorRescheduleModal({
         );
         const slots: RawSlot[] = parseSlotData(res);
         const todayStr = getTodayIST();
-        const now = new Date();
-        const currentHoursMin = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+        const currentHoursMin = `${String(nowIST.getHours()).padStart(2, '0')}:${String(nowIST.getMinutes()).padStart(2, '0')}`;
 
         const filtered = slots.filter((s) => {
           if (!isSlotBookable(s.status)) return false;

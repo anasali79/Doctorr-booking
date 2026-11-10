@@ -246,7 +246,9 @@ export class NotificationService {
   ) {
     let whereCondition: any;
 
-    if (userRole === Role.DOCTOR) {
+    if (userRole === Role.ADMIN) {
+      whereCondition = {};
+    } else if (userRole === Role.DOCTOR) {
       const doctor = await this.getDoctorByUserId(userId);
       whereCondition = { doctorId: doctor.id };
     } else {
@@ -285,7 +287,9 @@ export class NotificationService {
   async markAsRead(userId: string, userRole: string, notificationId: string) {
     let whereCondition: any = { id: notificationId };
 
-    if (userRole === Role.DOCTOR) {
+    if (userRole === Role.ADMIN) {
+      // Admin has system-wide permissions to mark notifications
+    } else if (userRole === Role.DOCTOR) {
       const doctor = await this.getDoctorByUserId(userId);
       whereCondition.doctorId = doctor.id;
     } else {
@@ -327,7 +331,9 @@ export class NotificationService {
   async markAllAsRead(userId: string, userRole: string = Role.PATIENT) {
     let whereCondition: any;
 
-    if (userRole === Role.DOCTOR) {
+    if (userRole === Role.ADMIN) {
+      whereCondition = { isRead: false };
+    } else if (userRole === Role.DOCTOR) {
       const doctor = await this.getDoctorByUserId(userId);
       whereCondition = { doctorId: doctor.id, isRead: false };
     } else {
@@ -358,7 +364,9 @@ export class NotificationService {
   async getUnreadCount(userId: string, userRole: string = Role.PATIENT) {
     let whereCondition: any;
 
-    if (userRole === Role.DOCTOR) {
+    if (userRole === Role.ADMIN) {
+      whereCondition = { isRead: false };
+    } else if (userRole === Role.DOCTOR) {
       const doctor = await this.getDoctorByUserId(userId);
       whereCondition = { doctorId: doctor.id, isRead: false };
     } else {

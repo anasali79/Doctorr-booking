@@ -33,9 +33,15 @@ const ALLOWED_MIME_TYPES = [
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 
 function getUploadDir(): string {
-  const uploadDir = path.join(process.cwd(), 'uploads', 'verification-docs');
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
+  const baseDir =
+    process.env.UPLOADS_DIR || path.join(process.cwd(), 'uploads');
+  const uploadDir = path.join(baseDir, 'verification-docs');
+  try {
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+  } catch {
+    // Directory may have been created concurrently
   }
   return uploadDir;
 }
@@ -67,11 +73,10 @@ export class DoctorVerificationController {
         storage: diskStorage({
           destination: (_req, _file, cb) => cb(null, getUploadDir()),
           filename: (_req, file, cb) => {
+            const safeBaseName = path.basename(file.originalname);
+            const safeExt = extname(safeBaseName).toLowerCase().replace(/[^a-z0-9.]/g, '');
             const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-            cb(
-              null,
-              `${uniqueSuffix}${extname(file.originalname).toLowerCase()}`,
-            );
+            cb(null, `${uniqueSuffix}${safeExt}`);
           },
         }),
         limits: { fileSize: MAX_FILE_SIZE },

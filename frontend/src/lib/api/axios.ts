@@ -26,10 +26,11 @@ export class ApiError extends Error {
  * Ensures no duplicate trailing slashes and handles if /api is appended.
  */
 export function getNormalizedBaseUrl(): string {
+  const isServer = typeof window === 'undefined';
   let raw = (
     process.env.API_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
-    (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001')
+    (isServer ? 'http://localhost:3001' : '')
   ).trim();
 
   // Strip trailing slashes

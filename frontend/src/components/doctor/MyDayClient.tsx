@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Appointment, Doctor } from '@/types';
 import { formatTime, formatDate } from '@/lib/utils';
 import { toast } from 'sonner';
-import { clientAxios } from '@/lib/api/axios';
+import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -279,50 +279,51 @@ export function MyDayClient({
   };
 
   // Walk-in Registration
-  const handleAddWalkIn = (e: React.FormEvent) => {
+  const [submittingWalkIn, setSubmittingWalkIn] = useState(false);
+  const handleAddWalkIn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!walkInForm.fullName || !walkInForm.phone) {
       toast.error('Please enter patient name and phone number');
       return;
     }
 
-    const nextToken = (sortedAppointments[sortedAppointments.length - 1]?.tokenNumber || 0) + 1;
-    const now = new Date();
-    const startHour = String(now.getHours()).padStart(2, '0');
-    const startMin = String(now.getMinutes()).padStart(2, '0');
-    const timeStr = `${startHour}:${startMin}`;
+    try {
+      setSubmittingWalkIn(true);
+      const res = await clientAxios.post<{ success: boolean; data: Appointment }>(
+        '/api/doctor/appointments/walk-in',
+        {
+          fullName: walkInForm.fullName.trim(),
+          phone: walkInForm.phone.trim(),
+          age: Number(walkInForm.age) || 30,
+          gender: walkInForm.gender || 'OTHER',
+          reason: walkInForm.reason || 'Walk-in Consultation',
+        },
+      );
 
-    const newAppt: Appointment = {
-      id: `walkin-${Date.now()}`,
-      doctorId: profile.id,
-      patientId: `p-${Date.now()}`,
-      date: selectedDate,
-      startTime: timeStr,
-      endTime: `${startHour}:${String((now.getMinutes() + 15) % 60).padStart(2, '0')}`,
-      status: 'CHECKED_IN',
-      tokenNumber: nextToken,
-      patient: {
-        id: `p-${Date.now()}`,
-        fullName: walkInForm.fullName,
-        age: Number(walkInForm.age) || 30,
-        gender: walkInForm.gender as any,
-        phone: walkInForm.phone,
-        basicHealthInfo: walkInForm.reason || 'Walk-in Consultation',
-      },
-    };
+      const savedAppt = res.data?.data;
+      if (savedAppt) {
+        setAppointments((prev) => [...prev, savedAppt]);
+        setSelectedApptId(savedAppt.id);
+        toast.success(`${walkInForm.fullName} added to live queue!`);
+      }
 
-    setAppointments((prev) => [...prev, newAppt]);
-    setSelectedApptId(newAppt.id);
-    setWalkInModalOpen(false);
-    setWalkInForm({
-      fullName: '',
-      phone: '',
-      age: '28',
-      gender: 'MALE',
-      reason: '',
-      type: 'New Patient',
-    });
-    toast.success(`${walkInForm.fullName} added to live queue!`);
+      setWalkInModalOpen(false);
+      setWalkInForm({
+        fullName: '',
+        phone: '',
+        age: '28',
+        gender: 'MALE',
+        reason: '',
+        type: 'New Patient',
+      });
+      router.refresh();
+    } catch (err: unknown) {
+      toast.error('Failed to add walk-in patient', {
+        description: extractErrorMessage(err),
+      });
+    } finally {
+      setSubmittingWalkIn(false);
+    }
   };
 
   // Fetch patient medical record when current patient changes

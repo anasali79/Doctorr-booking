@@ -74,7 +74,7 @@ export function ScheduleConflictModal({
         </div>
 
         {/* Shift Context Notice */}
-        <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 text-xs text-slate-600 flex items-center justify-between">
+        <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 text-xs text-slate-600 flex items-center justify-between flex-wrap gap-2">
           <div>
             <span className="font-semibold text-slate-800">Clipped Period: </span>
             {conflictData.clippedIntervals?.map((c, i) => (
@@ -82,6 +82,16 @@ export function ScheduleConflictModal({
                 {formatTime(c.start)} – {formatTime(c.end)}
               </span>
             ))}
+            {conflictData.expandedIntervals && conflictData.expandedIntervals.length > 0 && (
+              <span className="ml-3">
+                <span className="font-semibold text-slate-800">Expanded: </span>
+                {conflictData.expandedIntervals.map((e, i) => (
+                  <span key={i} className="font-mono font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 ml-1">
+                    {formatTime(e.start)} – {formatTime(e.end)}
+                  </span>
+                ))}
+              </span>
+            )}
           </div>
           <span className="text-slate-500 font-mono">
             Target New Hours: {formatTime(shiftData?.newStartTime)} – {formatTime(shiftData?.newEndTime)}

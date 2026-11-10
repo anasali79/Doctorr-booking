@@ -1892,9 +1892,9 @@ export class AvailabilityService {
     }
 
     if (intervals.length === 0) {
-      throw new NotFoundException(
-        `No availability found for this doctor on the selected date`,
-      );
+      const emptySlots: any = [];
+      emptySlots.message = 'No availability found for this doctor on the selected date';
+      return emptySlots;
     }
 
     const candidateSlots: Array<{
@@ -2030,12 +2030,86 @@ export class AvailabilityService {
     });
 
     if (resultSlots.length === 0) {
-      throw new NotFoundException(
-        `No slots found for this doctor on the selected date`,
-      );
+      const emptySlots: any = [];
+      if (candidateSlots.length > 0) {
+        emptySlots.message = 'All consultation slots for today have already elapsed';
+      } else {
+        emptySlots.message = 'No slots found for this doctor on the selected date';
+      }
+      return emptySlots;
     }
 
     return resultSlots;
+  }
+
+  /**
+   * Retrieves the configured capacity (maxPatients) and scheduling type for a specific slot window.
+   * Checks custom date overrides first, then falls back to recurring availability.
+   */
+  async getSlotCapacity(
+    doctorId: string,
+    dateStr: string,
+    startTime: string,
+    endTime: string,
+  ): Promise<{ maxPatients: number; schedulingType: SchedulingType }> {
+    const cleanDate = dateStr.trim();
+    const dayOfWeek = getDayOfWeekFromDate(cleanDate);
+
+    const doctor = await this.doctorRepo.findOne({
+      where: [{ id: doctorId }, { userId: doctorId }],
+    });
+    const resolvedDoctorId = doctor ? doctor.id : doctorId;
+
+    const startMin = toMinutes(startTime);
+    const endMin = toMinutes(endTime);
+
+    // 1. Check custom overrides for this date
+    const customSlots = await this.customRepo.find({
+      where: { doctorId: resolvedDoctorId, date: cleanDate },
+      order: { startTime: 'ASC' },
+    });
+
+    if (customSlots.length > 0) {
+      const match = customSlots.find(
+        (s) =>
+          toMinutes(s.startTime) <= startMin && toMinutes(s.endTime) >= endMin,
+      );
+      if (match) {
+        const type = match.schedulingType ?? SchedulingType.STREAM;
+        const capacity =
+          match.maxPatients && match.maxPatients > 0
+            ? match.maxPatients
+            : type === SchedulingType.WAVE
+            ? 3
+            : 10;
+        return { maxPatients: capacity, schedulingType: type };
+      }
+    }
+
+    // 2. Check recurring availability for this day of week
+    const recurringSlots = await this.recurringRepo.find({
+      where: { doctorId: resolvedDoctorId, dayOfWeek },
+      order: { startTime: 'ASC' },
+    });
+
+    if (recurringSlots.length > 0) {
+      const match = recurringSlots.find(
+        (s) =>
+          toMinutes(s.startTime) <= startMin && toMinutes(s.endTime) >= endMin,
+      );
+      if (match) {
+        const type = match.schedulingType ?? SchedulingType.STREAM;
+        const capacity =
+          match.maxPatients && match.maxPatients > 0
+            ? match.maxPatients
+            : type === SchedulingType.WAVE
+            ? 3
+            : 10;
+        return { maxPatients: capacity, schedulingType: type };
+      }
+    }
+
+    return { maxPatients: 1, schedulingType: SchedulingType.STREAM };
   }
 
 
@@ -2130,7 +2204,7 @@ export class AvailabilityService {
     todayAvailable: boolean;
     nextAvailableDate: string | null;
     dayOfWeek: string | null;
-    schedulingType: string;
+    schedulingType: string | null;
     availableSlots: Array<{
       startTime: string;
       endTime: string;
@@ -2176,9 +2250,16 @@ export class AvailabilityService {
         .getCount();
 
       if (customOverrides === 0) {
-        throw new NotFoundException(
-          'Doctor has no configured schedule. No appointments available.',
-        );
+        return {
+          doctorId,
+          searchedFromDate: todayStr,
+          todayAvailable: false,
+          nextAvailableDate: null,
+          dayOfWeek: null,
+          schedulingType: null,
+          availableSlots: [],
+          message: 'Doctor has no configured schedule. No appointments available.',
+        };
       }
     }
 
@@ -2286,9 +2367,16 @@ export class AvailabilityService {
     }
 
 
-    throw new NotFoundException(
-      `No appointments available in the next ${searchWindow} working days. Please try again later.`,
-    );
+    return {
+      doctorId,
+      searchedFromDate: todayStr,
+      todayAvailable: false,
+      nextAvailableDate: null,
+      dayOfWeek: null,
+      schedulingType: null,
+      availableSlots: [],
+      message: `No appointments available in the next ${searchWindow} working days. Please try again later.`,
+    };
   }
 
 
@@ -2354,6 +2442,16 @@ export class AvailabilityService {
     }
   }
   /**
+   * Check if a doctor has an active approved leave on a given date.
+   */
+  async isDoctorOnLeave(doctorId: string, date: string): Promise<boolean> {
+    const leaveRecord = await this.leaveRepo.findOne({
+      where: { doctorId, date },
+    });
+    return !!leaveRecord;
+  }
+
+  /**
    * Validates that the requested booking date is within the doctor's
    * allowed future booking window and that the doctor is not on leave.
    *
@@ -2364,7 +2462,7 @@ export class AvailabilityService {
    *   - allowFutureBooking = true  → up to maxFutureBookingDays (default 7) from today
    *   - maxFutureBookingDays < 0   → configuration is invalid
    */
-  private async validateFutureBookingConfig(doctor: Doctor, date: string): Promise<void> {
+  async validateFutureBookingConfig(doctor: Doctor, date: string): Promise<void> {
     const todayStr = getTodayIST();
 
     if (date < todayStr) {

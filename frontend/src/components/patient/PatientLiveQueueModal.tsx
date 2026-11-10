@@ -94,10 +94,10 @@ export function PatientLiveQueueModal({
     setLoading(true);
     fetchQueue(false);
 
-    // Auto poll every 3s as fallback to Socket.io for immediate live updates
+    // Auto poll every 8s as fallback to Socket.io for live updates
     const timer = setInterval(() => {
       fetchQueue(true);
-    }, 3000);
+    }, 8000);
 
     const handleQueueUpdate = () => {
       fetchQueue(true);
