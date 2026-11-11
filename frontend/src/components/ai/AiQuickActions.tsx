@@ -40,8 +40,8 @@ export function AiQuickActions({
       },
       {
         icon: FileText,
-        label: 'Prescription status',
-        prompt: 'Show my prescription status.',
+        label: 'Explain My Prescription',
+        prompt: 'Show my prescriptions and explain how and when to take my medicines in simple words.',
       },
       {
         icon: CreditCard,
@@ -72,8 +72,8 @@ export function AiQuickActions({
       },
       {
         icon: FileText,
-        label: 'प्रिस्क्रिप्शन स्थिति',
-        prompt: 'मेरी प्रिस्क्रिप्शन स्थिति दिखाएं।',
+        label: 'प्रिस्क्रिप्शन व दवाइयां समझाएं',
+        prompt: 'मेरे प्रिस्क्रिप्शन दिखाएं और दवाइयों का सही समय व परहेज आसान भाषा में समझाएं।',
       },
       {
         icon: CreditCard,
@@ -104,8 +104,8 @@ export function AiQuickActions({
       },
       {
         icon: FileText,
-        label: 'Prescription status',
-        prompt: 'Meri prescription dikhao.',
+        label: 'Prescription & Dawaiyan samjhao',
+        prompt: 'Mere kitne prescription hain aur dawaiyan kab aur kaise leni hai aasan bhasha me samjhao.',
       },
       {
         icon: CreditCard,

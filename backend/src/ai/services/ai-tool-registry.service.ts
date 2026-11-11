@@ -1035,9 +1035,119 @@ export class AiToolRegistryService {
           doctor: p.doctor?.fullName || 'Doctor',
           status: 'Prescription Available',
         }));
+
+        const actions = list.map((p) => ({
+          type: 'EXPLAIN_PRESCRIPTION',
+          label: `Dr. ${p.doctor?.fullName || 'Doctor'} ka prescription samjhao`,
+          data: {
+            prescriptionId: p.id,
+            doctorName: p.doctor?.fullName || 'Doctor',
+          },
+        }));
+
         return {
           success: true,
           data: summary,
+          actions,
+        };
+      },
+    });
+
+    // explainPrescriptionDetails (AI Prescription & Medication Explainer)
+    this.register({
+      name: 'explainPrescriptionDetails',
+      description:
+        'Explains and translates the patient’s doctor prescription into simple, easy-to-understand language. Explains each medicine name, purpose, dosage, frequency (morning/night), timing (empty stomach/after food), doctor advice, and follow-up checkup date.',
+      permittedRoles: [Role.PATIENT],
+      declaration: {
+        name: 'explainPrescriptionDetails',
+        description:
+          'Decodes the patient prescription into an easy-to-understand medication timetable and home-care advice.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            prescriptionId: {
+              type: 'STRING',
+              description: 'Optional UUID of the prescription to explain.',
+            },
+            doctorName: {
+              type: 'STRING',
+              description: 'Optional doctor name to look up prescription.',
+            },
+          },
+        },
+      },
+      execute: async (ctx, args) => {
+        const list = await this.prescriptionService.getPatientPrescriptions(
+          ctx.userId,
+        );
+        if (!list || list.length === 0) {
+          return {
+            success: true,
+            data: {
+              found: false,
+              message: 'Aapka abhi tak koi prescription record nahi mila hai.',
+            },
+          };
+        }
+
+        // Find the target prescription
+        let selected: any = null;
+        if (args?.prescriptionId) {
+          selected = list.find((p) => p.id === args.prescriptionId);
+        }
+        if (!selected && args?.doctorName) {
+          const lowerDoc = args.doctorName.toLowerCase();
+          selected = list.find((p) =>
+            (p.doctor?.fullName || '').toLowerCase().includes(lowerDoc),
+          );
+        }
+        if (!selected) {
+          selected = list[0]; // default to most recent
+        }
+
+        const frequencyMap: Record<string, string> = {
+          '1-0-1': 'Subah aur Raat (din me 2 baar)',
+          '1-1-1': 'Subah, Dopahar aur Raat (din me 3 baar)',
+          '1-0-0': 'Sirf Subah (din me 1 baar)',
+          '0-0-1': 'Sirf Raat ko sone se pehle (din me 1 baar)',
+          '0-1-0': 'Sirf Dopahar me (din me 1 baar)',
+          'SOS': 'Sirf zaroorat padne par (takleef ya dard hone par)',
+        };
+
+        const timingMap: Record<string, string> = {
+          'After Food': 'Khana khane ke baad',
+          'Before Food': 'Khana khane se pehle',
+          'Empty Stomach': 'Subah khali pet (nashte se 30 min pehle)',
+          'At Bedtime': 'Raat ko sone se pehle',
+        };
+
+        const formattedMedicines = (selected.medicines || []).map(
+          (m: any, idx: number) => ({
+            itemNumber: idx + 1,
+            medicineName: m.name,
+            dosage: m.dosage || '1 Tablet',
+            timing: timingMap[m.timing] || m.timing || 'Khana khane ke baad',
+            frequency:
+              frequencyMap[m.frequency] || m.frequency || 'Doctor ke bataye anusaar',
+            duration: m.duration || 'Course poora karein',
+            instructions: m.instructions || 'Paani ke sath lein',
+          }),
+        );
+
+        return {
+          success: true,
+          data: {
+            found: true,
+            prescriptionId: selected.id,
+            doctorName: selected.doctor?.fullName || 'Doctor',
+            specialization: selected.doctor?.specialization || 'Consultant',
+            date: selected.appointment?.date || 'Recent',
+            diagnosis: selected.diagnosis || 'General Consultation',
+            advice: selected.advice || 'Paryapt paani piyein aur aaraam karein.',
+            followUpDate: selected.followUpDate || 'Jarurat padne par',
+            medicines: formattedMedicines,
+          },
         };
       },
     });

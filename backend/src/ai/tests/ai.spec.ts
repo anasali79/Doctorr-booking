@@ -131,9 +131,21 @@ describe('AI Backend Module Unit Tests & Security Suite', () => {
     getPatientPrescriptions: jest.fn().mockResolvedValue([
       {
         id: 'presc-1',
-        medicines: [{ name: 'Aspirin', dose: '100mg' }],
+        medicines: [
+          {
+            name: 'Aspirin',
+            dosage: '1 Tablet',
+            frequency: '1-0-1',
+            timing: 'After Food',
+            duration: '5 Days',
+            instructions: 'Take with warm water',
+          },
+        ],
         diagnosis: 'Private Cardiac Issue',
+        advice: 'Drink warm water and avoid heavy lifting',
+        followUpDate: '2026-11-20',
         appointment: { date: '2026-11-01' },
+        doctor: { fullName: 'Dr. Aryan Sharma', specialization: 'Cardiology' },
       },
     ]),
   };
@@ -481,6 +493,61 @@ describe('AI Backend Module Unit Tests & Security Suite', () => {
       expect(result.data.fallbackSpecialization).toBe('general physician');
       expect(result.data.doctors.length).toBeGreaterThan(0);
       expect(result.data.doctors[0].nextSlot).toBeDefined();
+    });
+  });
+
+  // 8. AI Prescription Explainer & Medication Assistant
+  describe('AI Prescription Explainer & Medication Assistant', () => {
+    it('should decode prescription into plain-language timetable, timing, frequency, and advice', async () => {
+      const patientCtx = {
+        userId: 'patient-rx-1',
+        email: 'patient@test.com',
+        role: Role.PATIENT,
+      };
+
+      const tool = toolRegistry.getTool('explainPrescriptionDetails');
+      expect(tool).toBeDefined();
+
+      const result = await tool!.execute(patientCtx, {
+        doctorName: 'Aryan',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data.found).toBe(true);
+      expect(result.data.doctorName).toBe('Dr. Aryan Sharma');
+      expect(result.data.medicines.length).toBe(1);
+      expect(result.data.medicines[0].medicineName).toBe('Aspirin');
+      expect(result.data.medicines[0].timing).toContain('Khana khane ke baad');
+      expect(result.data.medicines[0].frequency).toContain('Subah aur Raat');
+      expect(result.data.advice).toContain('Drink warm water');
+      expect(result.data.followUpDate).toBe('2026-11-20');
+    });
+
+    it('should return actions in getMyPrescriptions to allow 1-click explanation', async () => {
+      const patientCtx = {
+        userId: 'patient-rx-2',
+        email: 'patient@test.com',
+        role: Role.PATIENT,
+      };
+
+      const tool = toolRegistry.getTool('getMyPrescriptions');
+      const result = await tool!.execute(patientCtx, {});
+
+      expect(result.success).toBe(true);
+      expect(result.actions).toBeDefined();
+      expect(result.actions![0].type).toBe('EXPLAIN_PRESCRIPTION');
+      expect(result.actions![0].data.doctorName).toBe('Dr. Aryan Sharma');
+    });
+
+    it('should deny doctor from calling explainPrescriptionDetails', () => {
+      const doctorCtx = {
+        userId: 'doc-1',
+        email: 'doctor@test.com',
+        role: Role.DOCTOR,
+      };
+
+      const tool = toolRegistry.getTool('explainPrescriptionDetails');
+      expect(permissionService.canExecuteTool(doctorCtx, tool!)).toBe(false);
     });
   });
 });

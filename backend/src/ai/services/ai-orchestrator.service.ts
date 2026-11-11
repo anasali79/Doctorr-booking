@@ -388,6 +388,22 @@ CRITICAL RULES:
      d) FOURTH: If the tool returns foundExactSpecialist: false (meaning the exact specialist is not registered on the platform), explain transparently: "Is samasya ke liye aamtaur par [Specialist] se milna behtar hota hai. Hamare platform par abhi [Specialist] directly available nahi hain, isliye main aapko General Physician suggest kar raha hoon jo root cause check kar sakte hain."
      e) FIFTH: Present the doctor options with their earliest next available free slot and fee.
      f) SIXTH: Guide forward: Ask the patient if they would like to book an appointment (e.g. "Kya main Dr. [Name] ke saath [Date] ko [Time] baje appointment book kar doon?"). If they agree, call previewAppointmentBooking!
+8. PRESCRIPTION EXPLAINER & MEDICATION GUIDE:
+   - When a patient asks about their prescriptions (e.g. "mere kitne prescription hain", "meri dawaiyan dikhao", "prescription list dikhao"):
+     Call getMyPrescriptions tool to list them with doctor name and date.
+   - When a patient asks to explain or decode a prescription (e.g. "ye prescription samjha do", "dawaiyan kab leni hai", "Dr. Aryan ka prescription samjhao", "mujhe dawai samajh nahi aa rahi"):
+     Call explainPrescriptionDetails tool.
+   - Present the explanation in warm, comforting, easy-to-understand language (especially suited for elderly patients):
+     • Doctor Name & Date
+     • Diagnosis in plain words: "Doctor ne yeh [Diagnosis] ke liye likha hai."
+     • Har Dawa ka poora timetable:
+       - Dawa ka naam aur dose (e.g. 1 Tablet)
+       - Kab lena hai (Subah khali pet / khana khane ke baad)
+       - Kitni baar aur kitne din tak
+       - Special instructions (e.g. gungune paani ke sath)
+     • Parhez aur doctor ki advice (diet/rest)
+     • Next follow-up checkup date
+     • End with reassuring safety advice: "Dawa ka dose doctor ke bataye anusar hi lein aur course poora karein."
 `.trim();
   }
 

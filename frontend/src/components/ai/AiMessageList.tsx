@@ -13,6 +13,8 @@ import {
   ArrowRight,
   RotateCcw,
   AlertCircle,
+  FileText,
+  Pill,
 } from 'lucide-react';
 import { AiConfirmationCard } from './AiConfirmationCard';
 
@@ -301,6 +303,40 @@ export function AiMessageList({
                         >
                           <span>Book This Slot</span>
                           <ArrowRight className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  if (act.type === 'EXPLAIN_PRESCRIPTION') {
+                    const actionData = (act.data as any) || {};
+                    const docName = actionData.doctorName || 'Doctor';
+
+                    return (
+                      <div
+                        key={idx}
+                        className="mt-2.5 rounded-xl border border-indigo-200/90 bg-indigo-50/80 p-3 shadow-2xs dark:border-indigo-900/60 dark:bg-indigo-950/40 text-zinc-800 dark:text-zinc-200"
+                      >
+                        <div className="flex items-center justify-between text-xs mb-1.5">
+                          <span className="flex items-center gap-1.5 font-bold text-indigo-950 dark:text-indigo-100">
+                            <FileText className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                            <span>Prescription: Dr. {docName}</span>
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-600 dark:text-zinc-300 mb-2.5">
+                          Dawaiyon ka schedule, time aur doctor ki advice aasan bhasha me samjhein.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onSelectPrompt?.(
+                              `Dr. ${docName} ka prescription poora aasan bhasha me samjha do`,
+                            )
+                          }
+                          className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white shadow-xs hover:bg-indigo-700 active:scale-[0.98] transition-all cursor-pointer dark:bg-indigo-600 dark:hover:bg-indigo-500"
+                        >
+                          <Pill className="h-3.5 w-3.5" />
+                          <span>{act.label || `Dr. ${docName} ka prescription samjhao`}</span>
                         </button>
                       </div>
                     );
