@@ -13,6 +13,7 @@ import {
   Maximize2,
   Minimize2,
   Radio,
+  GripHorizontal,
 } from 'lucide-react';
 import { AiMessageList, ChatMessage } from './AiMessageList';
 import { AiQuickActions } from './AiQuickActions';
@@ -37,6 +38,70 @@ export function AiAssistantDrawer({ role, defaultOpen = false }: AiAssistantDraw
   const [conversationId, setConversationId] = useState<string>('');
   const [languagePreference, setLanguagePreference] = useState<'auto' | 'hi' | 'en'>('auto');
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
+  const [lastFailedText, setLastFailedText] = useState<string | null>(null);
+
+  // Drag and drop state for floating window
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    posX: number;
+    posY: number;
+  } | null>(null);
+  const windowRef = useRef<HTMLDivElement>(null);
+
+  // Reset position if expanded
+  useEffect(() => {
+    if (isExpanded) {
+      setPosition(null);
+    }
+  }, [isExpanded]);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Only allow drag if not clicking interactive buttons/inputs/selects and not expanded
+    const target = e.target as HTMLElement;
+    if (target.closest('button, select, input, a, textarea') || isExpanded) return;
+
+    if (!windowRef.current) return;
+    const rect = windowRef.current.getBoundingClientRect();
+
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      posX: rect.left,
+      posY: rect.top,
+    };
+    setIsDragging(true);
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      if (!dragRef.current || !windowRef.current) return;
+      const dx = moveEvent.clientX - dragRef.current.startX;
+      const dy = moveEvent.clientY - dragRef.current.startY;
+
+      const currentRect = windowRef.current.getBoundingClientRect();
+      const width = currentRect.width;
+      const height = currentRect.height;
+
+      const maxX = Math.max(0, window.innerWidth - width - 8);
+      const maxY = Math.max(0, window.innerHeight - height - 8);
+
+      const nextX = Math.max(8, Math.min(maxX, dragRef.current.posX + dx));
+      const nextY = Math.max(8, Math.min(maxY, dragRef.current.posY + dy));
+
+      setPosition({ x: nextX, y: nextY });
+    };
+
+    const handlePointerUp = () => {
+      setIsDragging(false);
+      dragRef.current = null;
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+  };
 
   // Dedicated Payment Modal State
   const [paymentModalData, setPaymentModalData] = useState<{
@@ -92,6 +157,13 @@ export function AiAssistantDrawer({ role, defaultOpen = false }: AiAssistantDraw
     if (!text || isLoading) return;
 
     setErrorBanner(null);
+    setLastFailedText(null);
+
+    // If retrying, remove the previous failed attempt of this text
+    if (textToSend) {
+      setMessages((prev) => prev.filter((m) => !(m.isFailed && m.content === textToSend)));
+    }
+
     const userMsgId = String(Date.now());
     const newMsg: ChatMessage = {
       id: userMsgId,
@@ -161,6 +233,11 @@ export function AiAssistantDrawer({ role, defaultOpen = false }: AiAssistantDraw
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Network error occurred.';
       setErrorBanner(msg);
+      setLastFailedText(text);
+      // Mark message as failed so inline retry button appears
+      setMessages((prev) =>
+        prev.map((m) => (m.id === userMsgId ? { ...m, isFailed: true } : m)),
+      );
     } finally {
       setIsLoading(false);
     }
@@ -397,15 +474,44 @@ export function AiAssistantDrawer({ role, defaultOpen = false }: AiAssistantDraw
       {/* Floating Chat Modal / Drawer */}
       {isOpen && (
         <div
-          className={`fixed z-50 flex flex-col overflow-hidden bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl transition-all duration-300 ${
+          ref={windowRef}
+          style={
+            position && !isExpanded
+              ? {
+                  left: `${position.x}px`,
+                  top: `${position.y}px`,
+                  right: 'auto',
+                  bottom: 'auto',
+                }
+              : undefined
+          }
+          className={`fixed z-50 flex flex-col overflow-hidden bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl ${
+            isDragging
+              ? 'select-none transition-none shadow-3xl ring-2 ring-blue-500/40'
+              : 'transition-all duration-300'
+          } ${
             isExpanded
               ? 'inset-2 sm:inset-6 md:inset-10 rounded-2xl'
-              : 'inset-x-2 bottom-2 h-[85dvh] max-h-[640px] max-w-[calc(100vw-1rem)] rounded-2xl sm:inset-x-auto sm:bottom-6 sm:right-6 sm:h-[620px] sm:w-[420px]'
+              : position
+                ? 'h-[85dvh] max-h-[640px] w-[calc(100vw-1rem)] rounded-2xl sm:h-[620px] sm:w-[420px]'
+                : 'inset-x-2 bottom-2 h-[85dvh] max-h-[640px] max-w-[calc(100vw-1rem)] rounded-2xl sm:inset-x-auto sm:bottom-6 sm:right-6 sm:h-[620px] sm:w-[420px]'
           }`}
         >
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-zinc-200/80 bg-zinc-50/80 px-3 sm:px-4 py-2.5 sm:py-3 dark:border-zinc-800 dark:bg-zinc-800/50 backdrop-blur-xs">
-            <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+          {/* Header (Drag Handle) */}
+          <div
+            onPointerDown={handlePointerDown}
+            onDoubleClick={() => setPosition(null)}
+            title={!isExpanded ? 'Drag to move window • Double-click to reset' : undefined}
+            className={`flex items-center justify-between border-b border-zinc-200/80 bg-zinc-50/80 px-3 sm:px-4 py-2.5 sm:py-3 dark:border-zinc-800 dark:bg-zinc-800/50 backdrop-blur-xs select-none touch-none ${
+              !isExpanded
+                ? isDragging
+                  ? 'cursor-grabbing'
+                  : 'cursor-grab hover:bg-zinc-100/90 dark:hover:bg-zinc-800/80 transition-colors'
+                : ''
+            }`}
+          >
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 pointer-events-none">
+              <GripHorizontal className="h-4 w-4 text-zinc-400 hidden sm:block shrink-0" />
               <div className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-xs">
                 <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </div>
@@ -419,7 +525,7 @@ export function AiAssistantDrawer({ role, defaultOpen = false }: AiAssistantDraw
                   </span>
                 </div>
                 <p className="text-[10px] sm:text-[11px] text-zinc-400 truncate">
-                  Zero Cost • Gemini Flash • Web Speech
+                  Zero Cost • Gemini Flash • Drag to Move
                 </p>
               </div>
             </div>
@@ -557,11 +663,23 @@ export function AiAssistantDrawer({ role, defaultOpen = false }: AiAssistantDraw
           {activeError && (
             <div className="flex items-center gap-2 border-b border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
               <AlertCircle className="h-3.5 w-3.5 shrink-0 text-rose-600" />
-              <span className="flex-1">{activeError}</span>
+              <span className="flex-1 truncate">{activeError}</span>
+              {lastFailedText && (
+                <button
+                  type="button"
+                  onClick={() => handleSendMessage(lastFailedText)}
+                  className="rounded bg-rose-600 px-2 py-0.5 text-[11px] font-bold text-white hover:bg-rose-700 active:scale-95 transition-all cursor-pointer"
+                >
+                  Retry
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => setErrorBanner(null)}
-                className="text-rose-500 hover:text-rose-700"
+                onClick={() => {
+                  setErrorBanner(null);
+                  setLastFailedText(null);
+                }}
+                className="text-rose-500 hover:text-rose-700 ml-1"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -576,6 +694,8 @@ export function AiAssistantDrawer({ role, defaultOpen = false }: AiAssistantDraw
             onConfirm={handleConfirmAction}
             onCancel={handleCancelAction}
             onPay={handleTriggerPayment}
+            onSelectPrompt={(prompt) => handleSendMessage(prompt)}
+            onRetry={(text) => handleSendMessage(text)}
             confirmationLoadingId={confirmationLoadingId}
           />
 

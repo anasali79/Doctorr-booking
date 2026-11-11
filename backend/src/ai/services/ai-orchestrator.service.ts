@@ -152,6 +152,8 @@ export class AiOrchestratorService {
     let currentTurn = 0;
     let pendingConfirmationResult: ToolExecutionResult | null = null;
     let finalModelText = '';
+    const executedToolCalls = new Map<string, ToolExecutionResult>();
+    let lastToolSignature = '';
 
     while (currentTurn < MAX_TURNS) {
       currentTurn++;
@@ -201,6 +203,15 @@ export class AiOrchestratorService {
       // Check if model wants to call a function
       if (functionCallPart?.functionCall) {
         const { name, args } = functionCallPart.functionCall;
+        const toolSignature = `${name}:${JSON.stringify(args || {})}`;
+
+        // Guard against duplicate consecutive tool calls in the same turn
+        if (toolSignature === lastToolSignature && executedToolCalls.has(toolSignature)) {
+          this.logger.warn(`AI Orchestrator detected repeated identical tool call for ${name}. Forcing synthesis.`);
+          break;
+        }
+        lastToolSignature = toolSignature;
+
         this.logger.log(`AI Orchestrator calling tool: ${name} with args: ${JSON.stringify(args)}`);
 
         // Record the model's exact candidate content in contents (preserves thoughtSignature, thoughts, etc.)
@@ -219,6 +230,7 @@ export class AiOrchestratorService {
             // Automatically attach conversationId to tool args for previews
             const argsWithContext = { ...args, conversationId: session.id };
             executionResult = await tool.execute(userContext, argsWithContext);
+            executedToolCalls.set(toolSignature, executionResult);
           } catch (err: any) {
             executionResult = {
               success: false,
@@ -359,15 +371,23 @@ Role Scope: ${
     }
 
 CRITICAL RULES:
-1. HEALTHCARE SAFETY: You are an administrative appointment scheduling assistant ONLY. You are NOT a medical doctor. You CANNOT diagnose conditions, suggest treatments, prescribe medicines, or change dosages. If medical advice is asked, politely advise consulting a doctor.
-2. FREE-TIER PRIVACY: Never ask for or output sensitive medical history, diagnosis, full address, or phone numbers.
+1. HEALTHCARE SAFETY & ADVICE: You provide empathetic health guidance, probable root-cause insights, and practical lifestyle/home-care tips (e.g. hydration, warm salt-water rinse, rest, avoiding spicy foods). You do NOT prescribe prescription medications or guarantee diagnoses. Always encourage consulting a doctor.
+2. FREE-TIER PRIVACY: Never ask for or output sensitive private identifiers, full address, or phone numbers.
 3. TWO-STEP ACTIONS: You CANNOT finalize booking, rescheduling, or cancellation on your own! Always use the preview tools (previewAppointmentBooking, previewAppointmentReschedule, previewAppointmentCancellation). State the key details clearly (Doctor, Date, Time, Fee) and ask the user to confirm.
 4. LANGUAGE & TONE:
-   - Understand Hindi, English, and Hinglish ("aaj ke appointments", "kal mera slot kab hai", "isko reschedule kar do").
+   - Understand Hindi, English, and Hinglish ("aaj ke appointments", "muu me chaale ho gaye", "kal mera slot kab hai", "isko reschedule kar do").
    - Match the user's language: If user writes in Hinglish, reply in clear, friendly Hinglish. If in Hindi, reply in Hindi. If in English, reply in English.
    - Resolve date words accurately: "aaj" = ${todayIST}, "kal" = ${tomorrowIST}.
-5. CONCISENESS: Keep answers clear, direct, and helpful. Do not output raw JSON, internal database IDs, or verbose explanations.
-6. CLEAN PRESENTATION: Format lists and details cleanly using bullet points (•) or key-value format (e.g. Doctor: Dr. Rahul, Date: 18 Nov, Time: 9:00 AM, Fee: ₹500). Avoid raw asterisks (* or **) where possible.
+5. CONCISENESS & EMPATHY: Keep answers clear, empathetic, and direct. Do not output raw JSON, internal database IDs, or code blocks.
+6. CLEAN PRESENTATION: Format lists and details cleanly using bullet points (•) or key-value format (e.g. Doctor: Dr. Rahul, Date: 18 Nov, Time: 9:00 AM, Fee: ₹500).
+7. CLINICAL SYMPTOM ANALYSIS & GUIDED BOOKING:
+   - When a patient describes symptoms, discomfort, illness, or health complaints (e.g. "muu me chaale aa jate hai", "seene me dard", "fever", "skin rash", "teeth pain"):
+     a) FIRST: Explain possible root causes (e.g., deficiency of B12/iron, stress, acidity, stomach heat, infection) and give 2 practical home-care tips (e.g., stay hydrated, avoid spicy/acidic foods, rinse with salt water).
+     b) SECOND: Determine which medical specialist is suited (e.g. "Dentist", "ENT Specialist", "Cardiologist", "Dermatologist", "General Physician").
+     c) THIRD: Call checkSymptomsAndRecommendDoctors with the symptoms and your chosen specialization.
+     d) FOURTH: If the tool returns foundExactSpecialist: false (meaning the exact specialist is not registered on the platform), explain transparently: "Is samasya ke liye aamtaur par [Specialist] se milna behtar hota hai. Hamare platform par abhi [Specialist] directly available nahi hain, isliye main aapko General Physician suggest kar raha hoon jo root cause check kar sakte hain."
+     e) FIFTH: Present the doctor options with their earliest next available free slot and fee.
+     f) SIXTH: Guide forward: Ask the patient if they would like to book an appointment (e.g. "Kya main Dr. [Name] ke saath [Date] ko [Time] baje appointment book kar doon?"). If they agree, call previewAppointmentBooking!
 `.trim();
   }
 

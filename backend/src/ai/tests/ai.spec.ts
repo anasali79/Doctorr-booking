@@ -94,6 +94,13 @@ describe('AI Backend Module Unit Tests & Security Suite', () => {
       { startTime: '11:00', endTime: '11:30', status: 'booked' },
     ]),
     getDetailedAvailability: jest.fn().mockResolvedValue({ shifts: [] }),
+    findNextAvailableSlot: jest.fn().mockResolvedValue({
+      date: '2026-11-12',
+      startTime: '10:00',
+      endTime: '10:30',
+      schedulingType: 'standard',
+      availableCount: 5,
+    }),
   };
 
   const mockElasticSchedulingService = {
@@ -398,6 +405,82 @@ describe('AI Backend Module Unit Tests & Security Suite', () => {
       expect(() => {
         aiService.deleteConversation('user-B', 'conv-to-delete');
       }).toThrow(ForbiddenException);
+    });
+  });
+
+  // 7. AI Symptom Checker & Guided Doctor Triage to Booking
+  describe('AI Symptom Checker & Guided Doctor Triage', () => {
+    it('should analyze cardiac symptoms, flag emergency, and return doctors with next slot and booking actions', async () => {
+      const patientCtx = {
+        userId: 'patient-symptom-1',
+        email: 'patient@test.com',
+        role: Role.PATIENT,
+      };
+
+      const tool = toolRegistry.getTool('checkSymptomsAndRecommendDoctors');
+      expect(tool).toBeDefined();
+
+      const result = await tool!.execute(patientCtx, {
+        symptoms: 'mujhe 2 din se severe chest pain aur heart rate tez ho raha hai',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data.triageResult.specialization).toBe('cardiologist');
+      expect(result.data.triageResult.isEmergency).toBe(true);
+      expect(result.data.triageResult.emergencyNotice).toBeDefined();
+      expect(result.data.doctors.length).toBeGreaterThan(0);
+      expect(result.data.doctors[0].nextSlot).toBeDefined();
+      expect(result.data.doctors[0].nextSlot.date).toBe('2026-11-12');
+      expect(result.actions).toBeDefined();
+      expect(result.actions![0].type).toBe('BOOK_DOCTOR_SLOT');
+    });
+
+    it('should analyze skin symptoms and identify dermatologist without emergency', async () => {
+      const patientCtx = {
+        userId: 'patient-symptom-2',
+        email: 'patient2@test.com',
+        role: Role.PATIENT,
+      };
+
+      const tool = toolRegistry.getTool('checkSymptomsAndRecommendDoctors');
+      const result = await tool!.execute(patientCtx, {
+        symptoms: 'chehre par red rashes aur khujli ho rahi hai pimples ke saath',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data.triageResult.specialization).toBe('dermatologist');
+      expect(result.data.triageResult.isEmergency).toBe(false);
+    });
+
+    it('should disallow doctors from executing checkSymptomsAndRecommendDoctors', () => {
+      const doctorCtx = {
+        userId: 'doc-1',
+        email: 'doctor@test.com',
+        role: Role.DOCTOR,
+      };
+
+      const tool = toolRegistry.getTool('checkSymptomsAndRecommendDoctors');
+      expect(permissionService.canExecuteTool(doctorCtx, tool!)).toBe(false);
+    });
+
+    it('should handle unlisted specialty (e.g. dentist / mouth ulcers) by returning foundExactSpecialist: false and providing general physician fallback', async () => {
+      const patientCtx = {
+        userId: 'patient-ulcer-1',
+        email: 'patient@test.com',
+        role: Role.PATIENT,
+      };
+
+      const tool = toolRegistry.getTool('checkSymptomsAndRecommendDoctors');
+      const result = await tool!.execute(patientCtx, {
+        symptoms: 'muu mai har 10 din mai chaale aa jate hai',
+        specialization: 'dentist',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data.foundExactSpecialist).toBe(false);
+      expect(result.data.fallbackSpecialization).toBe('general physician');
+      expect(result.data.doctors.length).toBeGreaterThan(0);
+      expect(result.data.doctors[0].nextSlot).toBeDefined();
     });
   });
 });

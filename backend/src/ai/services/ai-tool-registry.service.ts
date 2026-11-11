@@ -22,6 +22,11 @@ import { AiSessionService } from './ai-session.service';
 import { AiPermissionService } from './ai-permission.service';
 import { SlotStatus } from '../../doctor/dto/availability.dto';
 import { getTodayIST } from '../../common/utils/appointment.utils';
+import { triageSymptoms } from './symptom-triage.helper';
+import {
+  isValidSpecialization,
+  normalizeSpecialization,
+} from '../../doctor/constants/specializations';
 
 @Injectable()
 export class AiToolRegistryService {
@@ -364,6 +369,154 @@ export class AiToolRegistryService {
     // =========================================================================
     // 2. PATIENT TOOLS
     // =========================================================================
+
+    // checkSymptomsAndRecommendDoctors (AI-Driven Symptom Analysis & Doctor Triage)
+    this.register({
+      name: 'checkSymptomsAndRecommendDoctors',
+      description:
+        'Analyzes patient symptoms or clinical specialization, checks for critical emergency red flags, finds matching doctors in that field with their earliest free available booking slots, and transparently offers General Physician alternatives if the exact specialist is not registered.',
+      permittedRoles: [Role.PATIENT],
+      declaration: {
+        name: 'checkSymptomsAndRecommendDoctors',
+        description:
+          'Finds doctors and their next available free slots for the patient’s symptoms or specialization. If the requested specialist is unavailable or not on the platform, returns General Physician alternatives.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            symptoms: {
+              type: 'STRING',
+              description:
+                'The health complaints described by the patient (e.g. "muu me chaale", "severe headache and vomiting", "seene me dard", "skin rash and itching").',
+            },
+            specialization: {
+              type: 'STRING',
+              description:
+                'Optional medical specialization determined by the AI (e.g. "cardiologist", "dentist", "dermatologist", "ent specialist", "general physician", "neurologist", "orthopedist", "pediatrician").',
+            },
+          },
+          required: ['symptoms'],
+        },
+      },
+      execute: async (ctx, args) => {
+        if (!args?.symptoms) {
+          throw new BadRequestException('Symptoms description is required');
+        }
+
+        const triage = triageSymptoms(args.symptoms, args.specialization);
+        const requestedSpec = (args.specialization || '').trim().toLowerCase();
+
+        // 1. Determine target specialization: either AI's explicit judgment or fallback triage helper
+        let targetSpec: string = triage.primarySpecialization;
+        let isKnownSpecialty = true;
+
+        if (requestedSpec) {
+          if (isValidSpecialization(requestedSpec)) {
+            targetSpec = normalizeSpecialization(requestedSpec);
+          } else {
+            isKnownSpecialty = false;
+          }
+        }
+
+        let docResult: any = null;
+        let foundExactSpecialist = false;
+
+        // 2. If specialty is valid in our system, search for doctors in that category
+        if (isKnownSpecialty) {
+          docResult = await this.doctorService.findAll({
+            specialization: targetSpec,
+            page: 1,
+            limit: 3,
+          });
+          if (docResult?.data && docResult.data.length > 0) {
+            foundExactSpecialist = true;
+          }
+        }
+
+        // 3. Fallback: If exact specialist is not registered on the platform or has 0 doctors,
+        // provide General Physicians as the safe primary clinical alternative!
+        if (!foundExactSpecialist) {
+          docResult = await this.doctorService.findAll({
+            specialization: 'general physician',
+            page: 1,
+            limit: 3,
+          });
+          // If still no general physician, fetch any active verified doctor
+          if (!docResult?.data || docResult.data.length === 0) {
+            docResult = await this.doctorService.findAll({
+              page: 1,
+              limit: 3,
+            });
+          }
+        }
+
+        const doctors = docResult?.data || [];
+        const todayIST = getTodayIST();
+
+        // 4. For each doctor, lookup their next available slot
+        const doctorSummaries: any[] = [];
+        const actions: any[] = [];
+
+        for (const doc of doctors) {
+          let nextSlot: any = null;
+          try {
+            nextSlot = await this.availabilityService.findNextAvailableSlot(doc.id, todayIST);
+          } catch (err: any) {
+            this.logger.warn(`Could not fetch next slot for doctor ${doc.id}: ${err.message}`);
+          }
+
+          const docSummary = {
+            id: doc.id,
+            name: doc.fullName || 'Doctor',
+            specialization: doc.specialization,
+            experience: doc.experience ?? 0,
+            consultationFee: doc.consultationFee ?? 500,
+            nextSlot: nextSlot
+              ? {
+                  date: nextSlot.date,
+                  startTime: nextSlot.startTime,
+                  endTime: nextSlot.endTime,
+                }
+              : null,
+          };
+          doctorSummaries.push(docSummary);
+
+          // Add a quick action button if slot is available
+          if (nextSlot) {
+            actions.push({
+              type: 'BOOK_DOCTOR_SLOT',
+              label: `Book Dr. ${docSummary.name} (${nextSlot.date} at ${nextSlot.startTime})`,
+              data: {
+                doctorId: doc.id,
+                doctorName: docSummary.name,
+                date: nextSlot.date,
+                startTime: nextSlot.startTime,
+                fee: docSummary.consultationFee,
+              },
+            });
+          }
+        }
+
+        return {
+          success: true,
+          data: {
+            symptoms: args.symptoms,
+            foundExactSpecialist,
+            requestedSpecialization: args.specialization || targetSpec,
+            suggestedSpecialization: targetSpec,
+            fallbackSpecialization: foundExactSpecialist ? null : 'general physician',
+            triageResult: {
+              specialization: targetSpec,
+              explanation: triage.explanation,
+              isEmergency: triage.isEmergency,
+              emergencyNotice: triage.emergencyNotice,
+              urgencyLevel: triage.urgencyLevel,
+            },
+            doctors: doctorSummaries,
+          },
+          actions,
+        };
+      },
+    });
 
     // getMyAppointments
     this.register({

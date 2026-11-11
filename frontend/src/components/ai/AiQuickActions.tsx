@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Calendar, Clock, FileText, CreditCard, RotateCcw } from 'lucide-react';
+import { Calendar, Clock, FileText, CreditCard, RotateCcw, Stethoscope } from 'lucide-react';
 
 interface AiQuickActionsProps {
   role: 'PATIENT' | 'DOCTOR';
@@ -18,6 +18,11 @@ export function AiQuickActions({
 }: AiQuickActionsProps) {
   const patientPromptsByLang = {
     en: [
+      {
+        icon: Stethoscope,
+        label: 'AI Symptom Checker',
+        prompt: 'I have some symptoms and want to find the right doctor and book a slot.',
+      },
       {
         icon: Calendar,
         label: 'Is there any appointment for me?',
@@ -46,6 +51,11 @@ export function AiQuickActions({
     ],
     hi: [
       {
+        icon: Stethoscope,
+        label: 'AI लक्षण चेकर (डॉक्टर खोजें)',
+        prompt: 'मुझे कुछ स्वास्थ्य लक्षण हैं, सही डॉक्टर और उपलब्ध स्लॉट बताएं।',
+      },
+      {
         icon: Calendar,
         label: 'क्या आज मेरी कोई अपॉइंटमेंट है?',
         prompt: 'क्या आज मेरी कोई अपॉइंटमेंट है या मेरी अगली अपॉइंटमेंट कब है?',
@@ -72,6 +82,11 @@ export function AiQuickActions({
       },
     ],
     auto: [
+      {
+        icon: Stethoscope,
+        label: 'Symptoms / Bimari check karo',
+        prompt: 'Mujhe lakshan check karke sahi doctor aur free slot dhundhna hai.',
+      },
       {
         icon: Calendar,
         label: 'Aaj meri koi appointment hai?',
