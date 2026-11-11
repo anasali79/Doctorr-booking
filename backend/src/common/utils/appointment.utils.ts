@@ -24,15 +24,30 @@ export function formatTime(time: string): string {
 }
 
 /**
- * Convert "2026-06-24" → "24 Jun 2026"
+ * Convert "2026-06-24" or ISO string → "24 Jun 2026"
  */
 export function formatDate(date: string): string {
-    const [year, month, day] = date.split('-');
-    return new Intl.DateTimeFormat('en-GB', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-    }).format(new Date(+year, +month - 1, +day));
+    if (!date) return '';
+    try {
+        if (date.includes('T')) {
+            const d = new Date(date);
+            if (!isNaN(d.getTime())) {
+                return new Intl.DateTimeFormat('en-GB', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                }).format(d);
+            }
+        }
+        const [year, month, day] = date.split('-');
+        return new Intl.DateTimeFormat('en-GB', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+        }).format(new Date(+year, +month - 1, parseInt(day, 10)));
+    } catch {
+        return date;
+    }
 }
 
 /**

@@ -25,6 +25,7 @@ export interface ChatMessage {
 interface AiMessageListProps {
   messages: ChatMessage[];
   isLoading: boolean;
+  language?: 'auto' | 'hi' | 'en';
   onConfirm: (confirmationId: string) => void;
   onCancel: (confirmationId: string) => void;
   onPay?: (data: any) => void;
@@ -115,6 +116,7 @@ function renderFormattedMessage(content: string, isUser: boolean) {
 export function AiMessageList({
   messages,
   isLoading,
+  language = 'auto',
   onConfirm,
   onCancel,
   onPay,
@@ -126,6 +128,23 @@ export function AiMessageList({
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
+  const emptyStateTexts = {
+    en: {
+      title: 'CareUp Free AI Assistant',
+      desc: 'Ask anything about appointments, available doctor slots, rescheduling, or booking status in English.',
+    },
+    hi: {
+      title: 'CareUp फ्री AI असिस्टेंट',
+      desc: 'आप अपॉइंटमेंट, डॉक्टर के उपलब्ध स्लॉट, रीशेड्यूल या स्थिति के बारे में हिंदी में पूछ सकते हैं।',
+    },
+    auto: {
+      title: 'CareUp Free AI Assistant',
+      desc: 'Aap Hindi, English ya Hinglish me appointment, availability ya status ke baare me pooch sakte hain.',
+    },
+  };
+
+  const currentEmptyText = emptyStateTexts[language] || emptyStateTexts.auto;
+
   if (messages.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center p-6 text-center text-zinc-500">
@@ -133,10 +152,10 @@ export function AiMessageList({
           <Sparkles className="h-6 w-6" />
         </div>
         <h3 className="mt-3 font-semibold text-zinc-900 dark:text-zinc-100">
-          CareUp Free AI Assistant
+          {currentEmptyText.title}
         </h3>
         <p className="mt-1 text-xs text-zinc-500 max-w-xs">
-          Aap Hindi, English ya Hinglish me appointment, availability ya status ke baare me pooch sakte hain.
+          {currentEmptyText.desc}
         </p>
       </div>
     );
@@ -251,7 +270,13 @@ export function AiMessageList({
               <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-500" />
               <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-500 [animation-delay:0.2s]" />
               <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-500 [animation-delay:0.4s]" />
-              <span className="ml-1 text-xs text-zinc-400">Soch raha hoon...</span>
+              <span className="ml-1 text-xs text-zinc-400">
+                {language === 'en'
+                  ? 'Thinking...'
+                  : language === 'hi'
+                    ? 'सोच रहा हूँ...'
+                    : 'Soch raha hoon...'}
+              </span>
             </div>
           </div>
         </div>

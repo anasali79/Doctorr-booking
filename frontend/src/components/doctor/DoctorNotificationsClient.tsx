@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { NotificationItem } from '@/types';
-import { formatDate } from '@/lib/utils';
+import { formatDateTime } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
   Bell,
@@ -207,7 +207,7 @@ export function DoctorNotificationsClient({
                         {item.title}
                       </h4>
                       <span className="text-[11px] text-slate-400 whitespace-nowrap shrink-0">
-                        {formatDate(item.createdAt)}
+                        {formatDateTime(item.createdAt)}
                       </span>
                     </div>
                     <p className="text-xs text-slate-600 mt-1 leading-relaxed">

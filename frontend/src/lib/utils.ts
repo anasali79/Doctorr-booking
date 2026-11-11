@@ -5,20 +5,81 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-/** Formats a date string 'YYYY-MM-DD' into readable 'dd MMM yyyy' */
-export function formatDate(dateStr: string): string {
+/** Formats a date string 'YYYY-MM-DD' or ISO timestamp into readable 'dd MMM yyyy' */
+export function formatDate(dateStr: string | Date | undefined | null): string {
   if (!dateStr) return '';
   try {
-    const [year, month, day] = dateStr.split('-').map(Number);
-    if (!year || !month || !day) return dateStr;
-    const date = new Date(year, month - 1, day);
-    return date.toLocaleDateString('en-IN', {
+    if (dateStr instanceof Date) {
+      if (isNaN(dateStr.getTime())) return '';
+      return dateStr.toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+    }
+
+    const str = String(dateStr).trim();
+    if (!str) return '';
+
+    // If it contains 'T' or time portion or is an ISO timestamp
+    if (str.includes('T') || str.includes(':')) {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString('en-IN', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        });
+      }
+    }
+
+    // Standard 'YYYY-MM-DD'
+    const parts = str.split('-');
+    if (parts.length >= 3) {
+      const year = Number(parts[0]);
+      const month = Number(parts[1]);
+      const day = parseInt(parts[2], 10);
+      if (year && month && day && !isNaN(day)) {
+        const date = new Date(year, month - 1, day);
+        return date.toLocaleDateString('en-IN', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        });
+      }
+    }
+
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+    }
+
+    return str;
+  } catch {
+    return String(dateStr);
+  }
+}
+
+/** Formats a date string or ISO timestamp into readable 'dd MMM yyyy, hh:mm AM/PM' */
+export function formatDateTime(dateStr: string | Date | undefined | null): string {
+  if (!dateStr) return '';
+  try {
+    const d = dateStr instanceof Date ? dateStr : new Date(String(dateStr));
+    if (isNaN(d.getTime())) return String(dateStr);
+    return d.toLocaleString('en-IN', {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
     });
   } catch {
-    return dateStr;
+    return String(dateStr);
   }
 }
 
