@@ -111,7 +111,7 @@ export class AiToolRegistryService {
     this.register({
       name: 'getDoctorAppointmentSummary',
       description:
-        "Returns summary count of the doctor's appointments grouped by status (confirmed, completed, cancelled) for today or a specific date.",
+        "Returns summary count of the doctor's appointments grouped by status (confirmed, completed, cancelled) for today or a specific date with patient roster and quick actions.",
       permittedRoles: [Role.DOCTOR],
       declaration: {
         name: 'getDoctorAppointmentSummary',
@@ -128,9 +128,14 @@ export class AiToolRegistryService {
         },
       },
       execute: async (ctx, args) => {
+        const todayIST = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Kolkata',
+        }).format(new Date());
+        const targetDate = args?.date || todayIST;
+
         const response = await this.appointmentService.getDoctorAppointments(
           ctx.userId,
-          args?.date,
+          targetDate,
         );
         const appointments: any[] = Array.isArray(response)
           ? response
@@ -138,22 +143,332 @@ export class AiToolRegistryService {
 
         const total = appointments.length;
         const confirmed = appointments.filter((a) => a.status === 'CONFIRMED').length;
+        const checkedIn = appointments.filter((a) => a.status === 'CHECKED_IN').length;
+        const inConsultation = appointments.filter((a) => a.status === 'IN_CONSULTATION').length;
         const completed = appointments.filter((a) => a.status === 'COMPLETED').length;
         const cancelled = appointments.filter((a) => a.status === 'CANCELLED').length;
+        const noShow = appointments.filter((a) => a.status === 'NO_SHOW').length;
         const firstAppointment = appointments[0]
           ? { time: appointments[0].startTime, status: appointments[0].status }
           : null;
 
+        const roster = appointments.map((a) => ({
+          appointmentId: a.id,
+          tokenNumber: a.tokenNumber ?? null,
+          date: a.date,
+          startTime: a.startTime,
+          endTime: a.endTime,
+          timeWindow: `${a.startTime} - ${a.endTime}`,
+          status: a.status,
+          patientId: a.patientId,
+          patientName: a.patient?.fullName || 'Patient',
+          age: a.patient?.age,
+          gender: a.patient?.gender,
+          bloodGroup: a.patient?.bloodGroup,
+          allergies: a.patient?.allergies,
+          reasonForVisit: a.reasonForVisit || a.clinicalNotes || null,
+        }));
+
+        const actions = roster.map((p) => ({
+          type: 'GET_PATIENT_SUMMARY',
+          label: `Summary: ${p.patientName} (${p.tokenNumber ? `#${p.tokenNumber}` : p.startTime})`,
+          payload: {
+            patientId: p.patientId,
+            patientName: p.patientName,
+          },
+        }));
+
         return {
           success: true,
+          dataType: 'DOCTOR_DAILY_SCHEDULE',
           data: {
-            date: args?.date || 'today',
+            date: targetDate,
             total,
             confirmed,
+            checkedIn,
+            inConsultation,
             completed,
             cancelled,
+            noShow,
             firstAppointment,
+            counts: {
+              confirmed,
+              checkedIn,
+              inConsultation,
+              completed,
+              cancelled,
+              noShow,
+            },
+            roster,
           },
+          actions,
+        };
+      },
+    });
+
+    // getDoctorDailySchedule
+    this.register({
+      name: 'getDoctorDailySchedule',
+      description:
+        "Fetches the authenticated doctor's appointment roster and schedule for today (or a specified date). Returns counts, token numbers, patient demographics, and quick actions to review each patient's summary.",
+      permittedRoles: [Role.DOCTOR],
+      declaration: {
+        name: 'getDoctorDailySchedule',
+        description:
+          "Returns doctor's appointment roster and patient list for today or a specific date with quick summary actions.",
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            date: {
+              type: 'STRING',
+              description: 'Optional date in YYYY-MM-DD format (defaults to today)',
+            },
+          },
+        },
+      },
+      execute: async (ctx, args) => {
+        const todayIST = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Kolkata',
+        }).format(new Date());
+        const targetDate = args?.date || todayIST;
+
+        const response = await this.appointmentService.getDoctorAppointments(
+          ctx.userId,
+          targetDate,
+        );
+        const appointments: any[] = Array.isArray(response)
+          ? response
+          : response.data || [];
+
+        const total = appointments.length;
+        const confirmed = appointments.filter((a) => a.status === 'CONFIRMED').length;
+        const checkedIn = appointments.filter((a) => a.status === 'CHECKED_IN').length;
+        const inConsultation = appointments.filter((a) => a.status === 'IN_CONSULTATION').length;
+        const completed = appointments.filter((a) => a.status === 'COMPLETED').length;
+        const cancelled = appointments.filter((a) => a.status === 'CANCELLED').length;
+        const noShow = appointments.filter((a) => a.status === 'NO_SHOW').length;
+
+        const roster = appointments.map((a) => ({
+          appointmentId: a.id,
+          tokenNumber: a.tokenNumber ?? null,
+          date: a.date,
+          startTime: a.startTime,
+          endTime: a.endTime,
+          timeWindow: `${a.startTime} - ${a.endTime}`,
+          status: a.status,
+          patientId: a.patientId,
+          patientName: a.patient?.fullName || 'Patient',
+          age: a.patient?.age,
+          gender: a.patient?.gender,
+          bloodGroup: a.patient?.bloodGroup,
+          allergies: a.patient?.allergies,
+          reasonForVisit: a.reasonForVisit || a.clinicalNotes || null,
+        }));
+
+        const actions = roster.map((p) => ({
+          type: 'GET_PATIENT_SUMMARY',
+          label: `Summary: ${p.patientName} (${p.tokenNumber ? `#${p.tokenNumber}` : p.startTime})`,
+          payload: {
+            patientId: p.patientId,
+            patientName: p.patientName,
+          },
+        }));
+
+        return {
+          success: true,
+          dataType: 'DOCTOR_DAILY_SCHEDULE',
+          data: {
+            date: targetDate,
+            total,
+            counts: {
+              confirmed,
+              checkedIn,
+              inConsultation,
+              completed,
+              cancelled,
+              noShow,
+            },
+            roster,
+          },
+          actions,
+        };
+      },
+    });
+
+    // getPatientClinicalSummary
+    this.register({
+      name: 'getPatientClinicalSummary',
+      description:
+        "Fetches a 30-second clinical summary/dossier of a patient for the authenticated doctor. Includes critical safety alerts (known drug allergies, medical history, current medications), last consultation notes, previous diagnosis, and prescribed medicines with dosages. Can be queried by patient name or patientId.",
+      permittedRoles: [Role.DOCTOR],
+      declaration: {
+        name: 'getPatientClinicalSummary',
+        description:
+          "Returns the patient's medical history, allergies, past diagnoses, previous prescriptions, and today's appointment status for the doctor.",
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            patientName: {
+              type: 'STRING',
+              description: 'The name or partial name of the patient (e.g. "Raj", "Raj Kumar", "Priya").',
+            },
+            patientId: {
+              type: 'STRING',
+              description: 'Optional UUID of the patient if already known.',
+            },
+          },
+          required: ['patientName'],
+        },
+      },
+      execute: async (ctx, args) => {
+        const patientName = (args?.patientName || '').trim();
+        const patientId = args?.patientId;
+
+        const doctor = await this.doctorService.findByUserIdOrFail(ctx.userId);
+
+        let targetPatientId = patientId;
+
+        if (!targetPatientId) {
+          const searchResult = await this.doctorService.getDoctorPatients(
+            ctx.userId,
+            patientName,
+          );
+          const patients = searchResult?.data || [];
+
+          if (patients.length === 0) {
+            return {
+              success: false,
+              message: `Doctor, aapke clinic records me "${patientName}" naam ka koi patient nahi mila.`,
+            };
+          }
+
+          if (patients.length > 1) {
+            // Check for exact case-insensitive match
+            const exactMatches = patients.filter(
+              (p: any) => p.fullName.toLowerCase() === patientName.toLowerCase(),
+            );
+            if (exactMatches.length === 1) {
+              targetPatientId = exactMatches[0].id;
+            } else {
+              // Return disambiguation list
+              return {
+                success: true,
+                dataType: 'MULTIPLE_PATIENTS_FOUND',
+                message: `Multiple patients found matching "${patientName}". Please select one:`,
+                data: {
+                  query: patientName,
+                  matches: patients.map((p: any) => ({
+                    id: p.id,
+                    fullName: p.fullName,
+                    age: p.age,
+                    gender: p.gender,
+                    phone: p.phone,
+                    lastVisit: p.lastVisit?.date || null,
+                  })),
+                },
+                actions: patients.map((p: any) => ({
+                  type: 'GET_PATIENT_SUMMARY',
+                  label: `${p.fullName} (${p.age}y, ${p.gender})`,
+                  payload: { patientId: p.id, patientName: p.fullName },
+                })),
+              };
+            }
+          } else {
+            targetPatientId = patients[0].id;
+          }
+        }
+
+        // Fetch full patient clinical record for this doctor
+        const recordResponse = await this.doctorService.getDoctorPatientRecord(
+          ctx.userId,
+          targetPatientId,
+        );
+        const recordData = recordResponse.data;
+        const patient = recordData.patient;
+
+        // Fetch prescriptions issued for this patient by this doctor
+        const prescriptions =
+          await this.prescriptionService.getPrescriptionsByDoctorAndPatient(
+            doctor.id,
+            targetPatientId,
+          );
+
+        const latestPrescription = prescriptions[0] || null;
+        const prescribedMedicines = latestPrescription?.medicines || [];
+        const lastDiagnosis =
+          latestPrescription?.diagnosis ||
+          recordData.allClinicalNotes?.[0]?.notes ||
+          null;
+
+        // Check if there is an appointment today
+        const todayIST = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Kolkata',
+        }).format(new Date());
+
+        const todayAppt = recordData.appointments?.find(
+          (a: any) => a.date === todayIST,
+        );
+
+        const summaryPayload = {
+          patient: {
+            id: patient.id,
+            fullName: patient.fullName,
+            age: patient.age,
+            gender: patient.gender,
+            bloodGroup: patient.bloodGroup || 'Not specified',
+            phone: patient.phone,
+          },
+          safetyAlerts: {
+            allergies: patient.allergies || 'No known drug allergies reported',
+            hasAllergyAlert: Boolean(
+              patient.allergies &&
+                patient.allergies.trim().length > 0 &&
+                !['none', 'nil', 'no', 'na'].includes(patient.allergies.trim().toLowerCase()),
+            ),
+            medicalHistory: patient.medicalHistory || 'No major chronic conditions recorded',
+            currentMedication: patient.currentMedication || 'None',
+          },
+          consultationStats: {
+            totalVisits: recordData.stats.totalVisits,
+            completedVisits: recordData.stats.completedVisits,
+            lastVisitDate: recordData.stats.lastVisitDate,
+          },
+          lastConsultation: {
+            date: recordData.stats.lastVisitDate || (latestPrescription?.createdAt ? new Date(latestPrescription.createdAt).toISOString().split('T')[0] : null),
+            diagnosis: lastDiagnosis || 'Routine Consultation / Checkup',
+            clinicalNotes: recordData.allClinicalNotes?.[0]?.notes || latestPrescription?.notes || null,
+            symptoms: latestPrescription?.symptoms || recordData.appointments?.[0]?.reasonForVisit || null,
+            vitals: latestPrescription?.vitals || null,
+            prescribedMedicines: prescribedMedicines.map((m: any) => ({
+              name: m.name,
+              dosage: m.dosage,
+              frequency: m.frequency,
+              timing: m.timing,
+              duration: m.duration,
+              instructions: m.instructions || '',
+            })),
+          },
+          todayAppointment: todayAppt
+            ? {
+                id: todayAppt.id,
+                tokenNumber: todayAppt.tokenNumber,
+                timeWindow: `${todayAppt.startTime} - ${todayAppt.endTime}`,
+                status: todayAppt.status,
+              }
+            : null,
+        };
+
+        return {
+          success: true,
+          dataType: 'PATIENT_CLINICAL_SUMMARY',
+          data: summaryPayload,
+          actions: [
+            {
+              type: 'VIEW_PATIENT_RECORDS',
+              label: `Open Full Records of ${patient.fullName}`,
+              payload: { patientId: patient.id },
+            },
+          ],
         };
       },
     });
@@ -366,6 +681,373 @@ export class AiToolRegistryService {
       },
     });
 
+    // previewDoctorSetAvailability
+    this.register({
+      name: 'previewDoctorSetAvailability',
+      description:
+        'Previews setting recurring or custom date availability for the authenticated doctor. If required details like days of week/date, start time, end time, or slot duration are missing, prompts the doctor for the missing details before previewing.',
+      permittedRoles: [Role.DOCTOR],
+      declaration: {
+        name: 'previewDoctorSetAvailability',
+        description:
+          'Previews setting doctor availability. Validates all required fields and asks for clarification if any are missing.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            shiftType: {
+              type: 'STRING',
+              description: "Type of shift: 'RECURRING' (every week) or 'CUSTOM' (specific date). Default is RECURRING.",
+            },
+            dayOfWeek: {
+              type: 'STRING',
+              description: "Day of the week (e.g. 'MONDAY', 'SUNDAY').",
+            },
+            daysOfWeek: {
+              type: 'ARRAY',
+              items: { type: 'STRING' },
+              description: "Array of days of the week, e.g. ['SUNDAY'] or ['MONDAY', 'WEDNESDAY'].",
+            },
+            specificDate: {
+              type: 'STRING',
+              description: 'Date in YYYY-MM-DD format (required if shiftType is CUSTOM).',
+            },
+            startTime: {
+              type: 'STRING',
+              description: "Shift start time in 24-hr HH:MM format (e.g. '09:00', '10:00').",
+            },
+            endTime: {
+              type: 'STRING',
+              description: "Shift end time in 24-hr HH:MM format (e.g. '12:00', '17:00').",
+            },
+            slotDuration: {
+              type: 'INTEGER',
+              description: 'Duration of each consultation slot in minutes (e.g. 15, 20, 30).',
+            },
+            schedulingType: {
+              type: 'STRING',
+              description: "'STREAM' (default, 1 patient per slot) or 'WAVE' (group slots).",
+            },
+          },
+          required: ['startTime', 'endTime'],
+        },
+      },
+      execute: async (ctx, args) => {
+        const startTime: string = args.startTime;
+        const endTime: string = args.endTime;
+        const shiftType: string = (args.shiftType || 'RECURRING').toUpperCase();
+        const slotDuration: number | undefined = args.slotDuration ? Number(args.slotDuration) : undefined;
+        const schedulingType: string = (args.schedulingType || 'STREAM').toUpperCase();
+
+        let daysOfWeek: string[] | undefined = args.daysOfWeek;
+        if (!daysOfWeek && args.dayOfWeek) {
+          daysOfWeek = [args.dayOfWeek.toUpperCase()];
+        }
+
+        const missingFields: string[] = [];
+        if (!daysOfWeek && !args.specificDate) {
+          missingFields.push('dayOfWeek or specificDate');
+        }
+        if (!startTime) {
+          missingFields.push('startTime');
+        }
+        if (!endTime) {
+          missingFields.push('endTime');
+        }
+        if (!slotDuration) {
+          missingFields.push('slotDuration (e.g. 15, 20, 30 minutes)');
+        }
+
+        if (missingFields.length > 0) {
+          return {
+            success: false,
+            data: {
+              needsClarification: true,
+              missingFields,
+              providedDetails: {
+                shiftType,
+                daysOfWeek,
+                specificDate: args.specificDate,
+                startTime,
+                endTime,
+                slotDuration,
+              },
+              guidance:
+                'Please ask the doctor for the missing details before confirming availability.',
+            },
+          };
+        }
+
+        const [sh, sm] = startTime.split(':').map(Number);
+        const [eh, em] = endTime.split(':').map(Number);
+        const startMins = sh * 60 + sm;
+        const endMins = eh * 60 + em;
+        if (startMins >= endMins) {
+          return {
+            success: false,
+            error: 'End time must be after start time.',
+          };
+        }
+
+        const totalMinutes = endMins - startMins;
+        const estSlots = Math.floor(totalMinutes / (slotDuration || 15));
+        const dayName = daysOfWeek ? daysOfWeek.join(', ') : args.specificDate;
+        const summaryText = shiftType === 'RECURRING'
+          ? 'Recurring shift for ' + dayName + ' from ' + startTime + ' to ' + endTime + ' (' + (slotDuration || 15) + ' mins/slot, ~' + estSlots + ' slots).'
+          : 'Custom shift for ' + dayName + ' from ' + startTime + ' to ' + endTime + ' (' + (slotDuration || 15) + ' mins/slot, ~' + estSlots + ' slots).';
+
+        const pending = this.sessionService.createPendingConfirmation(
+          ctx.userId,
+          (args as any)?.conversationId || '',
+          'SET_DOCTOR_AVAILABILITY',
+          {
+            shiftType,
+            daysOfWeek,
+            specificDate: args.specificDate,
+            startTime,
+            endTime,
+            slotDuration: slotDuration || 15,
+            schedulingType,
+            totalEstimatedSlots: estSlots,
+          },
+          summaryText,
+        );
+
+        return {
+          success: true,
+          requiresConfirmation: true,
+          confirmationId: pending.id,
+          expiresAt: pending.expiresAt.toISOString(),
+          data: {
+            actionType: 'SET_DOCTOR_AVAILABILITY',
+            shiftType,
+            day: dayName,
+            daysOfWeek,
+            specificDate: args.specificDate,
+            startTime,
+            endTime,
+            slotDuration: slotDuration || 15,
+            schedulingType,
+            totalEstimatedSlots: estSlots,
+            summary: summaryText,
+          },
+          actions: [
+            {
+              type: 'CONFIRM_AVAILABILITY',
+              label: 'Confirm & Set ' + dayName + ' (' + startTime + ' - ' + endTime + ')',
+              data: {
+                confirmationId: pending.id,
+              },
+            },
+          ],
+        };
+      },
+    });
+
+    // previewDoctorElasticSchedule
+    this.register({
+      name: 'previewDoctorElasticSchedule',
+      description:
+        'Previews expanding or shrinking an existing shift for the doctor. For shrink, checks conflicts and identifies affected appointments that will automatically receive reschedule requests upon confirmation.',
+      permittedRoles: [Role.DOCTOR],
+      declaration: {
+        name: 'previewDoctorElasticSchedule',
+        description:
+          'Previews expanding or shrinking a shift. Validates capacity and reports affected appointments with automatic reschedule dispatch upon confirmation.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            actionType: {
+              type: 'STRING',
+              description: "'EXPAND' (increase hours) or 'SHRINK' (decrease hours).",
+            },
+            shiftId: {
+              type: 'STRING',
+              description: 'Optional ID of the shift. If omitted, the shift is resolved using dayOfWeek or date.',
+            },
+            shiftType: {
+              type: 'STRING',
+              description: "'RECURRING' or 'CUSTOM'. Default is 'RECURRING'.",
+            },
+            date: {
+              type: 'STRING',
+              description: 'Date in YYYY-MM-DD format (e.g. today or tomorrow).',
+            },
+            dayOfWeek: {
+              type: 'STRING',
+              description: "Day of week (e.g. 'FRIDAY', 'SUNDAY').",
+            },
+            newStartTime: {
+              type: 'STRING',
+              description: "New start time in HH:MM (e.g. '09:00').",
+            },
+            newEndTime: {
+              type: 'STRING',
+              description: "New end time in HH:MM (e.g. '11:00').",
+            },
+          },
+          required: ['actionType', 'newStartTime', 'newEndTime'],
+        },
+      },
+      execute: async (ctx, args) => {
+        const actionType = (args.actionType || 'SHRINK').toUpperCase();
+        const newStartTime: string = args.newStartTime;
+        const newEndTime: string = args.newEndTime;
+        const shiftType: string = (args.shiftType || 'RECURRING').toUpperCase();
+        const targetDate: string = args.date || getTodayIST();
+
+        let targetShiftId: string | undefined = args.shiftId;
+        const doctorAvailability =
+          await this.availabilityService.getDetailedAvailability(ctx.userId);
+
+        if (!targetShiftId) {
+          if (shiftType === 'CUSTOM' && args.date) {
+            const custom = doctorAvailability.customOverrides?.find(
+              (c) => c.date === args.date,
+            );
+            if (custom) targetShiftId = custom.id;
+          } else {
+            const dayTarget = (
+              args.dayOfWeek ||
+              new Date(targetDate).toLocaleDateString('en-US', {
+                weekday: 'long',
+              })
+            ).toUpperCase();
+            const rec = doctorAvailability.recurring?.find(
+              (r) => r.dayOfWeek?.toUpperCase() === dayTarget,
+            );
+            if (rec) targetShiftId = rec.id;
+          }
+        }
+
+        if (!targetShiftId) {
+          const firstShift =
+            doctorAvailability.recurring?.[0] ||
+            doctorAvailability.customOverrides?.[0];
+          if (firstShift) {
+            targetShiftId = firstShift.id;
+          } else {
+            return {
+              success: false,
+              error:
+                'No active shifts found for this doctor to shrink or expand. Please set availability first.',
+            };
+          }
+        }
+
+        if (actionType === 'EXPAND') {
+          const summaryText = 'Expand shift to ' + newStartTime + ' - ' + newEndTime + ' on ' + targetDate + '. This will open additional appointment slots.';
+          const pending = this.sessionService.createPendingConfirmation(
+            ctx.userId,
+            (args as any)?.conversationId || '',
+            'APPLY_DOCTOR_EXPAND',
+            {
+              shiftId: targetShiftId,
+              shiftType,
+              newStartTime,
+              newEndTime,
+              date: targetDate,
+            },
+            summaryText,
+          );
+
+          return {
+            success: true,
+            requiresConfirmation: true,
+            confirmationId: pending.id,
+            expiresAt: pending.expiresAt.toISOString(),
+            data: {
+              actionType: 'APPLY_DOCTOR_EXPAND',
+              shiftId: targetShiftId,
+              shiftType,
+              newStartTime,
+              newEndTime,
+              date: targetDate,
+              summary: summaryText,
+            },
+            actions: [
+              {
+                type: 'CONFIRM_EXPAND',
+                label: 'Confirm Expansion (' + newStartTime + ' - ' + newEndTime + ')',
+                data: { confirmationId: pending.id },
+              },
+            ],
+          };
+        }
+
+        // SHRINK ACTION: Check conflicts and affected appointments
+        const conflicts = await this.elasticSchedulingService.checkShrinkConflicts(
+          ctx.userId,
+          {
+            shiftId: targetShiftId,
+            shiftType: shiftType as any,
+            newStartTime,
+            newEndTime,
+          },
+        );
+
+        const affectedAppts = (conflicts.affectedAppointments || []).map((a) => ({
+          appointmentId: a.appointmentId,
+          patientName: a.patientName || 'Patient',
+          tokenNumber: a.tokenNumber,
+          date: a.date,
+          startTime: a.startTime,
+          endTime: a.endTime,
+        }));
+
+        const summaryText =
+          conflicts.conflictCount > 0
+            ? 'Shrinking shift to ' + newStartTime + ' - ' + newEndTime + ' affects ' + conflicts.conflictCount + ' existing appointment(s). Confirming will automatically notify affected patients and send reschedule requests.'
+            : 'Shrinking shift to ' + newStartTime + ' - ' + newEndTime + '. No existing appointments will be affected.';
+
+        const pending = this.sessionService.createPendingConfirmation(
+          ctx.userId,
+          (args as any)?.conversationId || '',
+          'APPLY_DOCTOR_SHRINK',
+          {
+            shiftId: targetShiftId,
+            shiftType,
+            newStartTime,
+            newEndTime,
+            date: targetDate,
+            conflictCount: conflicts.conflictCount || affectedAppts.length,
+            affectedAppointments: affectedAppts,
+            forceIfNoConflicts: true,
+          },
+          summaryText,
+        );
+
+        return {
+          success: true,
+          requiresConfirmation: true,
+          confirmationId: pending.id,
+          expiresAt: pending.expiresAt.toISOString(),
+          data: {
+            actionType: 'APPLY_DOCTOR_SHRINK',
+            shiftId: targetShiftId,
+            shiftType,
+            newStartTime,
+            newEndTime,
+            date: targetDate,
+            hasConflicts: conflicts.hasConflicts,
+            conflictCount: conflicts.conflictCount || affectedAppts.length,
+            affectedAppointments: affectedAppts,
+            summary: summaryText,
+          },
+          actions: [
+            {
+              type: 'CONFIRM_SHRINK',
+              label:
+                conflicts.conflictCount > 0
+                  ? 'Confirm Shrink & Auto-Notify (' + conflicts.conflictCount + ' affected)'
+                  : 'Confirm Shrink (' + newStartTime + ' - ' + newEndTime + ')',
+              data: { confirmationId: pending.id },
+            },
+          ],
+        };
+      },
+    });
+
+
     // =========================================================================
     // 2. PATIENT TOOLS
     // =========================================================================
@@ -470,6 +1152,9 @@ export class AiToolRegistryService {
             specialization: doc.specialization,
             experience: doc.experience ?? 0,
             consultationFee: doc.consultationFee ?? 500,
+            qualification: doc.qualification || 'MBBS',
+            clinic: doc.profileDetails || 'CareUp Healthcare Clinic',
+            profileUrl: `/doctors/${doc.id}`,
             nextSlot: nextSlot
               ? {
                   date: nextSlot.date,
@@ -480,7 +1165,7 @@ export class AiToolRegistryService {
           };
           doctorSummaries.push(docSummary);
 
-          // Add a quick action button if slot is available
+          // Action 1: Quick slot booking if available
           if (nextSlot) {
             actions.push({
               type: 'BOOK_DOCTOR_SLOT',
@@ -494,6 +1179,17 @@ export class AiToolRegistryService {
               },
             });
           }
+
+          // Action 2: Direct link/action to view doctor profile
+          actions.push({
+            type: 'VIEW_DOCTOR_PROFILE',
+            label: `View Dr. ${docSummary.name}'s Profile`,
+            data: {
+              doctorId: doc.id,
+              doctorName: docSummary.name,
+              profileUrl: `/doctors/${doc.id}`,
+            },
+          });
         }
 
         return {
@@ -1362,6 +2058,85 @@ export class AiToolRegistryService {
           data: {
             message: `Aapka appointment successfully cancel kar diya gaya hai.`,
             appointmentId: payload.appointmentId,
+          },
+        };
+      }
+
+      if (pending.actionType === 'SET_DOCTOR_AVAILABILITY') {
+        const payload = pending.actionPayload;
+        if (payload.shiftType === 'CUSTOM') {
+          await this.availabilityService.createCustomOverride(userId, {
+            date: payload.specificDate,
+            startTime: payload.startTime,
+            endTime: payload.endTime,
+            slotDuration: payload.slotDuration || 15,
+            schedulingType: payload.schedulingType || 'STREAM',
+            maxPatients: payload.maxPatients,
+          });
+        } else {
+          await this.availabilityService.createRecurring(userId, {
+            daysOfWeek: payload.daysOfWeek,
+            startTime: payload.startTime,
+            endTime: payload.endTime,
+            slotDuration: payload.slotDuration || 15,
+            schedulingType: payload.schedulingType || 'STREAM',
+            maxPatients: payload.maxPatients,
+          });
+        }
+
+        this.sessionService.clearPendingConfirmation(confirmationId);
+        const dayDesc = payload.daysOfWeek ? payload.daysOfWeek.join(', ') : payload.specificDate;
+        return {
+          success: true,
+          data: {
+            message: `Availability successfully set for ${dayDesc} (${payload.startTime} - ${payload.endTime}, ${payload.slotDuration || 15} mins/slot).`,
+            actionType: 'SET_DOCTOR_AVAILABILITY',
+          },
+        };
+      }
+
+      if (pending.actionType === 'APPLY_DOCTOR_SHRINK') {
+        const payload = pending.actionPayload;
+        const result = await this.elasticSchedulingService.applyShrink(userId, {
+          shiftId: payload.shiftId,
+          shiftType: payload.shiftType,
+          newStartTime: payload.newStartTime,
+          newEndTime: payload.newEndTime,
+          forceIfNoConflicts: true,
+        });
+
+        this.sessionService.clearPendingConfirmation(confirmationId);
+        const conflictMsg =
+          payload.conflictCount > 0
+            ? `Shift has been shrunken to ${payload.newStartTime} - ${payload.newEndTime}. All ${payload.conflictCount} affected patient(s) have been automatically notified and sent reschedule requests with alternative slots.`
+            : `Shift has been safely shrunken to ${payload.newStartTime} - ${payload.newEndTime} with no patient conflicts.`;
+
+        return {
+          success: true,
+          data: {
+            message: conflictMsg,
+            actionType: 'APPLY_DOCTOR_SHRINK',
+            result,
+          },
+        };
+      }
+
+      if (pending.actionType === 'APPLY_DOCTOR_EXPAND') {
+        const payload = pending.actionPayload;
+        const result = await this.elasticSchedulingService.expandSchedule(userId, {
+          shiftId: payload.shiftId,
+          shiftType: payload.shiftType,
+          newStartTime: payload.newStartTime,
+          newEndTime: payload.newEndTime,
+        });
+
+        this.sessionService.clearPendingConfirmation(confirmationId);
+        return {
+          success: true,
+          data: {
+            message: `Shift has been expanded to ${payload.newStartTime} - ${payload.newEndTime}. New consultation slots are now available!`,
+            actionType: 'APPLY_DOCTOR_EXPAND',
+            result,
           },
         };
       }

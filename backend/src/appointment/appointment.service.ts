@@ -682,6 +682,10 @@ export class AppointmentService {
     });
 
     const now = new Date();
+    const todayStr = getTodayIST();
+    const nowIST = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const currentMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
+
     for (const appt of appointments) {
       if (
         appt.status === AppointmentStatus.PENDING_PAYMENT &&
@@ -691,6 +695,16 @@ export class AppointmentService {
         appt.status = AppointmentStatus.CANCELLED;
         appt.paymentStatus = 'FAILED';
         appt.pendingExpiresAt = null;
+        await this.appointmentRepo.save(appt);
+      } else if (
+        appt.status === AppointmentStatus.CONFIRMED &&
+        (appt.date < todayStr ||
+          (appt.date === todayStr &&
+            (appt.endTime
+              ? toMinutes(appt.endTime) < currentMinutes
+              : toMinutes(appt.startTime) + 30 < currentMinutes)))
+      ) {
+        appt.status = AppointmentStatus.NO_SHOW;
         await this.appointmentRepo.save(appt);
       }
     }
@@ -1491,6 +1505,21 @@ export class AppointmentService {
     const todayStr = getTodayIST();
     const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
     const currentMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
+
+    // Auto-mark past confirmed appointments as NO_SHOW
+    for (const appt of appointments) {
+      if (
+        appt.status === AppointmentStatus.CONFIRMED &&
+        (appt.date < todayStr ||
+          (appt.date === todayStr &&
+            (appt.endTime
+              ? toMinutes(appt.endTime) < currentMinutes
+              : toMinutes(appt.startTime) + 30 < currentMinutes)))
+      ) {
+        appt.status = AppointmentStatus.NO_SHOW;
+        this.appointmentRepo.update(appt.id, { status: AppointmentStatus.NO_SHOW }).catch(() => {});
+      }
+    }
 
     // Guarantee sequential tokens
     const byDate = new Map<string, Appointment[]>();

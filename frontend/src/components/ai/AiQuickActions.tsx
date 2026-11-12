@@ -123,6 +123,11 @@ export function AiQuickActions({
         prompt: 'Do I have any appointments today? Show my schedule.',
       },
       {
+        icon: FileText,
+        label: 'Patient Clinical Summary',
+        prompt: 'Show me the clinical summary and past visits of my scheduled patient.',
+      },
+      {
         icon: Clock,
         label: "Tomorrow's schedule",
         prompt: 'Show my appointments for tomorrow.',
@@ -145,6 +150,11 @@ export function AiQuickActions({
         prompt: 'क्या आज मेरी कोई अपॉइंटमेंट है? आज का पूरा शेड्यूल दिखाएं।',
       },
       {
+        icon: FileText,
+        label: 'मरीज का क्लिनिकल सारांश',
+        prompt: 'मरीज की क्लिनिकल समरी और पिछली दवाइयां बताएं।',
+      },
+      {
         icon: Clock,
         label: 'कल का शेड्यूल',
         prompt: 'कल की मेरी अपॉइंटमेंट्स दिखाएं।',
@@ -165,6 +175,11 @@ export function AiQuickActions({
         icon: Calendar,
         label: 'Aaj ke kitne appointments hain?',
         prompt: 'Aaj mere kitne appointments hain? Schedule dikhao.',
+      },
+      {
+        icon: FileText,
+        label: 'Patient Clinical Summary',
+        prompt: 'Patient ki clinical summary, bimari aur past dawai batao.',
       },
       {
         icon: Clock,

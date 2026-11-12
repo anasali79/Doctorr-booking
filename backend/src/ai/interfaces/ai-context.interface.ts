@@ -4,7 +4,13 @@ export interface PendingConfirmation {
   id: string;
   userId: string;
   conversationId: string;
-  actionType: 'BOOK_APPOINTMENT' | 'RESCHEDULE_APPOINTMENT' | 'CANCEL_APPOINTMENT';
+  actionType:
+    | 'BOOK_APPOINTMENT'
+    | 'RESCHEDULE_APPOINTMENT'
+    | 'CANCEL_APPOINTMENT'
+    | 'SET_DOCTOR_AVAILABILITY'
+    | 'APPLY_DOCTOR_SHRINK'
+    | 'APPLY_DOCTOR_EXPAND';
   actionPayload: Record<string, any>;
   summary: string;
   createdAt: Date;

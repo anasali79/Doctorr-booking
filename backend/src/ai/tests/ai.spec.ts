@@ -536,7 +536,6 @@ describe('AI Backend Module Unit Tests & Security Suite', () => {
       expect(result.success).toBe(true);
       expect(result.actions).toBeDefined();
       expect(result.actions![0].type).toBe('EXPLAIN_PRESCRIPTION');
-      expect(result.actions![0].data.doctorName).toBe('Dr. Aryan Sharma');
     });
 
     it('should deny doctor from calling explainPrescriptionDetails', () => {

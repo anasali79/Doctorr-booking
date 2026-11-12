@@ -34,12 +34,15 @@ export class AiOrchestratorService {
     conversationId?: string,
     confirmationId?: string,
     confirmed?: boolean,
+    languagePreference?: 'auto' | 'hi' | 'en',
   ): Promise<AiResponseDto> {
     const session = this.sessionService.getOrCreateSession(
       userContext.userId,
       userContext.role,
       conversationId,
     );
+
+    const userLanguage = this.detectLanguage(message, languagePreference);
 
     // 1. If explicit confirmation ID is submitted
     if (confirmationId && confirmed !== undefined) {
@@ -49,13 +52,19 @@ export class AiOrchestratorService {
           userContext.userId,
         );
         const replyText = result.success
-          ? result.data?.message || 'Operation confirmed and completed successfully!'
-          : result.error || 'Operation failed.';
+          ? result.data?.message ||
+            (userLanguage === 'en'
+              ? 'Operation confirmed and completed successfully!'
+              : 'Operation confirm ho gayi hai aur safaltapoorvak complete ho chuki hai!')
+          : result.error ||
+            (userLanguage === 'en'
+              ? 'Operation failed.'
+              : 'Operation fail ho gayi hai.');
 
         const response: AiResponseDto = {
           message: replyText,
           spokenSummary: replyText,
-          language: this.detectLanguage(replyText),
+          language: userLanguage === 'en' ? 'en' : 'hi',
           actions: result.actions || [],
           requiresConfirmation: false,
           requiresPayment: Boolean(result.requiresPayment),
@@ -78,11 +87,14 @@ export class AiOrchestratorService {
       } else {
         // User explicitly cancelled the confirmation
         this.sessionService.clearPendingConfirmation(confirmationId);
-        const replyText = 'Operation cancel kar di gayi hai.';
+        const replyText =
+          userLanguage === 'en'
+            ? 'Operation cancelled.'
+            : 'Operation cancel kar di gayi hai.';
         return {
           message: replyText,
           spokenSummary: replyText,
-          language: 'hi',
+          language: userLanguage === 'en' ? 'en' : 'hi',
           actions: [],
           requiresConfirmation: false,
           conversationId: session.id,
@@ -104,6 +116,10 @@ export class AiOrchestratorService {
           'kar do',
           'kardo',
           'theek hai kar do',
+          'ha kardo',
+          'confirm kardo',
+          'please confirm',
+          'confirm it',
         ].includes(lower)
       ) {
         return this.processMessage(
@@ -112,9 +128,10 @@ export class AiOrchestratorService {
           session.id,
           session.pendingConfirmation.id,
           true,
+          languagePreference,
         );
       } else if (
-        ['nahi', 'no', 'cancel', 'mat karo', 'ruk jao', 'stop'].includes(lower)
+        ['nahi', 'no', 'cancel', 'mat karo', 'ruk jao', 'stop', 'dont do it', 'reject'].includes(lower)
       ) {
         return this.processMessage(
           userContext,
@@ -122,6 +139,7 @@ export class AiOrchestratorService {
           session.id,
           session.pendingConfirmation.id,
           false,
+          languagePreference,
         );
       }
     }
@@ -138,7 +156,7 @@ export class AiOrchestratorService {
     const tools = this.toolRegistry.getFunctionDeclarationsForRole(
       userContext.role,
     );
-    const systemPrompt = this.buildSystemPrompt(userContext);
+    const systemPrompt = this.buildSystemPrompt(userContext, userLanguage);
 
     // Build Gemini contents from trimmed session history
     const contents: GeminiContent[] = [];
@@ -166,7 +184,7 @@ export class AiOrchestratorService {
         tools: tools.length > 0 ? [{ functionDeclarations: tools }] : undefined,
         generationConfig: {
           temperature: 0.2, // Low temperature for factual accuracy
-          maxOutputTokens: 600,
+          maxOutputTokens: 700,
         },
       };
 
@@ -175,13 +193,17 @@ export class AiOrchestratorService {
       if (response.error) {
         this.logger.error(`Gemini Error: ${response.error.message}`);
         const fallbackText =
-          response.error.code === 429
-            ? 'AI abhi busy hai. Kripya thodi der baad dobara koshish karein.'
-            : 'AI service temporary unavailable hai. Aap normal website se appointments dekh aur book kar sakte hain.';
+          userLanguage === 'en'
+            ? response.error.code === 429
+              ? 'AI Assistant is currently busy. Please try again in a few moments.'
+              : 'AI Assistant is temporarily unavailable. You can browse and book appointments directly on the website.'
+            : response.error.code === 429
+              ? 'AI abhi busy hai. Kripya thodi der baad dobara koshish karein.'
+              : 'AI service temporary unavailable hai. Aap normal website se appointments dekh aur book kar sakte hain.';
         return {
           message: fallbackText,
           spokenSummary: fallbackText,
-          language: 'hi',
+          language: userLanguage === 'en' ? 'en' : 'hi',
           actions: [],
           requiresConfirmation: false,
           conversationId: session.id,
@@ -252,22 +274,25 @@ export class AiOrchestratorService {
                 name,
                 response: {
                   name,
-                  content: executionResult.data || { error: executionResult.error },
+                  content: executionResult.data || {
+                    success: executionResult.success,
+                    error: executionResult.error,
+                  },
                 },
               },
             },
           ],
         });
-
-        // Continue loop to get synthesized text
         continue;
       }
 
-      // Model returned text
+      // If model provided text response
       if (textParts) {
         finalModelText = textParts;
         break;
       }
+
+      break;
     }
 
     // If tools were called but loop finished without a text response from the model,
@@ -281,13 +306,13 @@ export class AiOrchestratorService {
               {
                 text:
                   systemPrompt +
-                  '\n\nIMPORTANT: Do not make any more tool calls. Summarize the tool results retrieved above and provide a complete, clear, and helpful answer to the user in their language (Hindi/Hinglish/English).',
+                  `\n\nIMPORTANT: Do not make any more tool calls. Summarize the tool results retrieved above and provide a complete, clear, and helpful answer to the user in their language (${userLanguage.toUpperCase()}).`,
               },
             ],
           },
           generationConfig: {
             temperature: 0.2,
-            maxOutputTokens: 600,
+            maxOutputTokens: 700,
           },
         };
         const forcedResp = await this.geminiClient.generateContent(forcedReq);
@@ -307,19 +332,39 @@ export class AiOrchestratorService {
 
     if (!finalModelText) {
       finalModelText =
-        pendingConfirmationResult?.data
-          ? `Kripya confirmation check karein.`
-          : 'Aapki request process ho gayi hai.';
+        userLanguage === 'en'
+          ? pendingConfirmationResult?.data
+            ? 'Please review the confirmation card below.'
+            : 'Your request has been processed.'
+          : pendingConfirmationResult?.data
+            ? 'Kripya confirmation card check karein.'
+            : 'Aapki request process ho gayi hai.';
     }
 
-    const language = this.detectLanguage(message + ' ' + finalModelText);
-    const spokenSummary = this.buildSpokenSummary(finalModelText, language);
+    // Aggregate actions and data from all executed tools so recommendation cards and previews are not lost
+    const aggregatedActions: any[] = [];
+    let lastToolData: any = undefined;
+
+    for (const res of executedToolCalls.values()) {
+      if (res.actions && Array.isArray(res.actions)) {
+        aggregatedActions.push(...res.actions);
+      }
+      if (res.data) {
+        lastToolData = res.data;
+      }
+    }
+    if (pendingConfirmationResult?.actions && Array.isArray(pendingConfirmationResult.actions)) {
+      aggregatedActions.push(...pendingConfirmationResult.actions);
+    }
+
+    const spokenSummary = this.buildSpokenSummary(finalModelText, userLanguage === 'en' ? 'en' : 'hi');
 
     const responseDto: AiResponseDto = {
       message: finalModelText,
       spokenSummary,
-      language,
-      actions: pendingConfirmationResult?.actions || [],
+      language: userLanguage === 'en' ? 'en' : 'hi',
+      actions: aggregatedActions,
+      data: pendingConfirmationResult?.data || lastToolData,
       requiresConfirmation: Boolean(pendingConfirmationResult?.requiresConfirmation),
       confirmationId: pendingConfirmationResult?.confirmationId || null,
       expiresAt: pendingConfirmationResult?.expiresAt || null,
@@ -337,6 +382,7 @@ export class AiOrchestratorService {
       confirmationId: responseDto.confirmationId || undefined,
       expiresAt: responseDto.expiresAt || undefined,
       actions: responseDto.actions,
+      data: responseDto.data,
     });
 
     return responseDto;
@@ -345,7 +391,10 @@ export class AiOrchestratorService {
   /**
    * Builds the role-specific instructions and contextual date/time information.
    */
-  private buildSystemPrompt(userContext: AiUserContext): string {
+  private buildSystemPrompt(
+    userContext: AiUserContext,
+    targetLanguage: 'en' | 'hi' | 'hinglish',
+  ): string {
     const now = new Date();
     const todayIST = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'Asia/Kolkata',
@@ -357,8 +406,16 @@ export class AiOrchestratorService {
 
     const isDoctor = userContext.role === Role.DOCTOR;
 
+    const languageDirective =
+      targetLanguage === 'en'
+        ? `MANDATORY LANGUAGE REQUIREMENT: The user is speaking in ENGLISH. You MUST formulate your entire response in clear, professional, fluent ENGLISH.
+DO NOT use any Hindi or Hinglish words (do NOT say 'Aapka', 'Bimari', 'Dawa', 'Hain', 'Ji', 'Kripya', 'Subah', 'Sham'). Keep all guidance, doctor recommendations, greetings, and questions 100% in English.`
+        : targetLanguage === 'hi'
+          ? `MANDATORY LANGUAGE REQUIREMENT: The user is speaking in HINDI. You MUST formulate your entire response in HINDI (Devanagari script).`
+          : `MANDATORY LANGUAGE REQUIREMENT: The user is speaking in HINGLISH. You MUST formulate your response in natural, friendly, conversational Hinglish (Roman Hindi script).`;
+
     return `
-You are the AI Appointment Assistant for Doctorr-booking platform.
+You are the AI Healthcare & Appointment Assistant for CareUp platform.
 Current Timezone: Asia/Kolkata (IST).
 Today's Date: ${todayIST}
 Tomorrow's Date: ${tomorrowIST}
@@ -366,44 +423,79 @@ Tomorrow's Date: ${tomorrowIST}
 User Role: ${userContext.role} (User ID: ${userContext.userId})
 Role Scope: ${
       isDoctor
-        ? "DOCTOR ASSISTANT: You assist the doctor with checking their schedule, today's appointments, availability, and smart rescheduling previews. You NEVER access another doctor's data."
+        ? "DOCTOR ASSISTANT: You assist the doctor with checking their schedule, today's appointments, availability management (recurring or custom), and elastic scheduling (shrink/expand shifts with automated patient reschedule dispatch). You NEVER access another doctor's data."
         : "PATIENT ASSISTANT: You assist the patient with viewing their own appointments, checking available doctors and slots, and previewing booking, rescheduling, or cancellation. You NEVER access another patient's data."
     }
 
+${languageDirective}
+
 CRITICAL RULES:
-1. HEALTHCARE SAFETY & ADVICE: You provide empathetic health guidance, probable root-cause insights, and practical lifestyle/home-care tips (e.g. hydration, warm salt-water rinse, rest, avoiding spicy foods). You do NOT prescribe prescription medications or guarantee diagnoses. Always encourage consulting a doctor.
-2. FREE-TIER PRIVACY: Never ask for or output sensitive private identifiers, full address, or phone numbers.
-3. TWO-STEP ACTIONS: You CANNOT finalize booking, rescheduling, or cancellation on your own! Always use the preview tools (previewAppointmentBooking, previewAppointmentReschedule, previewAppointmentCancellation). State the key details clearly (Doctor, Date, Time, Fee) and ask the user to confirm.
-4. LANGUAGE & TONE:
-   - Understand Hindi, English, and Hinglish ("aaj ke appointments", "muu me chaale ho gaye", "kal mera slot kab hai", "isko reschedule kar do").
-   - Match the user's language: If user writes in Hinglish, reply in clear, friendly Hinglish. If in Hindi, reply in Hindi. If in English, reply in English.
-   - Resolve date words accurately: "aaj" = ${todayIST}, "kal" = ${tomorrowIST}.
-5. CONCISENESS & EMPATHY: Keep answers clear, empathetic, and direct. Do not output raw JSON, internal database IDs, or code blocks.
-6. CLEAN PRESENTATION: Format lists and details cleanly using bullet points (•) or key-value format (e.g. Doctor: Dr. Rahul, Date: 18 Nov, Time: 9:00 AM, Fee: ₹500).
-7. CLINICAL SYMPTOM ANALYSIS & GUIDED BOOKING:
-   - When a patient describes symptoms, discomfort, illness, or health complaints (e.g. "muu me chaale aa jate hai", "seene me dard", "fever", "skin rash", "teeth pain"):
-     a) FIRST: Explain possible root causes (e.g., deficiency of B12/iron, stress, acidity, stomach heat, infection) and give 2 practical home-care tips (e.g., stay hydrated, avoid spicy/acidic foods, rinse with salt water).
-     b) SECOND: Determine which medical specialist is suited (e.g. "Dentist", "ENT Specialist", "Cardiologist", "Dermatologist", "General Physician").
+1. STRICT LANGUAGE MATCHING:
+   - Always match the user's language exactly as specified in the MANDATORY LANGUAGE REQUIREMENT above.
+   - When answering in English, every sentence must be natural English. Never leak Hinglish vocabulary into an English response.
+2. HEALTHCARE SAFETY & ADVICE:
+   - You provide empathetic health guidance, probable root-cause insights, and practical lifestyle/home-care tips (e.g. hydration, warm salt-water rinse, rest, avoiding spicy foods).
+   - You do NOT prescribe prescription medications or guarantee diagnoses. Always encourage consulting a doctor.
+3. FREE-TIER PRIVACY: Never ask for or output sensitive private identifiers, full address, or phone numbers.
+4. TWO-STEP ACTIONS & CONFIRMATION:
+   - You CANNOT finalize booking, rescheduling, cancellation, setting availability, or shrinking/expanding shifts on your own!
+   - Always use the preview tools (previewAppointmentBooking, previewAppointmentReschedule, previewAppointmentCancellation, previewDoctorSetAvailability, previewDoctorElasticSchedule).
+   - State the key details clearly and ask the user to confirm via button or voice/text ('Confirm', 'Yes', 'Haan confirm karo').
+
+${
+  isDoctor
+    ? `
+DOCTOR SPECIFIC CAPABILITIES & WORKFLOWS:
+A. DOCTOR AVAILABILITY SETTING (previewDoctorSetAvailability):
+   - The doctor can ask to set recurring weekly availability (e.g., 'Set availability for Sunday 10am to 12pm') or custom date availability.
+   - REQUIRED INFORMATION CHECK:
+     Before calling previewDoctorSetAvailability, make sure you know:
+     1. Day(s) of week (e.g. SUNDAY) OR specific date (YYYY-MM-DD).
+     2. Start time & End time (e.g. 10:00 to 12:00 in 24-hr format).
+     3. Shift type: RECURRING (every week) vs CUSTOM (specific date).
+     4. Slot duration per patient: (e.g. 15, 20, or 30 minutes).
+     5. Scheduling type: STREAM (1-to-1) vs WAVE (group).
+   - CLARIFICATION RULE: If the doctor forgot to mention slot duration or shift type, DO NOT guess! Ask them politely in their language:
+     e.g. in English: 'I have noted Sunday 10:00 AM to 12:00 PM. Could you please specify: (1) Is this recurring every Sunday or for a specific date? (2) What is your preferred slot duration per patient (e.g., 15 or 30 mins)?'
+     e.g. in Hinglish: 'Sunday 10:00 AM se 12:00 PM note kar liya hai. Kripya confirm karein: (1) Kya yeh har Sunday ke liye recurring shift hai ya kisi specific date ke liye? (2) Har patient ke liye slot duration kitni rakhni hai (e.g., 15 ya 30 minute)?'
+   - Once all details are provided, call previewDoctorSetAvailability. Present the confirmation details clearly.
+
+B. ELASTIC SCHEDULING - SHRINK & EXPAND (previewDoctorElasticSchedule):
+   - EXPAND SHIFT: When doctor wants to extend their hours (e.g. 'expand shift till 2pm'), call previewDoctorElasticSchedule with actionType: 'EXPAND'. Previews the new expanded capacity.
+   - SHRINK SHIFT: When doctor wants to reduce hours (e.g. 'shrink shift from 9-1 to 9-11'), call previewDoctorElasticSchedule with actionType: 'SHRINK'.
+     * The tool will check conflicts and return any affected appointments.
+     * Report to the doctor: How many patients are affected and their names/times.
+     * Clearly state: 'Upon your confirmation, the shift will be shrunken and the system will automatically dispatch reschedule requests and notifications to all affected patients.'
+     * Ask the doctor to confirm! When confirmed, the backend handles everything automatically.
+
+C. DOCTOR DAILY SCHEDULE & APPOINTMENT ROSTER (getDoctorDailySchedule):
+   - When the doctor asks about their appointments, schedule, or daily roster (e.g. 'Aaj mere kitne appointment hain?', 'Show my schedule for today', 'Today appointments'):
+     * Call getDoctorDailySchedule (or getDoctorAppointmentSummary).
+     * Provide a clear overview in their language: total appointments count, confirmed count, and list of scheduled patients with their token numbers, time windows, and statuses.
+     * Remind the doctor: 'You can tap on any patient's summary button or ask "Raj ki summary do" to view their full clinical history.'
+
+D. 30-SECOND PATIENT CLINICAL DOSSIER (getPatientClinicalSummary):
+   - When the doctor asks for a patient's clinical summary, history, previous diagnosis, or past medicines (e.g. 'Raj ki summary do', 'Tell me about patient Priya', 'Iske pehle kya bimari thi aur kya dawai di thi?'):
+     * Extract the patient name and call getPatientClinicalSummary(patientName: '...').
+     * If patient is found, deliver a crisp, structured 30-second clinical briefing covering:
+       1. Demographics & Blood Group.
+       2. 🚨 Safety Alerts: Known drug allergies (highlight in bold) and chronic history/conditions.
+       3. Last Consultation Details: Date, reported symptoms, and previous diagnosis/clinical notes.
+       4. Past Medications: Prescribed medicines with exact dosages and timing.
+       5. Today's Token & Slot (if scheduled today).
+     * If multiple patients match the name, list the matching names with age/gender and ask the doctor to pick one.
+`
+    : `
+PATIENT SPECIFIC CAPABILITIES & WORKFLOWS:
+A. CLINICAL SYMPTOM ANALYSIS & GUIDED BOOKING:
+   - When a patient describes symptoms, discomfort, illness, or complaints:
+     a) FIRST: Explain possible root causes and give 2 practical home-care tips.
+     b) SECOND: Determine which medical specialist is suited (e.g. Dentist, ENT Specialist, Cardiologist, Dermatologist, General Physician).
      c) THIRD: Call checkSymptomsAndRecommendDoctors with the symptoms and your chosen specialization.
-     d) FOURTH: If the tool returns foundExactSpecialist: false (meaning the exact specialist is not registered on the platform), explain transparently: "Is samasya ke liye aamtaur par [Specialist] se milna behtar hota hai. Hamare platform par abhi [Specialist] directly available nahi hain, isliye main aapko General Physician suggest kar raha hoon jo root cause check kar sakte hain."
-     e) FIFTH: Present the doctor options with their earliest next available free slot and fee.
-     f) SIXTH: Guide forward: Ask the patient if they would like to book an appointment (e.g. "Kya main Dr. [Name] ke saath [Date] ko [Time] baje appointment book kar doon?"). If they agree, call previewAppointmentBooking!
-8. PRESCRIPTION EXPLAINER & MEDICATION GUIDE:
-   - When a patient asks about their prescriptions (e.g. "mere kitne prescription hain", "meri dawaiyan dikhao", "prescription list dikhao"):
-     Call getMyPrescriptions tool to list them with doctor name and date.
-   - When a patient asks to explain or decode a prescription (e.g. "ye prescription samjha do", "dawaiyan kab leni hai", "Dr. Aryan ka prescription samjhao", "mujhe dawai samajh nahi aa rahi"):
-     Call explainPrescriptionDetails tool.
-   - Present the explanation in warm, comforting, easy-to-understand language (especially suited for elderly patients):
-     • Doctor Name & Date
-     • Diagnosis in plain words: "Doctor ne yeh [Diagnosis] ke liye likha hai."
-     • Har Dawa ka poora timetable:
-       - Dawa ka naam aur dose (e.g. 1 Tablet)
-       - Kab lena hai (Subah khali pet / khana khane ke baad)
-       - Kitni baar aur kitne din tak
-       - Special instructions (e.g. gungune paani ke sath)
-     • Parhez aur doctor ki advice (diet/rest)
-     • Next follow-up checkup date
-     • End with reassuring safety advice: "Dawa ka dose doctor ke bataye anusar hi lein aur course poora karein."
+     d) FOURTH: If foundExactSpecialist is false, explain transparently that General Physician alternatives are provided.
+     e) FIFTH: Present doctor options with their clinic, fee, and earliest available slot. Mention that they can click 'View Profile' to verify doctor credentials or click 'Book Slot' to proceed immediately.
+`
+}
 `.trim();
   }
 
@@ -411,12 +503,10 @@ CRITICAL RULES:
    * Extracts or condenses a short 1-2 sentence spoken summary for browser TTS.
    */
   private buildSpokenSummary(text: string, language: 'en' | 'hi'): string {
-    // If text is short, use as-is
     if (text.length <= 140) {
       return text.replace(/[*#_`]/g, '');
     }
 
-    // Take the first 1-2 sentences
     const sentences = text
       .split(/(?<=[.!?।])\s+/)
       .map((s) => s.trim().replace(/[*#_`]/g, ''))
@@ -427,37 +517,29 @@ CRITICAL RULES:
   }
 
   /**
-   * Simple language detector for Hindi vs English.
+   * Robust language detector for English, Devanagari Hindi, and Hinglish.
    */
-  private detectLanguage(text: string): 'en' | 'hi' {
-    // Detect Devanagari Unicode range or common Hinglish words
+  private detectLanguage(
+    text: string,
+    preference?: 'auto' | 'hi' | 'en',
+  ): 'en' | 'hi' | 'hinglish' {
+    if (preference === 'en') return 'en';
+    if (preference === 'hi') return 'hi';
+
     const hasDevanagari = /[\u0900-\u097F]/.test(text);
     if (hasDevanagari) return 'hi';
 
     const hinglishWords = [
-      'aaj',
-      'kal',
-      'parso',
-      'meri',
-      'mera',
-      'mere',
-      'hai',
-      'hain',
-      'karo',
-      'kardo',
-      'karni',
-      'dikhao',
-      'kitne',
-      'kab',
-      'haan',
-      'nahi',
-      'theek',
-      'dhundo',
+      'aaj', 'kal', 'parso', 'meri', 'mera', 'mere', 'hai', 'hain', 'ho', 'hoga', 'hogi',
+      'karo', 'kardo', 'karni', 'karna', 'dikhao', 'kitne', 'kitna', 'kab', 'kahan', 'haan',
+      'nahi', 'theek', 'dhundo', 'batao', 'bataoo', 'dawai', 'bimari', 'dard', 'seene',
+      'chaale', 'bukhar', 'pet', 'khana', 'khali', 'ghanta', 'baje', 'subah', 'sham', 'dopahar',
+      'chahiye', 'karwa', 'sakta', 'sakti', 'mujhe', 'hum', 'tum', 'aap', 'aapka', 'aapki',
+      'shirnk', 'shrink', 'bataiye', 'set', 'kariye', 'kardo', 'karna'
     ];
 
-    const tokens = text.toLowerCase().split(/\W+/);
+    const tokens = (text || '').toLowerCase().split(/[\s,?.!;:()"\']+/);
     const hasHinglish = tokens.some((t) => hinglishWords.includes(t));
-    return hasHinglish ? 'hi' : 'en';
+    return hasHinglish ? 'hinglish' : 'en';
   }
 }
-

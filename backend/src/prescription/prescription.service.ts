@@ -222,6 +222,22 @@ export class PrescriptionService {
     });
   }
 
+  /**
+   * Get all prescriptions for a specific patient under a doctor
+   */
+  async getPrescriptionsByDoctorAndPatient(
+    doctorId: string,
+    patientId: string,
+  ): Promise<Prescription[]> {
+    return this.prescriptionRepo.find({
+      where: { doctorId, patientId },
+      relations: {
+        appointment: true,
+      },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
   private checkAccess(
     prescription: Prescription,
     userId: string,

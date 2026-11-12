@@ -184,10 +184,10 @@ export function PatientAppointmentsClient({
     activeTab === 'PENDING'
       ? pendingList
       : activeTab === 'UPCOMING'
-      ? upcomingList
-      : activeTab === 'PAST'
-      ? pastList
-      : cancelledList;
+        ? upcomingList
+        : activeTab === 'PAST'
+          ? pastList
+          : cancelledList;
 
   // Retry payment for pending reservation
   const handleRetryPayment = async (appt: Appointment) => {
@@ -267,8 +267,8 @@ export function PatientAppointmentsClient({
       cancelReasonPreset === 'Other'
         ? cancelReasonCustom.trim() || 'Patient requested cancellation'
         : cancelReasonCustom.trim()
-        ? (cancelReasonPreset + ': ' + cancelReasonCustom.trim())
-        : cancelReasonPreset;
+          ? (cancelReasonPreset + ': ' + cancelReasonCustom.trim())
+          : cancelReasonPreset;
 
     try {
       setCancelLoading(true);
@@ -434,22 +434,20 @@ export function PatientAppointmentsClient({
                     </div>
                   </div>
                   <span
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
-                      req.proposedTokenNumber
-                        ? 'bg-blue-100 text-blue-800 border-blue-300'
-                        : 'bg-amber-100 text-amber-800 border-amber-300'
-                    }`}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${req.proposedTokenNumber
+                      ? 'bg-blue-100 text-blue-800 border-blue-300'
+                      : 'bg-amber-100 text-amber-800 border-amber-300'
+                      }`}
                   >
                     {req.proposedTokenNumber ? 'Slot Held For You' : 'Rescheduling Required'}
                   </span>
                 </div>
 
                 <div
-                  className={`space-y-1.5 text-xs rounded-xl border p-2.5 ${
-                    req.proposedTokenNumber
-                      ? 'bg-blue-50/40 border-blue-100 text-zinc-700'
-                      : 'bg-amber-50/50 border-amber-200 text-amber-950'
-                  }`}
+                  className={`space-y-1.5 text-xs rounded-xl border p-2.5 ${req.proposedTokenNumber
+                    ? 'bg-blue-50/40 border-blue-100 text-zinc-700'
+                    : 'bg-amber-50/50 border-amber-200 text-amber-950'
+                    }`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-slate-500">Current Slot:</span>
@@ -639,8 +637,10 @@ export function PatientAppointmentsClient({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {currentList.map((appt, index) => {
-            const displayStatus = appt.status;
-            const isConfirmed = displayStatus === 'CONFIRMED';
+            const isPast = isSlotPastToday(appt);
+            const isConfirmed = appt.status === 'CONFIRMED';
+            const displayStatus = isPast && isConfirmed ? 'NO_SHOW' : appt.status;
+            const canModify = isConfirmed && !isPast;
             const displayToken = String(appt.tokenNumber || index + 1).padStart(2, '0');
             return (
               <Card
@@ -787,7 +787,8 @@ export function PatientAppointmentsClient({
                   </Button>
                 )}
 
-                {isConfirmed && (
+                {/* Reschedule & Cancel buttons: ONLY available for upcoming active appointments */}
+                {canModify && (
                   <div className="pt-2 border-t border-black/[0.06] flex items-center gap-2">
                     <Button
                       type="button"
@@ -807,6 +808,25 @@ export function PatientAppointmentsClient({
                       <XCircle className="w-3.5 h-3.5 text-rose-600 group-hover:text-white transition-colors" />
                       <span>Cancel</span>
                     </Button>
+                  </div>
+                )}
+
+                {/* Past slot indicator if appointment elapsed without attendance */}
+                {isPast && (appt.status === 'CONFIRMED' || appt.status === 'NO_SHOW') && (
+                  <div className="pt-2 border-t border-black/[0.06]">
+                    <div className="flex items-center justify-between px-3 py-2 rounded-2xl bg-slate-100 border border-slate-200/90 text-slate-900 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100 shadow-2xs">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-700 dark:bg-zinc-700 dark:text-zinc-200">
+                          <Clock className="w-3.5 h-3.5" />
+                        </div>
+                        <span className="text-xs font-bold text-slate-900 dark:text-zinc-100">
+                          Appointment time elapsed
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-white text-slate-700 border border-slate-200 shadow-2xs dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-700">
+                        Past slot
+                      </span>
+                    </div>
                   </div>
                 )}
 
@@ -1012,13 +1032,12 @@ export function PatientAppointmentsClient({
                         disabled={!isBookable}
                         variant="ghost"
                         onClick={() => setSelectedSlot(slot)}
-                        className={`p-2.5 rounded-xl border text-xs font-bold transition-all h-auto flex flex-col items-center justify-center gap-0.5 ${
-                          isSelected
-                            ? 'bg-black border-black text-white shadow-xs hover:bg-black hover:text-white'
-                            : isBookable
+                        className={`p-2.5 rounded-xl border text-xs font-bold transition-all h-auto flex flex-col items-center justify-center gap-0.5 ${isSelected
+                          ? 'bg-black border-black text-white shadow-xs hover:bg-black hover:text-white'
+                          : isBookable
                             ? 'bg-white border-black/[0.1] hover:border-black text-zinc-800'
                             : 'opacity-40 cursor-not-allowed bg-zinc-100 text-zinc-400'
-                        }`}
+                          }`}
                       >
                         <span className="whitespace-nowrap">
                           {formatTime(slot.startTime)} – {formatTime(slot.endTime)}
