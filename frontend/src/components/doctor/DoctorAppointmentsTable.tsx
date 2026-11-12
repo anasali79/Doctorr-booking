@@ -348,27 +348,31 @@ export function DoctorAppointmentsTable({
                               <UserX className="w-3 h-3 text-slate-600" />
                               <span>No Show</span>
                             </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              onClick={() => setReschedulingAppt(appt)}
-                              className="px-2.5 py-1 rounded-full border border-blue-300 bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-900 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer shadow-2xs h-auto group"
-                              title="Reschedule Appointment"
-                            >
-                              <CalendarSync className="w-3 h-3 text-blue-600 group-hover:text-white transition-colors" />
-                              <span>Reschedule</span>
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              onClick={() => handleCancel(appt.id)}
-                              disabled={loadingId === `${appt.id}-cancel`}
-                              className="px-2.5 py-1 rounded-full border border-rose-300 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-800 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer shadow-2xs h-auto group"
-                              title="Cancel Appointment"
-                            >
-                              <XCircle className="w-3 h-3 text-rose-600 group-hover:text-white transition-colors" />
-                              <span>Cancel</span>
-                            </Button>
+                            {appt.date >= todayStr && (
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  onClick={() => setReschedulingAppt(appt)}
+                                  className="px-2.5 py-1 rounded-full border border-blue-300 bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-900 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer shadow-2xs h-auto group"
+                                  title="Reschedule Appointment"
+                                >
+                                  <CalendarSync className="w-3 h-3 text-blue-600 group-hover:text-white transition-colors" />
+                                  <span>Reschedule</span>
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  onClick={() => handleCancel(appt.id)}
+                                  disabled={loadingId === `${appt.id}-cancel`}
+                                  className="px-2.5 py-1 rounded-full border border-rose-300 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-800 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer shadow-2xs h-auto group"
+                                  title="Cancel Appointment"
+                                >
+                                  <XCircle className="w-3 h-3 text-rose-600 group-hover:text-white transition-colors" />
+                                  <span>Cancel</span>
+                                </Button>
+                              </>
+                            )}
                           </>
                         )}
 

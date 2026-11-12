@@ -50,6 +50,7 @@ export class AiService {
       dto.conversationId,
       dto.confirmationId,
       dto.confirmed,
+      dto.languagePreference,
     );
   }
 

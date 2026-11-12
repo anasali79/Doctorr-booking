@@ -212,6 +212,7 @@ export function AiAssistantDrawer({ role, defaultOpen = false }: AiAssistantDraw
         confirmationId: data.confirmationId,
         expiresAt: data.expiresAt,
         actions: data.actions,
+        data: data.data,
       };
 
       setMessages((prev) => [...prev, assistantMsg]);

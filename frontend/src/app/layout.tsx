@@ -24,8 +24,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={inter.variable}>
-      <body className="relative flex min-h-screen flex-col bg-[#f6f8fb] font-sans text-slate-900 antialiased selection:bg-[#0066cc] selection:text-white">
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
+      <body
+        className="relative flex min-h-screen flex-col bg-[#f6f8fb] font-sans text-slate-900 antialiased selection:bg-[#0066cc] selection:text-white"
+        suppressHydrationWarning
+      >
         <div className="pointer-events-none fixed inset-0 -z-10 bg-ambient-light-mesh opacity-90" />
         <Toaster position="top-right" closeButton expand={false} richColors />
         {children}

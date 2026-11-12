@@ -355,7 +355,7 @@ export class DoctorService {
     };
   }
 
-  private async findByUserIdOrFail(userId: string): Promise<Doctor> {
+  async findByUserIdOrFail(userId: string): Promise<Doctor> {
     const profile = await this.doctorRepository.findOne({ where: { userId } });
     if (!profile) {
       throw new NotFoundException('Doctor profile not found');

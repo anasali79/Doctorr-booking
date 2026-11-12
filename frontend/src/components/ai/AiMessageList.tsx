@@ -15,8 +15,11 @@ import {
   AlertCircle,
   FileText,
   Pill,
+  ExternalLink,
 } from 'lucide-react';
 import { AiConfirmationCard } from './AiConfirmationCard';
+import { DoctorRosterCard } from './DoctorRosterCard';
+import { PatientClinicalDossierCard } from './PatientClinicalDossierCard';
 
 export interface ChatMessage {
   id: string;
@@ -69,7 +72,9 @@ function renderInlineFormatting(text: string, isUser: boolean) {
       );
     }
     // Remove any remaining stray single asterisks
-    const cleaned = part.replace(/(^|\s)\*(\S)/g, '$1$2').replace(/(\S)\*(\s|$)/g, '$1$2');
+    const cleaned = part
+      .replace(/(^|\s)\*(\S)/g, '$1$2')
+      .replace(/(\S)\*(\s|$)/g, '$1$2');
     return <React.Fragment key={index}>{cleaned}</React.Fragment>;
   });
 }
@@ -103,31 +108,63 @@ function renderFormattedMessage(content: string, isUser: boolean) {
   lines.forEach((line, index) => {
     const trimmed = line.trim();
 
-    // Check if line is a bullet (*, -, •) or numbered list item
-    const bulletMatch = trimmed.match(/^([*•\-]|(\d+\.))\s+(.*)$/);
+    // Bullet points: starts with * or - or •
+    const bulletMatch = trimmed.match(/^[\*\-\•]\s+(.*)$/);
     if (bulletMatch) {
-      currentList.push({ text: bulletMatch[3], num: bulletMatch[2] });
+      currentList.push({ text: bulletMatch[1] });
       return;
     }
 
-    // Flush any pending list before normal paragraph
+    // Numbered list: starts with 1., 2., etc.
+    const numMatch = trimmed.match(/^(\d+)[\.\)]\s+(.*)$/);
+    if (numMatch) {
+      currentList.push({ num: numMatch[1], text: numMatch[2] });
+      return;
+    }
+
+    // If non-list line encountered, flush any pending list items
     flushList(index);
 
     if (!trimmed) {
-      elements.push(<div key={`space-${index}`} className="h-1.5" />);
+      elements.push(<div key={`blank-${index}`} className="h-2" />);
       return;
     }
 
+    // Headings: ###
+    if (trimmed.startsWith('### ')) {
+      elements.push(
+        <h4
+          key={`h4-${index}`}
+          className="mt-3 mb-1 text-xs font-bold tracking-wide uppercase text-blue-900 dark:text-blue-300"
+        >
+          {renderInlineFormatting(trimmed.slice(4), false)}
+        </h4>,
+      );
+      return;
+    }
+
+    if (trimmed.startsWith('## ') || trimmed.startsWith('# ')) {
+      elements.push(
+        <h3
+          key={`h3-${index}`}
+          className="mt-3.5 mb-1.5 text-sm font-bold text-zinc-900 dark:text-zinc-100"
+        >
+          {renderInlineFormatting(trimmed.replace(/^#+\s*/, ''), false)}
+        </h3>,
+      );
+      return;
+    }
+
+    // Normal paragraph line
     elements.push(
-      <p key={`p-${index}`} className="leading-relaxed">
-        {renderInlineFormatting(line, false)}
+      <p key={`p-${index}`} className="my-1 leading-relaxed">
+        {renderInlineFormatting(trimmed, false)}
       </p>,
     );
   });
 
   flushList(lines.length);
-
-  return <div className="space-y-1 text-sm">{elements}</div>;
+  return <div className="space-y-0.5">{elements}</div>;
 }
 
 export function AiMessageList({
@@ -150,15 +187,15 @@ export function AiMessageList({
   const emptyStateTexts = {
     en: {
       title: 'CareUp Free AI Assistant',
-      desc: 'Ask anything about appointments, available doctor slots, rescheduling, or booking status in English.',
+      desc: 'Ask anything about symptoms, available doctor slots, appointments, schedule, or prescriptions in English.',
     },
     hi: {
       title: 'CareUp फ्री AI असिस्टेंट',
-      desc: 'आप अपॉइंटमेंट, डॉक्टर के उपलब्ध स्लॉट, रीशेड्यूल या स्थिति के बारे में हिंदी में पूछ सकते हैं।',
+      desc: 'आप लक्षणों, डॉक्टर के उपलब्ध स्लॉट, शेड्यूल या प्रिस्क्रिप्शन के बारे में हिंदी में पूछ सकते हैं।',
     },
     auto: {
       title: 'CareUp Free AI Assistant',
-      desc: 'Aap Hindi, English ya Hinglish me appointment, availability ya status ke baare me pooch sakte hain.',
+      desc: 'Aap Hindi, English ya Hinglish me appointment, bimari ke lakshan, availability ya doctor schedule pooch sakte hain.',
     },
   };
 
@@ -185,6 +222,10 @@ export function AiMessageList({
       {messages.map((msg) => {
         const isUser = msg.role === 'user';
 
+        // Extract any structured doctor recommendations
+        const rawDoctors = (msg.data?.doctors as any[]) || [];
+        const hasDoctorCards = rawDoctors.length > 0;
+
         return (
           <div
             key={msg.id}
@@ -197,9 +238,9 @@ export function AiMessageList({
             )}
 
             <div
-              className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-xs ${
+              className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-xs ${
                 isUser
-                  ? 'bg-blue-600 text-white rounded-tr-xs'
+                  ? 'bg-[#0066cc] text-white rounded-tr-xs'
                   : 'bg-white text-zinc-900 dark:bg-zinc-800/95 dark:text-zinc-100 rounded-tl-xs border border-zinc-200/80 dark:border-zinc-700/80'
               }`}
             >
@@ -210,11 +251,133 @@ export function AiMessageList({
                 <AiConfirmationCard
                   confirmationId={msg.confirmationId}
                   expiresAt={msg.expiresAt}
-                  data={msg.actions?.[0]?.data}
+                  data={
+                    (msg.data as Record<string, unknown>) ||
+                    (msg.actions?.[0]?.data as Record<string, unknown>)
+                  }
                   onConfirm={onConfirm}
                   onCancel={onCancel}
                   isLoading={confirmationLoadingId === msg.confirmationId}
                 />
+              )}
+
+              {/* Doctor Daily Schedule Roster Card */}
+              {!isUser && (msg.data as any)?.dataType === 'DOCTOR_DAILY_SCHEDULE' && (
+                <DoctorRosterCard
+                  data={msg.data as any}
+                  onSelectSummary={(patientName) =>
+                    onSelectPrompt?.(`Give me clinical summary of ${patientName}`)
+                  }
+                />
+              )}
+
+              {/* Patient Clinical Dossier Card */}
+              {!isUser && (msg.data as any)?.dataType === 'PATIENT_CLINICAL_SUMMARY' && (
+                <PatientClinicalDossierCard
+                  data={msg.data as any}
+                  onSelectAction={onSelectPrompt}
+                />
+              )}
+
+              {/* Rich Visual Doctor Recommendation Cards */}
+              {!isUser && hasDoctorCards && (
+                <div className="mt-3 space-y-2.5">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                    <Sparkles className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                    <span>Recommended Doctors:</span>
+                  </div>
+
+                  {rawDoctors.map((doc: any, dIdx: number) => {
+                    const nextSlot = doc.nextSlot;
+                    const docCleanName = (doc.name || 'Doctor').replace(/^Dr\.?\s+/i, '');
+
+                    return (
+                      <div
+                        key={dIdx}
+                        className="rounded-xl border border-zinc-200/90 bg-zinc-50/80 p-3 shadow-2xs dark:border-zinc-700/80 dark:bg-zinc-800/80 transition-all hover:border-blue-300 dark:hover:border-blue-700"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-2.5">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700 font-extrabold text-sm dark:bg-blue-950 dark:text-blue-300">
+                              {docCleanName.charAt(0) || 'D'}
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-xs text-zinc-900 dark:text-zinc-100 leading-tight">
+                                Dr. {docCleanName}
+                              </h4>
+                              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                <span className="inline-block rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+                                  {doc.specialization}
+                                </span>
+                                {doc.experience ? (
+                                  <span className="text-[10px] text-zinc-500">
+                                    • {doc.experience} yrs exp
+                                  </span>
+                                ) : null}
+                              </div>
+                              {doc.clinic && (
+                                <p className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
+                                  📍 {doc.clinic}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">
+                              Rs. {doc.consultationFee ?? 500}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Earliest Slot Pill */}
+                        {nextSlot ? (
+                          <div className="mt-2.5 flex items-center justify-between gap-1.5 rounded-lg bg-emerald-50/90 px-2.5 py-1.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-900/40">
+                            <span className="flex items-center gap-1.5">
+                              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                              <span>Earliest Slot:</span>
+                              <span className="font-bold">
+                                {nextSlot.date} at {nextSlot.startTime}
+                              </span>
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="mt-2 text-[10px] text-zinc-400 italic">
+                            No immediate slots available.
+                          </div>
+                        )}
+
+                        {/* Two Clear Actions: View Profile & Book Slot */}
+                        <div className="mt-2.5 flex items-center gap-2">
+                          <a
+                            href={`/doctors/${doc.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-100 hover:text-blue-600 transition-all dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                          >
+                            <span>View Profile</span>
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+
+                          {nextSlot && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onSelectPrompt?.(
+                                  `Book appointment with Dr. ${docCleanName} on ${nextSlot.date} at ${nextSlot.startTime}`,
+                                )
+                              }
+                              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#0066cc] px-2.5 py-1.5 text-[11px] font-bold text-white shadow-2xs hover:bg-[#0052a3] active:scale-95 transition-all cursor-pointer"
+                            >
+                              <span>Book Slot</span>
+                              <ArrowRight className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
 
               {/* Payment Card for PAY_NOW actions */}
@@ -255,7 +418,9 @@ export function AiMessageList({
                       </div>
                     );
                   }
-                  if (act.type === 'BOOK_DOCTOR_SLOT') {
+
+                  // Only show individual BOOK_DOCTOR_SLOT if we did not already render the rich doctor cards
+                  if (act.type === 'BOOK_DOCTOR_SLOT' && !hasDoctorCards) {
                     const actionData = (act.data as any) || {};
                     const doctorName = actionData.doctorName || 'Doctor';
                     const date = actionData.date;
@@ -341,12 +506,30 @@ export function AiMessageList({
                       </div>
                     );
                   }
+                  if (act.type === 'GET_PATIENT_SUMMARY') {
+                    const actionData = (act.data as any) || (act as any).payload || {};
+                    const patientName = actionData.patientName || act.label?.replace(/^Summary:\s*/i, '');
+
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() =>
+                          onSelectPrompt?.(`Give me clinical summary of ${patientName}`)
+                        }
+                        className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-600 hover:text-white transition-all mr-2 cursor-pointer dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300 dark:hover:bg-blue-600 dark:hover:text-white"
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        <span>{act.label}</span>
+                      </button>
+                    );
+                  }
                   return null;
                 })}
 
               <div
                 className={`mt-1 text-[10px] ${
-                  isUser ? 'text-blue-200 text-right' : 'text-zinc-400 text-left'
+                  isUser ? 'text-blue-100 text-right' : 'text-zinc-400 text-left'
                 }`}
               >
                 {new Date(msg.timestamp).toLocaleTimeString([], {
