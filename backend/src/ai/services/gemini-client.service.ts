@@ -11,16 +11,17 @@ export class GeminiClientService {
   private readonly apiKey: string;
   private readonly primaryModel: string;
   private readonly fallbackModels: string[] = [
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-2.5-flash',
     'gemini-3.1-flash-lite',
-    'gemini-3-flash-preview',
-    'gemini-3.6-flash',
   ];
   private readonly baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
 
   constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.get<string>('GEMINI_API_KEY') || '';
     this.primaryModel =
-      this.configService.get<string>('GEMINI_MODEL') || 'gemini-3.1-flash-lite';
+      this.configService.get<string>('GEMINI_MODEL') || 'gemini-2.0-flash';
   }
 
   isAvailable(): boolean {
@@ -36,8 +37,8 @@ export class GeminiClientService {
    */
   async generateContent(
     request: GeminiGenerateRequest,
-    retries = 2,
-    delayMs = 1000,
+    retries = 1,
+    delayMs = 800,
   ): Promise<GeminiGenerateResponse> {
     if (!this.isAvailable()) {
       return {
@@ -63,7 +64,7 @@ export class GeminiClientService {
       for (let attempt = 0; attempt <= retries; attempt++) {
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+          const timeoutId = setTimeout(() => controller.abort(), 7000); // 7s responsive timeout
 
           const response = await fetch(url, {
             method: 'POST',
@@ -88,7 +89,7 @@ export class GeminiClientService {
               `Model "${model}" returned ${response.status} (${data.error?.message || 'unavailable'}). Switching to next candidate model...`,
             );
             lastError = data.error;
-            break; // Break inner retry loop to try next candidate model
+            break; // Break inner retry loop to try next candidate model immediately
           }
 
           // Handle Rate Limit / Quota Exceeded (429)
@@ -120,8 +121,14 @@ export class GeminiClientService {
         } catch (err: any) {
           if (err.name === 'AbortError') {
             this.logger.warn(
-              `Gemini API request timed out on model ${model} (attempt ${attempt + 1})`,
+              `Model "${model}" timed out (7s). Switching immediately to next candidate model...`,
             );
+            lastError = {
+              code: 504,
+              message: `Model ${model} timed out after 7s.`,
+            };
+            // Break to next candidate model immediately without repeating timeout
+            break;
           } else {
             this.logger.error(`Gemini fetch error on model ${model}: ${err.message}`);
           }

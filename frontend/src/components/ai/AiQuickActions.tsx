@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Calendar, Clock, FileText, CreditCard, RotateCcw } from 'lucide-react';
+import { Calendar, Clock, FileText, CreditCard, RotateCcw, Stethoscope } from 'lucide-react';
 
 interface AiQuickActionsProps {
   role: 'PATIENT' | 'DOCTOR';
@@ -19,6 +19,11 @@ export function AiQuickActions({
   const patientPromptsByLang = {
     en: [
       {
+        icon: Stethoscope,
+        label: 'AI Symptom Checker',
+        prompt: 'I have some symptoms and want to find the right doctor and book a slot.',
+      },
+      {
         icon: Calendar,
         label: 'Is there any appointment for me?',
         prompt: 'Is there any appointment for me or when is my next appointment?',
@@ -35,8 +40,8 @@ export function AiQuickActions({
       },
       {
         icon: FileText,
-        label: 'Prescription status',
-        prompt: 'Show my prescription status.',
+        label: 'Explain My Prescription',
+        prompt: 'Show my prescriptions and explain how and when to take my medicines in simple words.',
       },
       {
         icon: CreditCard,
@@ -45,6 +50,11 @@ export function AiQuickActions({
       },
     ],
     hi: [
+      {
+        icon: Stethoscope,
+        label: 'AI लक्षण चेकर (डॉक्टर खोजें)',
+        prompt: 'मुझे कुछ स्वास्थ्य लक्षण हैं, सही डॉक्टर और उपलब्ध स्लॉट बताएं।',
+      },
       {
         icon: Calendar,
         label: 'क्या आज मेरी कोई अपॉइंटमेंट है?',
@@ -62,8 +72,8 @@ export function AiQuickActions({
       },
       {
         icon: FileText,
-        label: 'प्रिस्क्रिप्शन स्थिति',
-        prompt: 'मेरी प्रिस्क्रिप्शन स्थिति दिखाएं।',
+        label: 'प्रिस्क्रिप्शन व दवाइयां समझाएं',
+        prompt: 'मेरे प्रिस्क्रिप्शन दिखाएं और दवाइयों का सही समय व परहेज आसान भाषा में समझाएं।',
       },
       {
         icon: CreditCard,
@@ -72,6 +82,11 @@ export function AiQuickActions({
       },
     ],
     auto: [
+      {
+        icon: Stethoscope,
+        label: 'Symptoms / Bimari check karo',
+        prompt: 'Mujhe lakshan check karke sahi doctor aur free slot dhundhna hai.',
+      },
       {
         icon: Calendar,
         label: 'Aaj meri koi appointment hai?',
@@ -89,8 +104,8 @@ export function AiQuickActions({
       },
       {
         icon: FileText,
-        label: 'Prescription status',
-        prompt: 'Meri prescription dikhao.',
+        label: 'Prescription & Dawaiyan samjhao',
+        prompt: 'Mere kitne prescription hain aur dawaiyan kab aur kaise leni hai aasan bhasha me samjhao.',
       },
       {
         icon: CreditCard,
