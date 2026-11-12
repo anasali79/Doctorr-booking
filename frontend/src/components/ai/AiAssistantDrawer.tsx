@@ -20,7 +20,6 @@ import { AiFloatingTrigger } from './AiFloatingTrigger';
 import { AiPaymentModal, PaymentOrderData } from './AiPaymentModal';
 import { useVoiceAssistant } from '@/lib/hooks/useVoiceAssistant';
 import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
 
 interface AiAssistantDrawerProps {
   role: 'PATIENT' | 'DOCTOR';
@@ -377,6 +376,13 @@ export function AiAssistantDrawer({ role, defaultOpen = false }: AiAssistantDraw
 
   const activeError = voiceError || errorBanner;
 
+  const inputPlaceholder =
+    languagePreference === 'en'
+      ? 'Type in English (e.g. Is there any appointment for me?)...'
+      : languagePreference === 'hi'
+        ? 'यहाँ हिंदी में लिखें (जैसे: क्या आज मेरी कोई अपॉइंटमेंट है?)...'
+        : 'Type here in Hindi, English ya Hinglish...';
+
   return (
     <>
       {/* Draggable Compact Floating Action Button */}
@@ -393,32 +399,32 @@ export function AiAssistantDrawer({ role, defaultOpen = false }: AiAssistantDraw
         <div
           className={`fixed z-50 flex flex-col overflow-hidden bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl transition-all duration-300 ${
             isExpanded
-              ? 'inset-4 rounded-2xl md:inset-10'
-              : 'bottom-4 right-4 h-[620px] w-full max-w-[440px] rounded-2xl sm:bottom-6 sm:right-6'
+              ? 'inset-2 sm:inset-6 md:inset-10 rounded-2xl'
+              : 'inset-x-2 bottom-2 h-[85dvh] max-h-[640px] max-w-[calc(100vw-1rem)] rounded-2xl sm:inset-x-auto sm:bottom-6 sm:right-6 sm:h-[620px] sm:w-[420px]'
           }`}
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-zinc-200/80 bg-zinc-50/80 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-800/50 backdrop-blur-xs">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white shadow-xs">
-                <Sparkles className="h-4 w-4" />
+          <div className="flex items-center justify-between border-b border-zinc-200/80 bg-zinc-50/80 px-3 sm:px-4 py-2.5 sm:py-3 dark:border-zinc-800 dark:bg-zinc-800/50 backdrop-blur-xs">
+            <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+              <div className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-xs">
+                <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <h3 className="text-xs sm:text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
                     {role === 'DOCTOR' ? 'Doctor AI Assistant' : 'CareUp Patient Assistant'}
                   </h3>
-                  <span className="inline-flex items-center rounded-full bg-emerald-100 px-1.5 py-0.2 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                  <span className="inline-flex shrink-0 items-center rounded-full bg-emerald-100 px-1.5 py-0.2 text-[9px] sm:text-[10px] font-medium text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
                     Free
                   </span>
                 </div>
-                <p className="text-[11px] text-zinc-400">
+                <p className="text-[10px] sm:text-[11px] text-zinc-400 truncate">
                   Zero Cost • Gemini Flash • Web Speech
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-1 text-zinc-500">
+            <div className="flex items-center gap-1 text-zinc-500 shrink-0">
               {/* Language selection */}
               <select
                 aria-label="Language preference"
@@ -426,7 +432,7 @@ export function AiAssistantDrawer({ role, defaultOpen = false }: AiAssistantDraw
                 onChange={(e) =>
                   setLanguagePreference(e.target.value as 'auto' | 'hi' | 'en')
                 }
-                className="h-7 rounded border border-zinc-200 bg-white px-1.5 text-[11px] font-medium text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 cursor-pointer"
+                className="h-7 rounded border border-zinc-200 bg-white px-1 sm:px-1.5 text-[10px] sm:text-[11px] font-medium text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 cursor-pointer max-w-[105px] sm:max-w-none"
               >
                 <option value="auto">Auto (Hinglish)</option>
                 <option value="en">English</option>
@@ -438,7 +444,7 @@ export function AiAssistantDrawer({ role, defaultOpen = false }: AiAssistantDraw
                 type="button"
                 onClick={handleClearChat}
                 title="Clear conversation"
-                className="rounded p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition cursor-pointer"
+                className="rounded p-1 sm:p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition cursor-pointer"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -466,7 +472,7 @@ export function AiAssistantDrawer({ role, defaultOpen = false }: AiAssistantDraw
                   setIsOpen(false);
                 }}
                 title="Close Assistant"
-                className="rounded p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition cursor-pointer"
+                className="rounded p-1 sm:p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -566,6 +572,7 @@ export function AiAssistantDrawer({ role, defaultOpen = false }: AiAssistantDraw
           <AiMessageList
             messages={messages}
             isLoading={isLoading}
+            language={languagePreference}
             onConfirm={handleConfirmAction}
             onCancel={handleCancelAction}
             onPay={handleTriggerPayment}
@@ -573,9 +580,10 @@ export function AiAssistantDrawer({ role, defaultOpen = false }: AiAssistantDraw
           />
 
           {/* Quick Actions (Patient or Doctor prompts) */}
-          <div className="border-t border-zinc-100 bg-zinc-50/50 px-3 dark:border-zinc-800/80 dark:bg-zinc-900/40">
+          <div className="border-t border-zinc-100 bg-zinc-50/50 px-3 dark:border-zinc-800/80 dark:bg-zinc-900/40 max-h-24 sm:max-h-28 overflow-y-auto">
             <AiQuickActions
               role={role}
+              language={languagePreference}
               onSelect={(prompt) => handleSendMessage(prompt)}
               disabled={isLoading}
             />
@@ -587,17 +595,17 @@ export function AiAssistantDrawer({ role, defaultOpen = false }: AiAssistantDraw
               e.preventDefault();
               handleSendMessage();
             }}
-            className="border-t border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900"
+            className="border-t border-zinc-200 bg-white p-2.5 sm:p-3 dark:border-zinc-800 dark:bg-zinc-900 pb-[calc(0.625rem+env(safe-area-inset-bottom,0px))]"
           >
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               <input
                 ref={inputRef}
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                placeholder="Type here in Hindi, English ya Hinglish..."
+                placeholder={inputPlaceholder}
                 disabled={isLoading}
-                className="flex-1 rounded-xl border border-zinc-300/80 bg-white px-3.5 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 shadow-2xs focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 focus:outline-hidden dark:border-zinc-700 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-400 dark:focus:border-blue-500 dark:focus:bg-zinc-800"
+                className="flex-1 min-w-0 rounded-xl border border-zinc-300/80 bg-white px-3 py-2 sm:px-3.5 sm:py-2.5 text-xs sm:text-sm text-zinc-900 placeholder-zinc-400 shadow-2xs focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 focus:outline-hidden dark:border-zinc-700 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-400 dark:focus:border-blue-500 dark:focus:bg-zinc-800"
               />
 
               {/* Single Mic Button (Press to speak single query) */}
@@ -615,7 +623,7 @@ export function AiAssistantDrawer({ role, defaultOpen = false }: AiAssistantDraw
                     startListening();
                   }
                 }}
-                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition cursor-pointer ${
+                className={`flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl border transition cursor-pointer ${
                   voiceState === 'LISTENING'
                     ? 'border-rose-300 bg-rose-50 text-rose-600 animate-pulse'
                     : 'border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
@@ -628,7 +636,7 @@ export function AiAssistantDrawer({ role, defaultOpen = false }: AiAssistantDraw
               <button
                 type="submit"
                 disabled={isLoading || !inputValue.trim()}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm hover:bg-blue-700 active:scale-95 disabled:opacity-40 transition-all cursor-pointer"
+                className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm hover:bg-blue-700 active:scale-95 disabled:opacity-40 transition-all cursor-pointer"
               >
                 <Send className="h-4 w-4" />
               </button>

@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { NotificationItem } from '@/types';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatDateTime } from '@/lib/utils';
 import { toast } from 'sonner';
 import { Bell, CheckCheck, Inbox, Loader2, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -131,7 +131,7 @@ export function PatientNotificationsClient({
                     {item.title}
                   </h4>
                   <span className="text-[10px] text-slate-400 whitespace-nowrap">
-                    {item.createdAt ? formatDate(item.createdAt.split('T')[0]) : ''}
+                    {item.createdAt ? formatDateTime(item.createdAt) : ''}
                   </span>
                 </div>
 

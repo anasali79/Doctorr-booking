@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
-import { formatTime, formatDate, getTodayIST } from '@/lib/utils';
+import { formatTime, formatDate, formatDateTime, getTodayIST } from '@/lib/utils';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import {
   elasticSchedulingApi,
@@ -657,8 +657,8 @@ export function PatientRescheduleRequestModal({
           >
             Decide Later
           </Button>
-          <span className="text-[11px] text-slate-400 font-mono">
-            Hold expires: {formatDate(request.expiresAt)}
+          <span className="text-[11px] text-slate-500 font-mono">
+            Hold expires: {formatDateTime(request.expiresAt)}
           </span>
         </DialogFooter>
       </DialogContent>

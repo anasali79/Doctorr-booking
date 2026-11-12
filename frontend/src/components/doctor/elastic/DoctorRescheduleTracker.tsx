@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { formatTime, formatDate } from '@/lib/utils';
+import { formatTime, formatDate, formatDateTime } from '@/lib/utils';
 import {
   elasticSchedulingApi,
   RescheduleRequestRecord,
@@ -200,9 +200,9 @@ export function DoctorRescheduleTracker() {
                   </td>
                   <td className="py-3 px-3 text-slate-500 font-mono text-[11px]">
                     {r.status === 'PENDING' ? (
-                      formatDate(r.expiresAt)
+                      formatDateTime(r.expiresAt)
                     ) : r.patientRespondedAt ? (
-                      `Responded: ${formatDate(r.patientRespondedAt)}`
+                      `Responded: ${formatDateTime(r.patientRespondedAt)}`
                     ) : (
                       'N/A'
                     )}
