@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       body: JSON.stringify(body),
       token,
+      timeout: 60000,
     });
 
     return NextResponse.json(res);

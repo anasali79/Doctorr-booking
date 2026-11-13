@@ -238,11 +238,10 @@ export function AiMessageList({
             )}
 
             <div
-              className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-xs ${
-                isUser
+              className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-xs ${isUser
                   ? 'bg-[#0066cc] text-white rounded-tr-xs'
                   : 'bg-white text-zinc-900 dark:bg-zinc-800/95 dark:text-zinc-100 rounded-tl-xs border border-zinc-200/80 dark:border-zinc-700/80'
-              }`}
+                }`}
             >
               {renderFormattedMessage(msg.content, isUser)}
 
@@ -386,7 +385,7 @@ export function AiMessageList({
                   if (act.type === 'PAY_NOW') {
                     const feeAmount =
                       act.data?.fee ||
-                      (act.data?.orderData as any)?.amount
+                        (act.data?.orderData as any)?.amount
                         ? Number((act.data?.orderData as any)?.amount) / 100
                         : 500;
 
@@ -528,9 +527,8 @@ export function AiMessageList({
                 })}
 
               <div
-                className={`mt-1 text-[10px] ${
-                  isUser ? 'text-blue-100 text-right' : 'text-zinc-400 text-left'
-                }`}
+                className={`mt-1 text-[10px] ${isUser ? 'text-blue-100 text-right' : 'text-zinc-400 text-left'
+                  }`}
               >
                 {new Date(msg.timestamp).toLocaleTimeString([], {
                   hour: '2-digit',

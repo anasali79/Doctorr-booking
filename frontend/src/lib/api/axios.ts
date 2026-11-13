@@ -187,6 +187,7 @@ export async function apiRequest<T>(
     token?: string;
     headers?: Record<string, string>;
     skipCache?: boolean;
+    timeout?: number;
   } = {},
 ): Promise<T> {
   const method = (options.method || 'GET').toUpperCase() as any;
@@ -240,6 +241,7 @@ export async function apiRequest<T>(
       data: payload,
       params: Object.keys(cleanParams).length > 0 ? cleanParams : undefined,
       headers,
+      timeout: options.timeout,
     });
 
     // Determine if this endpoint should be cached

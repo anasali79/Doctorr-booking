@@ -12,7 +12,8 @@ import { AiToolRegistryService } from './ai-tool-registry.service';
 import { AiSessionService } from './ai-session.service';
 import { AiPermissionService } from './ai-permission.service';
 
-const MAX_TURNS = 8;
+const MAX_TURNS = 5;
+const MAX_ORCHESTRATION_TIME_MS = 20000; // 20 seconds maximum orchestrator runtime
 
 @Injectable()
 export class AiOrchestratorService {
@@ -102,26 +103,63 @@ export class AiOrchestratorService {
       }
     }
 
-    // 2. Check if user wrote a voice/text confirmation like "haan confirm karo", "yes confirm"
+    // 2. Check if user wrote a voice/text confirmation like "haan confirm karo", "yes confirm", "book karo"
     if (session.pendingConfirmation) {
-      const lower = message.toLowerCase().trim();
-      if (
-        [
-          'haan confirm karo',
-          'haan',
-          'yes',
-          'confirm',
-          'yes confirm',
-          'ha confirm karo',
-          'kar do',
-          'kardo',
-          'theek hai kar do',
-          'ha kardo',
-          'confirm kardo',
-          'please confirm',
-          'confirm it',
-        ].includes(lower)
-      ) {
+      const lower = message.toLowerCase().trim().replace(/[.,!?-]/g, '');
+      const confirmKeywords = [
+        'haan confirm karo',
+        'haan',
+        'ha',
+        'yes',
+        'confirm',
+        'yes confirm',
+        'ha confirm karo',
+        'kar do',
+        'kardo',
+        'theek hai kar do',
+        'ha kardo',
+        'haan kardo',
+        'confirm kardo',
+        'please confirm',
+        'confirm it',
+        'book karo',
+        'book kardo',
+        'book kar do',
+        'slot book karo',
+        'isko book karo',
+        'appointment book karo',
+        'proceed',
+        'aage badho',
+        'theek hai',
+        'ok',
+        'okay',
+        'done',
+        'book it',
+        'yes book it',
+        'yes please',
+      ];
+
+      const isConfirm = confirmKeywords.some(
+        (kw) => lower === kw || lower.startsWith(kw + ' ') || lower.endsWith(' ' + kw),
+      );
+
+      const cancelKeywords = [
+        'nahi',
+        'no',
+        'cancel',
+        'mat karo',
+        'ruk jao',
+        'stop',
+        'dont do it',
+        'reject',
+        'rehne do',
+      ];
+
+      const isCancel = cancelKeywords.some(
+        (kw) => lower === kw || lower.startsWith(kw + ' ') || lower.endsWith(' ' + kw),
+      );
+
+      if (isConfirm) {
         return this.processMessage(
           userContext,
           message,
@@ -130,9 +168,7 @@ export class AiOrchestratorService {
           true,
           languagePreference,
         );
-      } else if (
-        ['nahi', 'no', 'cancel', 'mat karo', 'ruk jao', 'stop', 'dont do it', 'reject'].includes(lower)
-      ) {
+      } else if (isCancel) {
         return this.processMessage(
           userContext,
           message,
@@ -152,18 +188,55 @@ export class AiOrchestratorService {
       timestamp: new Date(),
     });
 
-    // 4. Build prompt and tools
+    // 4. Build prompt and tools with session context
     const tools = this.toolRegistry.getFunctionDeclarationsForRole(
       userContext.role,
     );
-    const systemPrompt = this.buildSystemPrompt(userContext, userLanguage);
+    const systemPrompt = this.buildSystemPrompt(userContext, userLanguage, session);
 
-    // Build Gemini contents from trimmed session history
+    // Build Gemini contents from trimmed session history ensuring strict alternating turns
     const contents: GeminiContent[] = [];
     for (const msg of session.messages) {
+      const role = msg.role === 'user' ? 'user' : 'model';
+      let text = (msg.content || '').trim();
+
+      // If assistant message had structured actions/data (like doctor preview or slot), append context note
+      if (role === 'model' && msg.data) {
+        const d = msg.data;
+        const extraHints: string[] = [];
+        if (d.doctorName) extraHints.push(`Doctor: ${d.doctorName}`);
+        if (d.date) extraHints.push(`Date: ${d.date}`);
+        if (d.time) extraHints.push(`Time: ${d.time}`);
+        if (d.fee !== undefined) extraHints.push(`Fee: ₹${d.fee}`);
+        if (d.shiftDate) extraHints.push(`ShiftDate: ${d.shiftDate}`);
+        if (d.startTime && d.endTime) extraHints.push(`Hours: ${d.startTime}-${d.endTime}`);
+        if (extraHints.length > 0) {
+          text = `${text}\n[Context: ${extraHints.join(', ')}]`.trim();
+        }
+      }
+
+      if (!text) continue;
+
+      if (contents.length > 0 && contents[contents.length - 1].role === role) {
+        // Merge consecutive same-role messages so Gemini never throws 400 Invalid Argument
+        contents[contents.length - 1].parts.push({ text });
+      } else {
+        contents.push({
+          role,
+          parts: [{ text }],
+        });
+      }
+    }
+
+    // Gemini strictly requires conversation to start with a user turn
+    while (contents.length > 0 && contents[0].role === 'model') {
+      contents.shift();
+    }
+
+    if (contents.length === 0) {
       contents.push({
-        role: msg.role === 'user' ? 'user' : 'model',
-        parts: [{ text: msg.content }],
+        role: 'user',
+        parts: [{ text: message }],
       });
     }
 
@@ -172,8 +245,17 @@ export class AiOrchestratorService {
     let finalModelText = '';
     const executedToolCalls = new Map<string, ToolExecutionResult>();
     let lastToolSignature = '';
+    const orchestratorStartTime = Date.now();
 
     while (currentTurn < MAX_TURNS) {
+      // Time-budget safeguard: if multi-step tool calls exceed 20s, break early to synthesize text
+      if (Date.now() - orchestratorStartTime > MAX_ORCHESTRATION_TIME_MS) {
+        this.logger.warn(
+          `Orchestration exceeded ${MAX_ORCHESTRATION_TIME_MS}ms budget. Breaking tool loop early to synthesize response.`,
+        );
+        break;
+      }
+
       currentTurn++;
 
       const request: GeminiGenerateRequest = {
@@ -200,6 +282,16 @@ export class AiOrchestratorService {
             : response.error.code === 429
               ? 'AI abhi busy hai. Kripya thodi der baad dobara koshish karein.'
               : 'AI service temporary unavailable hai. Aap normal website se appointments dekh aur book kar sakte hain.';
+
+        // Save assistant response to session so conversation history maintains alternating turns
+        this.sessionService.addMessage(session.id, {
+          id: String(Date.now()),
+          role: 'assistant',
+          content: fallbackText,
+          spokenSummary: fallbackText,
+          timestamp: new Date(),
+        });
+
         return {
           message: fallbackText,
           spokenSummary: fallbackText,
@@ -394,6 +486,7 @@ export class AiOrchestratorService {
   private buildSystemPrompt(
     userContext: AiUserContext,
     targetLanguage: 'en' | 'hi' | 'hinglish',
+    session?: any,
   ): string {
     const now = new Date();
     const todayIST = new Intl.DateTimeFormat('en-CA', {
@@ -414,6 +507,24 @@ DO NOT use any Hindi or Hinglish words (do NOT say 'Aapka', 'Bimari', 'Dawa', 'H
           ? `MANDATORY LANGUAGE REQUIREMENT: The user is speaking in HINDI. You MUST formulate your entire response in HINDI (Devanagari script).`
           : `MANDATORY LANGUAGE REQUIREMENT: The user is speaking in HINGLISH. You MUST formulate your response in natural, friendly, conversational Hinglish (Roman Hindi script).`;
 
+    let contextDirectives = '';
+    if (session?.pendingConfirmation) {
+      const p = session.pendingConfirmation;
+      contextDirectives += `
+ACTIVE PENDING ACTION READY FOR USER CONFIRMATION:
+- Action Type: ${p.actionType}
+- Action Summary: ${p.summary}
+- Action Details: ${JSON.stringify(p.actionPayload)}
+- If user confirms ('haan', 'yes', 'book karo', 'kar do', 'ok', 'proceed', etc.), immediately acknowledge and proceed with this exact action!
+`;
+    }
+
+    contextDirectives += `
+CONVERSATION CONTINUITY & CONTEXT MEMORY:
+- You must retain full context of earlier turns in this chat.
+- If the patient previously asked about a specific doctor or slot (e.g. Dr. Rahul at 10:00 AM), and now says "book karo", "confirm kar do", or "isko reschedule karo", resolve the doctor and slot directly from chat history without asking the user to repeat the details!
+`;
+
     return `
 You are the AI Healthcare & Appointment Assistant for CareUp platform.
 Current Timezone: Asia/Kolkata (IST).
@@ -428,6 +539,7 @@ Role Scope: ${
     }
 
 ${languageDirective}
+${contextDirectives}
 
 CRITICAL RULES:
 1. STRICT LANGUAGE MATCHING:
@@ -441,6 +553,11 @@ CRITICAL RULES:
    - You CANNOT finalize booking, rescheduling, cancellation, setting availability, or shrinking/expanding shifts on your own!
    - Always use the preview tools (previewAppointmentBooking, previewAppointmentReschedule, previewAppointmentCancellation, previewDoctorSetAvailability, previewDoctorElasticSchedule).
    - State the key details clearly and ask the user to confirm via button or voice/text ('Confirm', 'Yes', 'Haan confirm karo').
+5. CONCISENESS & CLEAN PRESENTATION:
+   - Keep answers clear, direct, and helpful. Do not output raw JSON or internal database IDs.
+   - Format lists and details cleanly using bullet points (•) or key-value format. Avoid excessive markdown asterisks.
+6. FAST & FOCUSED TOOL USE:
+   - When a patient asks general questions like "Kal doctor ke paas koi slot available hai?" without specifying a doctor, call getAvailableDoctors first. If doctors are found, show their available slots or list the doctors. Avoid calling getAvailableSlots in a long sequential loop for multiple doctors. Keep response fast and direct.
 
 ${
   isDoctor

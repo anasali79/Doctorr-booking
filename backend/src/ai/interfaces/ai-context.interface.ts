@@ -35,6 +35,7 @@ export interface ConversationSession {
   id: string;
   userId: string;
   userRole: string;
+  title?: string;
   messages: ConversationMessage[];
   pendingConfirmation?: PendingConfirmation | null;
   createdAt: Date;

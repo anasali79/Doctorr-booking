@@ -24,6 +24,7 @@ interface FetchOptions {
   token?: string;
   params?: Record<string, string | number | boolean | undefined | null>;
   cache?: RequestCache;
+  timeout?: number;
 }
 
 /**
@@ -42,5 +43,6 @@ export async function apiFetch<T>(
     params: options.params,
     token: options.token,
     headers: options.headers,
+    timeout: options.timeout,
   });
 }

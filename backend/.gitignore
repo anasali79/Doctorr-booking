@@ -7,3 +7,4 @@ dist/
 private.key
 /etc/secrets/
 uploads/
+data/

@@ -1,6 +1,8 @@
 import { Injectable, Logger, ForbiddenException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   ConversationSession,
   ConversationMessage,
@@ -18,6 +20,8 @@ export class AiSessionService {
 
   private readonly maxHistoryMessages: number;
   private readonly dailyMessageCap: number;
+  private readonly storageFilePath: string;
+  private persistTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly configService: ConfigService) {
     this.maxHistoryMessages = Number(
@@ -26,6 +30,86 @@ export class AiSessionService {
     this.dailyMessageCap = Number(
       this.configService.get<string>('AI_DAILY_MESSAGE_CAP_PER_USER') || 30,
     );
+
+    this.storageFilePath = path.join(process.cwd(), 'data', 'ai-sessions.json');
+    this.loadSessionsFromDisk();
+  }
+
+  /**
+   * Load existing sessions from disk on server startup.
+   */
+  private loadSessionsFromDisk(): void {
+    try {
+      if (fs.existsSync(this.storageFilePath)) {
+        const raw = fs.readFileSync(this.storageFilePath, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) {
+            if (item && item.id && item.userId) {
+              const session: ConversationSession = {
+                id: item.id,
+                userId: item.userId,
+                userRole: item.userRole || 'USER',
+                title: item.title || 'Conversation',
+                messages: Array.isArray(item.messages)
+                  ? item.messages.map((m: any) => ({
+                      ...m,
+                      timestamp: new Date(m.timestamp || Date.now()),
+                    }))
+                  : [],
+                pendingConfirmation: item.pendingConfirmation
+                  ? {
+                      ...item.pendingConfirmation,
+                      createdAt: new Date(item.pendingConfirmation.createdAt),
+                      expiresAt: new Date(item.pendingConfirmation.expiresAt),
+                    }
+                  : null,
+                createdAt: new Date(item.createdAt || Date.now()),
+                updatedAt: new Date(item.updatedAt || Date.now()),
+              };
+              this.sessions.set(session.id, session);
+              if (
+                session.pendingConfirmation &&
+                new Date() < session.pendingConfirmation.expiresAt
+              ) {
+                this.pendingConfirmations.set(
+                  session.pendingConfirmation.id,
+                  session.pendingConfirmation,
+                );
+              }
+            }
+          }
+          this.logger.log(
+            `Loaded ${this.sessions.size} persistent AI conversation sessions from disk.`,
+          );
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(
+        `Could not load AI sessions from disk: ${err.message}. Starting with fresh in-memory state.`,
+      );
+    }
+  }
+
+  /**
+   * Schedule debounced flush to disk so I/O does not block chat latency.
+   */
+  private persistSessions(): void {
+    if (this.persistTimer) return;
+
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null;
+      try {
+        const dir = path.dirname(this.storageFilePath);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        const data = Array.from(this.sessions.values());
+        fs.writeFileSync(this.storageFilePath, JSON.stringify(data, null, 2), 'utf8');
+      } catch (err: any) {
+        this.logger.error(`Failed to persist AI sessions to disk: ${err.message}`);
+      }
+    }, 250);
   }
 
   /**
@@ -79,11 +163,13 @@ export class AiSessionService {
       id: newId,
       userId,
       userRole,
+      title: 'New Conversation',
       messages: [],
       createdAt: new Date(),
       updatedAt: new Date(),
     };
     this.sessions.set(newId, newSession);
+    this.persistSessions();
     return newSession;
   }
 
@@ -94,6 +180,15 @@ export class AiSessionService {
     const session = this.sessions.get(conversationId);
     if (!session) return;
 
+    // Generate intelligent title from first user message if still default
+    if (
+      message.role === 'user' &&
+      (!session.title || session.title === 'New Conversation')
+    ) {
+      const cleaned = message.content.replace(/\s+/g, ' ').trim();
+      session.title = cleaned.length > 40 ? cleaned.slice(0, 40) + '...' : cleaned;
+    }
+
     session.messages.push(message);
     session.updatedAt = new Date();
 
@@ -101,6 +196,8 @@ export class AiSessionService {
     if (session.messages.length > this.maxHistoryMessages * 2) {
       session.messages = session.messages.slice(-this.maxHistoryMessages * 2);
     }
+
+    this.persistSessions();
   }
 
   /**
@@ -134,6 +231,7 @@ export class AiSessionService {
     const session = this.sessions.get(conversationId);
     if (session) {
       session.pendingConfirmation = pending;
+      this.persistSessions();
     }
 
     return pending;
@@ -174,21 +272,33 @@ export class AiSessionService {
         session.pendingConfirmation = null;
       }
       this.pendingConfirmations.delete(id);
+      this.persistSessions();
     }
   }
 
   /**
    * List all conversations owned by a user.
    */
-  getUserConversations(userId: string): ConversationSession[] {
-    const list: ConversationSession[] = [];
+  getUserConversations(userId: string): any[] {
+    const list: any[] = [];
     for (const session of this.sessions.values()) {
       if (session.userId === userId) {
-        list.push(session);
+        list.push({
+          id: session.id,
+          title: session.title || 'Conversation',
+          messageCount: session.messages.length,
+          lastMessage:
+            session.messages.length > 0
+              ? session.messages[session.messages.length - 1].content
+              : '',
+          createdAt: session.createdAt,
+          updatedAt: session.updatedAt,
+        });
       }
     }
     return list.sort(
-      (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
+      (a, b) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
     );
   }
 
@@ -210,6 +320,7 @@ export class AiSessionService {
     }
 
     this.sessions.delete(conversationId);
+    this.persistSessions();
     return true;
   }
 }
