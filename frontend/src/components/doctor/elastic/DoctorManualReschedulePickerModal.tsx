@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { SmoothDatePicker } from '@/components/ui/smooth-date-picker';
 import { toast } from 'sonner';
 import { formatTime, formatDate, getTodayIST } from '@/lib/utils';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
@@ -213,13 +214,10 @@ export function DoctorManualReschedulePickerModal({
             <label className="block text-xs font-semibold text-slate-700 mb-1">
               Select Replacement Date
             </label>
-            <Input
-              type="date"
-              min={todayStr}
+            <SmoothDatePicker
               value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="font-mono text-sm"
-              required
+              onChange={setSelectedDate}
+              minDate={todayStr}
             />
           </div>
 

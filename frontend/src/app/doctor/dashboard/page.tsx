@@ -4,18 +4,13 @@ import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
 import { getDoctorProfile, getDoctorDashboard, getDoctorAppointments } from '@/lib/api/doctors';
 import { getDoctorVerificationStatus } from '@/lib/api/admin';
-import { DoctorAppointmentsTable } from '@/components/doctor/DoctorAppointmentsTable';
+import { DoctorDashboardInteractive } from '@/components/doctor/DoctorDashboardInteractive';
 import {
   CalendarDays,
   Clock,
-  Users,
-  CheckCircle2,
-  Calendar,
-  XCircle,
-  AlertCircle,
-  Sparkles,
+  LogOut,
 } from 'lucide-react';
-import { formatDate, getTodayIST } from '@/lib/utils';
+import { getTodayIST } from '@/lib/utils';
 import { Appointment } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -69,138 +64,99 @@ export default async function DoctorDashboardPage() {
     totalPatients: new Set(allAppointments.map((a) => a.patientId).filter(Boolean)).size,
   };
 
-  const statCards = [
-    {
-      label: "Today's Consults",
-      value: stats.today,
-      icon: Clock,
-    },
-    {
-      label: 'Upcoming Visits',
-      value: stats.upcoming,
-      icon: Calendar,
-    },
-    {
-      label: 'Completed Visits',
-      value: stats.completed,
-      icon: CheckCircle2,
-    },
-    {
-      label: 'Total Patients',
-      value: stats.totalPatients,
-      icon: Users,
-    },
-    {
-      label: 'Cancelled',
-      value: stats.cancelled,
-      icon: XCircle,
-    },
-    {
-      label: 'No Shows',
-      value: stats.noShow,
-      icon: AlertCircle,
-    },
-  ];
+  const currentHourIST = new Date(
+    new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
+  ).getHours();
+  const greeting =
+    currentHourIST < 12
+      ? 'Good Morning'
+      : currentHourIST < 17
+        ? 'Good Afternoon'
+        : 'Good Evening';
+
+  const doctorDisplayName = profile.fullName.startsWith('Dr.')
+    ? profile.fullName
+    : `Dr. ${profile.fullName}`;
 
   return (
-    <div className="page-container space-y-8 py-8 sm:py-12">
-      {/* Header Banner */}
-      <div className="relative rounded-2xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-xs overflow-hidden">
-        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#0066cc]" />
-                <span>CAREUP CLINICIAN CONSOLE</span>
-              </div>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-xs font-bold text-emerald-700 shadow-2xs">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Verified Practitioner</span>
-              </span>
-            </div>
-            <h1 className="mt-2 text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
-              {profile.fullName}
-            </h1>
-            <p className="mt-1 text-xs sm:text-sm text-slate-500 font-medium">
-              {profile.specialization} • {profile.qualification} • Fee: ₹{profile.consultationFee}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5">
-            <Link href="/doctor/my-day" className="btn-primary text-xs flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5" />
-              My Day
-            </Link>
-            <Link href="/doctor/availability" className="btn-secondary text-xs">
-              Availability
-            </Link>
-            <Link href="/doctor/availability?tab=leaves" className="btn-secondary text-xs">
-              Leave
-            </Link>
-            <Link href="/doctor/appointments" className="btn-secondary text-xs">
-              Patient Log
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      {/* Metrics Row */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-6">
-        {statCards.map((item) => (
-          <div
-            key={item.label}
-            className="rounded-2xl border border-slate-200/90 bg-white p-4 transition-all hover:border-slate-300 shadow-2xs"
+    <div className="page-container space-y-6 sm:space-y-8 py-4 sm:py-6">
+      {/* ── Top Welcome Banner (Redesigned matching screenshot) ── */}
+      <div className="relative rounded-2xl sm:rounded-3xl border border-blue-100/70 bg-gradient-to-r from-[#eef5fc] via-[#e6f1fd] to-[#edf4fc] p-6 sm:p-8 overflow-hidden shadow-[0_2px_16px_rgba(0,102,204,0.04)]">
+        {/* Subtle Watermark Stethoscope SVG Illustration in Background */}
+        <div className="pointer-events-none absolute right-12 sm:right-28 md:right-48 lg:right-64 top-1/2 -translate-y-1/2 opacity-25 select-none text-blue-500">
+          <svg
+            className="h-36 w-36 sm:h-44 sm:w-44"
+            viewBox="0 0 200 200"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-slate-500 block truncate">
-                {item.label}
-              </span>
-              <div className="p-1.5 rounded-lg bg-[#e8f2fe] text-[#0066cc]">
-                <item.icon className="h-3.5 w-3.5" />
-              </div>
-            </div>
-            <p className="mt-2 text-2xl font-bold text-slate-900 font-mono">
-              {item.value}
+            {/* Left Earpiece & Tube */}
+            <circle cx="68" cy="35" r="4" fill="currentColor" />
+            <path d="M68 39 C 68 55, 78 70, 90 78" />
+            {/* Right Earpiece & Tube */}
+            <circle cx="112" cy="35" r="4" fill="currentColor" />
+            <path d="M112 39 C 112 55, 102 70, 90 78" />
+            {/* Tube looping down and up to chest piece */}
+            <path d="M90 78 L90 92 C 90 120, 60 135, 60 155 C 60 175, 80 185, 100 185 C 125 185, 138 165, 138 140 L138 125" />
+            {/* Chest Piece / Stethoscope Head */}
+            <circle cx="138" cy="115" r="10" strokeWidth="5" />
+            <circle cx="138" cy="115" r="4" fill="currentColor" />
+          </svg>
+        </div>
+
+        {/* Banner Content */}
+        <div className="relative z-10 flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
+          <div>
+            <p className="text-sm sm:text-base font-semibold text-slate-600">
+              {greeting},
+            </p>
+            <h1 className="mt-0.5 text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-slate-900 flex items-center gap-2">
+              <span>{doctorDisplayName}</span>
+            </h1>
+            <p className="mt-1 text-xs sm:text-sm text-slate-600 font-medium">
+              Here&apos;s what&apos;s happening with your clinic today.
             </p>
           </div>
-        ))}
-      </div>
 
-      {/* Appointments & Live Queue Section */}
-      <section className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 pb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#e8f2fe] text-[#0066cc]">
-              <CalendarDays className="h-4 w-4" />
-            </div>
-            <div>
-              <h2 className="font-bold text-slate-900 text-base">
-                Doctor Appointments & Consultation Queue
-              </h2>
-              <span className="text-xs text-slate-500 font-medium">
-                {formatDate(todayIST)} • Outpatient & Online Bookings
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs">
+          {/* Action Pill Buttons */}
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
             <Link
               href="/doctor/my-day"
-              className="btn-primary !py-1.5 !px-3.5 text-xs inline-flex items-center gap-1.5"
+              className="inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-2xl bg-[#0066cc] text-white text-xs sm:text-sm font-semibold shadow-xs hover:bg-[#0055b3] transition-all"
             >
-              <span>Launch Live Cabin Queue</span>
-              <span>→</span>
+              <CalendarDays className="w-4 h-4" />
+              <span>My Day</span>
+            </Link>
+
+            <Link
+              href="/doctor/availability"
+              className="inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-2xl bg-white/95 hover:bg-white text-slate-800 text-xs sm:text-sm font-semibold shadow-2xs hover:shadow-xs transition-all border border-slate-200/60"
+            >
+              <Clock className="w-4 h-4 text-slate-700" />
+              <span>Availability</span>
+            </Link>
+
+            <Link
+              href="/doctor/availability?tab=leaves"
+              className="inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-2xl bg-white/95 hover:bg-white text-slate-800 text-xs sm:text-sm font-semibold shadow-2xs hover:shadow-xs transition-all border border-slate-200/60"
+            >
+              <LogOut className="w-4 h-4 text-slate-700" />
+              <span>Leave</span>
             </Link>
           </div>
         </div>
+      </div>
 
-        <DoctorAppointmentsTable
-          appointments={todayAppointments}
-          allAppointments={allAppointments}
-          isTodayOnly={false}
-          doctorId={profile?.id}
-        />
-      </section>
+      {/* ── Interactive 4 Clickable Cards & All Appointments (Matching Reference Image) ── */}
+      <DoctorDashboardInteractive
+        stats={stats}
+        initialAppointments={todayAppointments}
+        initialAllAppointments={allAppointments}
+        doctorId={profile.id}
+      />
     </div>
   );
 }

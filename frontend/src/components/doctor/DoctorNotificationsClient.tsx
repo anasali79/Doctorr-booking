@@ -15,35 +15,59 @@ import {
   Clock,
   UserCheck,
   Settings,
+  ChevronDown,
 } from 'lucide-react';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { NotificationPreferencesDialog } from '@/components/common/NotificationPreferencesDialog';
 
+interface MetaData {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 interface DoctorNotificationsClientProps {
   initialNotifications: NotificationItem[];
+  initialUnreadCount?: number;
+  initialMeta?: MetaData;
 }
 
 export function DoctorNotificationsClient({
   initialNotifications,
+  initialUnreadCount,
+  initialMeta = { total: initialNotifications.length, page: 1, limit: 20, totalPages: 1 },
 }: DoctorNotificationsClientProps) {
   const router = useRouter();
   const [notifications, setNotifications] = useState<NotificationItem[]>(initialNotifications);
+  const [unreadCount, setUnreadCount] = useState<number>(
+    initialUnreadCount !== undefined
+      ? initialUnreadCount
+      : initialNotifications.filter((n) => !n.isRead).length
+  );
+  const [meta, setMeta] = useState<MetaData>(initialMeta);
   const [filter, setFilter] = useState<'ALL' | 'UNREAD'>('ALL');
   const [markingAll, setMarkingAll] = useState(false);
   const [markingId, setMarkingId] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+
+  const notifyChange = () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('notification_updated'));
+    }
+  };
 
   const handleMarkAllRead = async () => {
     try {
       setMarkingAll(true);
       await clientAxios.patch('/api/notifications/read-all');
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      setUnreadCount(0);
+      notifyChange();
       toast.success('All notifications marked as read');
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('notification_updated'));
-      }
       router.refresh();
     } catch (err: unknown) {
       toast.error('Error updating notifications', { description: extractErrorMessage(err) });
@@ -59,9 +83,8 @@ export function DoctorNotificationsClient({
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)),
       );
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('notification_updated'));
-      }
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+      notifyChange();
       router.refresh();
     } catch {
       // Best effort
@@ -70,7 +93,23 @@ export function DoctorNotificationsClient({
     }
   };
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const handleLoadMore = async () => {
+    if (loadingMore || meta.page >= meta.totalPages) return;
+    try {
+      setLoadingMore(true);
+      const nextPage = meta.page + 1;
+      const res = await clientAxios.get<any>(`/api/notifications?page=${nextPage}&limit=${meta.limit}`);
+      const newItems = res.data?.data || [];
+      const newMeta = res.data?.meta || { ...meta, page: nextPage };
+      setNotifications((prev) => [...prev, ...newItems]);
+      setMeta(newMeta);
+    } catch (err: unknown) {
+      toast.error('Failed to load more notifications', { description: extractErrorMessage(err) });
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   const filteredList =
     filter === 'UNREAD' ? notifications.filter((n) => !n.isRead) : notifications;
 
@@ -118,19 +157,19 @@ export function DoctorNotificationsClient({
             type="button"
             variant="ghost"
             onClick={() => setFilter('ALL')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               filter === 'ALL'
                 ? 'bg-[#0066cc] text-white shadow-xs'
                 : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
             } h-auto`}
           >
-            All Alerts ({notifications.length})
+            All Alerts ({meta.total || notifications.length})
           </Button>
           <Button
             type="button"
             variant="ghost"
             onClick={() => setFilter('UNREAD')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               filter === 'UNREAD'
                 ? 'bg-[#0066cc] text-white shadow-xs'
                 : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
@@ -141,12 +180,18 @@ export function DoctorNotificationsClient({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {meta.total > 0 && (
+            <span className="text-xs text-slate-400 font-medium hidden md:inline">
+              Showing {notifications.length} of {meta.total}
+            </span>
+          )}
+
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={() => setPreferencesOpen(true)}
-            className="rounded-xl text-xs font-semibold gap-1.5 border-slate-200 hover:bg-slate-50 text-slate-700 h-auto py-1.5"
+            className="rounded-xl text-xs font-semibold gap-1.5 border-slate-200 hover:bg-slate-50 text-slate-700 h-auto py-1.5 cursor-pointer"
           >
             <Settings className="w-3.5 h-3.5 text-slate-600" />
             <span>Preferences</span>
@@ -159,7 +204,7 @@ export function DoctorNotificationsClient({
               size="sm"
               onClick={handleMarkAllRead}
               disabled={markingAll}
-              className="rounded-xl text-xs font-semibold gap-1.5 border-slate-200 hover:bg-slate-50 text-slate-700 h-auto py-1.5"
+              className="rounded-xl text-xs font-semibold gap-1.5 border-slate-200 hover:bg-slate-50 text-slate-700 h-auto py-1.5 cursor-pointer"
             >
               {markingAll ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -243,6 +288,29 @@ export function DoctorNotificationsClient({
               </Card>
             );
           })}
+
+          {/* Load More Pagination */}
+          {meta.page < meta.totalPages && (
+            <div className="pt-4 flex justify-center">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-xs cursor-pointer"
+              >
+                {loadingMore ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-[#0066cc]" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-slate-500" />
+                )}
+                <span>
+                  Load older notifications ({meta.total - notifications.length} remaining)
+                </span>
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

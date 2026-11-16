@@ -4,6 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { SmoothTimePicker } from '@/components/ui/smooth-time-picker';
 import { toast } from 'sonner';
 import { formatTime, formatDate } from '@/lib/utils';
 import { extractErrorMessage } from '@/lib/api/axios';
@@ -217,24 +218,18 @@ export function ElasticAvailabilityModal({
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 New Start Time
               </label>
-              <Input
-                type="time"
+              <SmoothTimePicker
                 value={newStartTime}
-                onChange={(e) => setNewStartTime(e.target.value)}
-                className="font-mono text-sm"
-                required
+                onChange={setNewStartTime}
               />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 New End Time
               </label>
-              <Input
-                type="time"
+              <SmoothTimePicker
                 value={newEndTime}
-                onChange={(e) => setNewEndTime(e.target.value)}
-                className="font-mono text-sm"
-                required
+                onChange={setNewEndTime}
               />
             </div>
           </div>

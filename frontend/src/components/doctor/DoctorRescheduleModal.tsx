@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { SmoothDatePicker } from '@/components/ui/smooth-date-picker';
 
 interface DoctorRescheduleModalProps {
   isOpen: boolean;
@@ -540,9 +541,18 @@ export function DoctorRescheduleModal({
               <div className="space-y-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
                 {/* Horizontal Date Picker */}
                 <div>
-                  <span className="text-[11px] font-semibold text-slate-600 block mb-1.5">
-                    Select Date (Next 7 Days):
-                  </span>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] font-semibold text-slate-600 block">
+                      Choose Target Date:
+                    </span>
+                  </div>
+                  <div className="mb-2">
+                    <SmoothDatePicker
+                      value={manualDate}
+                      onChange={(d) => handleManualDateSelect(d)}
+                      minDate={todayStr}
+                    />
+                  </div>
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
                     {nextDates.map((d) => {
                       const isDateActive = manualDate === d;
