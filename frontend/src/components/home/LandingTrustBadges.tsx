@@ -39,7 +39,7 @@ const badges = [
 
 export function LandingTrustBadges() {
   return (
-    <section className="py-16 bg-[#fbf9f5] border-b border-slate-100">
+    <section className="py-16 bg-white">
       <div className="page-container">
         <div className="text-center max-w-xl mx-auto mb-10 space-y-2">
           <span className="text-xs font-bold uppercase tracking-wider text-amber-700">

@@ -17,6 +17,7 @@ import {
   LayoutDashboard,
   Stethoscope,
   ChevronRight,
+  CalendarPlus,
 } from 'lucide-react';
 import { SessionUser } from '@/types';
 import { toast } from 'sonner';
@@ -24,19 +25,40 @@ import { BrandMark } from '@/components/ui/BrandMark';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
+import {
+  motion,
+  AnimatePresence,
+  useMotionValueEvent,
+  useScroll,
+} from 'framer-motion';
+import { Dock, DockIcon, DockItem, DockLabel } from '@/components/ui/dock';
+import { LiquidProfileDropdown, DockProfileMenu } from '@/components/common/LiquidProfileDropdown';
 
 interface NavbarProps {
   user?: SessionUser | null;
+  userName?: string;
   unreadCount?: number;
 }
 
-export function Navbar({ user, unreadCount = 0 }: NavbarProps) {
+export function Navbar({ user, userName, unreadCount = 0 }: NavbarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [unreadState, setUnreadState] = useState<number>(unreadCount);
+  const [isDocked, setIsDocked] = useState(false);
+
+  const { scrollY } = useScroll();
+
+  // Track scroll to toggle dock mode with hysteresis (prevents layout shift jitter/flip-flop)
+  useMotionValueEvent(scrollY, 'change', (latest) => {
+    if (latest > 100 && !isDocked) {
+      setIsDocked(true);
+    } else if (latest < 40 && isDocked) {
+      setIsDocked(false);
+    }
+  });
 
   useEffect(() => {
     setUnreadState(unreadCount);
@@ -46,29 +68,38 @@ export function Navbar({ user, unreadCount = 0 }: NavbarProps) {
     if (!user) return;
     const fetchUnread = () => {
       clientAxios
-        .get<{ data: { unreadCount: number } }>('/api/notifications/unread-count')
+        .get<any>('/api/notifications/unread-count')
         .then((res) => {
-          if (res.data?.data?.unreadCount !== undefined) {
-            setUnreadState(res.data.data.unreadCount);
+          const count = res.data?.data?.unreadCount ?? res.data?.unreadCount;
+          if (count !== undefined && typeof count === 'number') {
+            setUnreadState(count);
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     };
 
+    fetchUnread();
     if (typeof window !== 'undefined') {
       window.addEventListener('notification_updated', fetchUnread);
     }
+    const interval = setInterval(fetchUnread, 20_000);
     return () => {
       if (typeof window !== 'undefined') {
         window.removeEventListener('notification_updated', fetchUnread);
       }
+      clearInterval(interval);
     };
   }, [user]);
 
-  // Close mobile drawer and dropdown when route changes
+  // Close mobile drawer and dropdown when route changes, and reset dock state if starting at top
   useEffect(() => {
     setMobileMenuOpen(false);
     setUserMenuOpen(false);
+    if (typeof window !== 'undefined') {
+      if (window.scrollY < 40) {
+        setIsDocked(false);
+      }
+    }
   }, [pathname]);
 
   const handleLogout = async () => {
@@ -90,218 +121,360 @@ export function Navbar({ user, unreadCount = 0 }: NavbarProps) {
 
   const isDoctor = user?.role === 'DOCTOR';
   const closeMobile = () => setMobileMenuOpen(false);
-
-  // Role display label matching user prompt: "patient" or doctor
   const roleLabel = user?.role ? user.role.toLowerCase() : 'patient';
+
+  // Build dock items based on auth state
+  const dockItems = user
+    ? [
+      {
+        title: 'Home',
+        icon: <BrandMark size="sm" className="h-full w-full !rounded-full" />,
+        href: '/',
+      },
+      {
+        title: 'Book a visit',
+        icon: <Stethoscope className="h-full w-full text-slate-600" />,
+        href: '/doctors',
+      },
+      {
+        title: 'Appointments',
+        icon: <Calendar className="h-full w-full text-slate-600" />,
+        href: isDoctor ? '/doctor/appointments' : '/patient/appointments',
+      },
+      {
+        title: 'Dashboard',
+        icon: <LayoutDashboard className="h-full w-full text-slate-600" />,
+        href: isDoctor ? '/doctor/dashboard' : '/patient/dashboard',
+      },
+      ...(!isDoctor
+        ? [
+          {
+            title: 'Payments',
+            icon: <CreditCard className="h-full w-full text-slate-600" />,
+            href: '/patient/payments',
+          },
+        ]
+        : []),
+      {
+        title: `Notifications${unreadState > 0 ? ` (${unreadState})` : ''}`,
+        icon: (
+          <div className="relative h-full w-full">
+            <Bell className="h-full w-full text-slate-600" />
+            {unreadState > 0 && (
+              <span className="absolute -top-1 -right-1 flex min-w-[14px] h-[14px] px-0.5 items-center justify-center rounded-full bg-red-500 text-[8px] font-bold text-white ring-1 ring-white">
+                {unreadState > 99 ? '99+' : unreadState}
+              </span>
+            )}
+          </div>
+        ),
+        href: isDoctor ? '/doctor/notifications' : '/patient/notifications',
+      },
+      {
+        title: userName || user?.email?.split('@')[0] || 'Profile',
+        icon: (
+          <div className="flex h-full w-full items-center justify-center rounded-full bg-[#18191f] text-[10px] font-bold text-white">
+            {((userName?.[0] || user?.email?.[0]) || 'U').toUpperCase()}
+          </div>
+        ),
+        href: isDoctor ? '/doctor/profile' : '/patient/profile',
+        isProfile: true,
+      },
+    ]
+    : [
+      {
+        title: 'CareUp',
+        icon: <BrandMark size="sm" className="h-full w-full !rounded-full" />,
+        href: '/',
+      },
+      {
+        title: 'Our doctors',
+        icon: <Stethoscope className="h-full w-full text-slate-600" />,
+        href: '/#doctors-section',
+      },
+      {
+        title: 'How it works',
+        icon: <CheckCircle2 className="h-full w-full text-slate-600" />,
+        href: '/#how-it-works',
+      },
+      {
+        title: 'Call us',
+        icon: <Phone className="h-full w-full text-slate-600" />,
+        href: 'tel:01314960280',
+      },
+      {
+        title: 'Sign in',
+        icon: <User className="h-full w-full text-slate-600" />,
+        href: '/login',
+      },
+      {
+        title: 'Book appointment',
+        icon: <CalendarPlus className="h-full w-full text-white" />,
+        href: '/doctors',
+      },
+    ];
 
   return (
     <>
-      <header className="sticky top-0 z-40 w-full border-b border-slate-200/80 bg-white/95 backdrop-blur-md transition-all duration-200">
-        <div className="page-container">
-          <div className="flex h-16 items-center justify-between gap-4">
-            {/* ── Logo & Brand (CareUp) ── */}
-            <div className="flex items-center gap-6 sm:gap-8">
-              <Link href="/" className="flex items-center gap-2.5 group">
-                <BrandMark size="sm" />
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[1.125rem] leading-[1.15] font-extrabold tracking-tight text-slate-900 group-hover:text-[#0066cc] transition-colors">
-                      Care<span className="text-[#0066cc]">Up</span>
-                    </span>
-                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-bold text-[#0066cc] border border-blue-200">
-                      HEALTH
-                    </span>
-                  </div>
-                  <span className="text-[0.6875rem] leading-[1.25] font-medium tracking-[0.06em] text-slate-500 uppercase">
-                    Doctor Appointments
-                  </span>
-                </div>
-              </Link>
-
-              {/* ── Center Navigation Links ── */}
-              <nav className="hidden items-center gap-2 md:flex">
-                {user ? (
-                  <>
-                    <Link
-                      href="/doctors"
-                      className={cn(
-                        'relative px-4 py-2 text-xs font-semibold transition-all duration-200',
-                        pathname === '/doctors' || pathname === '/'
-                          ? 'text-[#0066cc]'
-                          : 'text-slate-600 hover:text-slate-900',
-                      )}
-                    >
-                      <span>Book a visit</span>
-                      {(pathname === '/doctors' || pathname === '/') && (
-                        <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0066cc] rounded-full" />
-                      )}
-                    </Link>
-                    <Link
-                      href={isDoctor ? '/doctor/appointments' : '/patient/appointments'}
-                      className={cn(
-                        'relative px-4 py-2 text-xs font-semibold transition-all duration-200',
-                        pathname.includes('appointments')
-                          ? 'text-[#0066cc]'
-                          : 'text-slate-600 hover:text-slate-900',
-                      )}
-                    >
-                      <span>Appointments</span>
-                      {pathname.includes('appointments') && (
-                        <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0066cc] rounded-full" />
-                      )}
-                    </Link>
-                    <Link
-                      href={isDoctor ? '/doctor/dashboard' : '/patient/dashboard'}
-                      className={cn(
-                        'relative px-4 py-2 text-xs font-semibold transition-all duration-200',
-                        pathname.includes('dashboard')
-                          ? 'text-[#0066cc]'
-                          : 'text-slate-600 hover:text-slate-900',
-                      )}
-                    >
-                      <span>Dashboard</span>
-                      {pathname.includes('dashboard') && (
-                        <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0066cc] rounded-full" />
-                      )}
-                    </Link>
-                    {!isDoctor && (
-                      <Link
-                        href="/patient/payments"
-                        className={cn(
-                          'relative px-4 py-2 text-xs font-semibold transition-all duration-200',
-                          pathname.startsWith('/patient/payments')
-                            ? 'text-[#0066cc]'
-                            : 'text-slate-600 hover:text-slate-900',
-                        )}
-                      >
-                        <span>Payments</span>
-                        {pathname.startsWith('/patient/payments') && (
-                          <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0066cc] rounded-full" />
-                        )}
-                      </Link>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <Link
-                      href="/#doctors-section"
-                      className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-[#0066cc] transition-colors"
-                    >
-                      Our doctors
-                    </Link>
-                    <Link
-                      href="/#how-it-works"
-                      className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-[#0066cc] transition-colors"
-                    >
-                      How it works
-                    </Link>
-                  </>
-                )}
-              </nav>
-            </div>
-
-            {/* ── Right Side: Phone + Bell/Auth (Desktop) ── */}
-            <div className="hidden items-center gap-3.5 md:flex">
-              {/* Phone Number: 0131 496 0280 */}
-              <a
-                href="tel:01314960280"
-                className="flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-slate-700 hover:text-[#0066cc] transition-colors"
-              >
-                <Phone className="h-3.5 w-3.5 text-slate-500" />
-                <span>0131 496 0280</span>
-              </a>
-
-              {user ? (
-                <>
-                  {/* Notification Bell */}
-                  <Link
-                    href={isDoctor ? '/doctor/notifications' : '/patient/notifications'}
-                    className="relative rounded-full p-2 text-slate-600 hover:bg-slate-100 hover:text-[#0066cc] transition-colors border border-slate-200"
-                    title="Notifications"
-                  >
-                    <Bell className="h-4 w-4" />
-                    {unreadState > 0 && (
-                      <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#0066cc] text-[10px] font-bold text-white shadow-xs">
-                        {unreadState > 9 ? '9+' : unreadState}
-                      </span>
-                    )}
+      {/* ═══════════════════════════════════════════════════════════════
+          DESKTOP: Full-Width Navbar Wrapper (Fixed h-16 prevents layout shift / jitter)
+         ═══════════════════════════════════════════════════════════════ */}
+      <div className="hidden md:block w-full h-16 relative z-40">
+        <AnimatePresence>
+          {!isDocked && (
+            <motion.header
+              key="full-navbar"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.25, ease: 'easeOut' }}
+              className="fixed top-0 left-0 w-full h-16 border-b border-black/[0.06] bg-white/80 backdrop-blur-xl shadow-xs shadow-slate-900/[0.02] z-40 transition-all duration-200"
+            >
+              <div className="page-container h-full">
+                <div className="flex h-16 items-center justify-between gap-4">
+                {/* ── Logo & Brand ── */}
+                <div className="flex items-center gap-6 sm:gap-8">
+                  <Link href="/" className="flex items-center gap-2.5 group">
+                    <BrandMark size="sm" />
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[1.125rem] leading-[1.15] font-extrabold tracking-tight text-slate-900 group-hover:text-[#0066cc] transition-colors">
+                          Care<span className="text-[#0066cc]">Up</span>
+                        </span>
+                      </div>
+                    </div>
                   </Link>
 
-                  {/* User Profile Dropdown Pill */}
-                  <div className="relative">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => setUserMenuOpen(!userMenuOpen)}
-                      className="flex items-center gap-2 rounded-full border border-slate-200 bg-white py-1 pl-1 pr-3 text-xs font-semibold text-slate-900 transition-all hover:bg-slate-50 hover:border-slate-300 shadow-xs h-auto"
-                    >
-                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#18191f] text-xs font-bold text-white">
-                        {(user?.email?.[0] || 'R').toUpperCase()}
-                      </div>
-                      <span>{user?.email?.split('@')[0] || 'Raj'}</span>
-                      <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
-                    </Button>
-
-                    {userMenuOpen && (
-                      <div className="absolute right-0 top-full mt-2 w-48 rounded-2xl border border-slate-200 bg-white py-1 shadow-lg ring-1 ring-black/5 z-50">
-                        <div className="px-4 py-2 border-b border-slate-100">
-                          <p className="text-xs font-bold text-slate-900 truncate">
-                            {user?.email?.split('@')[0] || 'User'}
-                          </p>
-                          <p className="text-[10px] text-slate-500 capitalize">{roleLabel}</p>
-                        </div>
+                  {/* ── Center Navigation Links ── */}
+                  <nav className="hidden items-center gap-2 md:flex">
+                    {user ? (
+                      <>
                         <Link
-                          href={isDoctor ? '/doctor/profile' : '/patient/profile'}
-                          onClick={() => setUserMenuOpen(false)}
-                          className="flex items-center gap-2 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
+                          href="/doctors"
+                          className={cn(
+                            'relative px-4 py-2 text-xs font-semibold transition-all duration-200',
+                            pathname === '/doctors' || pathname === '/'
+                              ? 'text-[#0066cc]'
+                              : 'text-slate-600 hover:text-slate-900',
+                          )}
                         >
-                          <User className="h-3.5 w-3.5 text-slate-400" />
-                          <span>Profile</span>
+                          <span>Book a visit</span>
+                          {(pathname === '/doctors' || pathname === '/') && (
+                            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0066cc] rounded-full" />
+                          )}
+                        </Link>
+                        <Link
+                          href={isDoctor ? '/doctor/appointments' : '/patient/appointments'}
+                          className={cn(
+                            'relative px-4 py-2 text-xs font-semibold transition-all duration-200',
+                            pathname.includes('appointments')
+                              ? 'text-[#0066cc]'
+                              : 'text-slate-600 hover:text-slate-900',
+                          )}
+                        >
+                          <span>Appointments</span>
+                          {pathname.includes('appointments') && (
+                            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0066cc] rounded-full" />
+                          )}
+                        </Link>
+                        <Link
+                          href={isDoctor ? '/doctor/dashboard' : '/patient/dashboard'}
+                          className={cn(
+                            'relative px-4 py-2 text-xs font-semibold transition-all duration-200',
+                            pathname.includes('dashboard')
+                              ? 'text-[#0066cc]'
+                              : 'text-slate-600 hover:text-slate-900',
+                          )}
+                        >
+                          <span>Dashboard</span>
+                          {pathname.includes('dashboard') && (
+                            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0066cc] rounded-full" />
+                          )}
                         </Link>
                         {!isDoctor && (
                           <Link
                             href="/patient/payments"
-                            onClick={() => setUserMenuOpen(false)}
-                            className="flex items-center gap-2 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
+                            className={cn(
+                              'relative px-4 py-2 text-xs font-semibold transition-all duration-200',
+                              pathname.startsWith('/patient/payments')
+                                ? 'text-[#0066cc]'
+                                : 'text-slate-600 hover:text-slate-900',
+                            )}
                           >
-                            <CreditCard className="h-3.5 w-3.5 text-slate-400" />
-                            <span>Payments & Receipts</span>
+                            <span>Payments</span>
+                            {pathname.startsWith('/patient/payments') && (
+                              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0066cc] rounded-full" />
+                            )}
                           </Link>
                         )}
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={handleLogout}
-                          disabled={loggingOut}
-                          className="flex w-full items-center gap-2 px-4 py-2 text-xs text-rose-600 hover:bg-rose-50 transition-colors text-left h-auto font-normal rounded-none justify-start"
+                      </>
+                    ) : (
+                      <>
+                        <Link
+                          href="/#doctors-section"
+                          className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-[#0066cc] transition-colors"
                         >
-                          <LogOut className="h-3.5 w-3.5 text-rose-500" />
-                          <span>{loggingOut ? 'Signing out...' : 'Sign out'}</span>
-                        </Button>
-                      </div>
+                          Our doctors
+                        </Link>
+                        <Link
+                          href="/#how-it-works"
+                          className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-[#0066cc] transition-colors"
+                        >
+                          How it works
+                        </Link>
+                      </>
                     )}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <Link
-                    href="/login"
-                    className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-[#0066cc] transition-colors"
-                  >
-                    Sign in
-                  </Link>
-                  <Link
-                    href="/doctors"
-                    className="inline-flex items-center justify-center rounded-full bg-[#0066cc] px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-[#0052a3] transition-all"
-                  >
-                    Book an appointment
-                  </Link>
-                </>
-              )}
-            </div>
+                  </nav>
+                </div>
 
-            {/* ── Mobile Header Actions (Notifications + Hamburger Toggle) ── */}
-            <div className="flex items-center gap-1.5 md:hidden">
+                {/* ── Right Side: Phone + Bell/Auth ── */}
+                <div className="hidden items-center gap-3.5 md:flex">
+                  <a
+                    href="tel:01314960280"
+                    className="flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-slate-700 hover:text-[#0066cc] transition-colors"
+                  >
+                    <Phone className="h-3.5 w-3.5 text-slate-500" />
+                    <span>0131 496 0280</span>
+                  </a>
+
+                  {user ? (
+                    <>
+                      <Link
+                        href={isDoctor ? '/doctor/notifications' : '/patient/notifications'}
+                        className="relative rounded-full p-2 text-slate-600 hover:bg-slate-100 hover:text-[#0066cc] transition-colors border border-slate-200"
+                        title="Notifications"
+                      >
+                        <Bell className="h-4 w-4" />
+                        {unreadState > 0 && (
+                          <span className="absolute -top-1 -right-1 flex min-w-[18px] h-[18px] px-1 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-xs ring-2 ring-white">
+                            {unreadState > 99 ? '99+' : unreadState}
+                          </span>
+                        )}
+                      </Link>
+
+                      <LiquidProfileDropdown
+                        user={user}
+                        userName={userName}
+                        isDoctor={isDoctor}
+                        roleLabel={roleLabel}
+                        onLogout={handleLogout}
+                        loggingOut={loggingOut}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <Link
+                        href="/login"
+                        className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-[#0066cc] transition-colors"
+                      >
+                        Sign in
+                      </Link>
+                      <Link
+                        href="/doctors"
+                        className="inline-flex items-center justify-center rounded-full bg-[#0066cc] px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-[#0052a3] transition-all"
+                      >
+                        Book an appointment
+                      </Link>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </motion.header>
+        )}
+      </AnimatePresence>
+    </div>
+
+      {/* ═══════════════════════════════════════════════════════════════
+          DESKTOP: Floating Dock (visible when scrolled — macOS style)
+         ═══════════════════════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {isDocked && (
+          <motion.div
+            key="dock-bar"
+            initial={{ opacity: 0, y: -20, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.96 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="fixed top-8 left-1/2 -translate-x-1/2 z-50 hidden md:block"
+          >
+            <Dock
+              magnification={68}
+              distance={140}
+              panelHeight={58}
+              className="items-end gap-5 sm:gap-7 px-8 sm:px-10 pb-2 pt-1.5 min-w-[620px] lg:min-w-[680px] justify-center bg-white/65 backdrop-blur-xl border border-white/50 shadow-xl shadow-slate-900/10 ring-1 ring-black/[0.04]"
+            >
+              {dockItems.map((item, idx) => {
+                const isActive = pathname === item.href;
+                const isSpecialAction = item.href === '/doctors' && !user;
+                const isProfile = (item as any).isProfile;
+
+                if (isProfile && user) {
+                  return (
+                    <DockProfileMenu
+                      key={idx}
+                      item={item}
+                      user={user}
+                      userName={userName}
+                      isDoctor={isDoctor}
+                      roleLabel={roleLabel}
+                      onLogout={handleLogout}
+                      loggingOut={loggingOut}
+                    />
+                  );
+                }
+
+                return (
+                  <Link key={idx} href={item.href} className="flex items-end h-full">
+                    <DockItem
+                      className={cn(
+                        'aspect-square rounded-full shadow-xs transition-colors',
+                        isSpecialAction
+                          ? 'bg-[#0066cc] text-white hover:bg-[#0052a3] shadow-md shadow-blue-500/25'
+                          : isActive
+                            ? 'bg-blue-50/80 text-[#0066cc] ring-2 ring-[#0066cc]/40 border border-blue-200/50'
+                            : 'bg-white/60 text-slate-700 hover:bg-white/90 hover:text-slate-900 border border-white/60',
+                      )}
+                    >
+                      <DockLabel>{item.title}</DockLabel>
+                      <DockIcon>{item.icon}</DockIcon>
+                      {isActive && (
+                        <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 h-1.5 w-1.5 rounded-full bg-[#0066cc]" />
+                      )}
+                    </DockItem>
+                  </Link>
+                );
+              })}
+            </Dock>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ═══════════════════════════════════════════════════════════════
+          MOBILE: Sticky top bar (unchanged)
+         ═══════════════════════════════════════════════════════════════ */}
+      <header
+        className="sticky top-0 z-40 w-full border-b border-black/[0.06] bg-white/75 backdrop-blur-xl shadow-xs shadow-slate-900/[0.02] md:hidden transition-all duration-200"
+      >
+        <div className="px-4">
+          <div className="flex h-14 items-center justify-between gap-4">
+            <Link href="/" className="flex items-center gap-2.5 group">
+              <BrandMark size="sm" />
+              <div className="flex flex-col">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[1.125rem] leading-[1.15] font-extrabold tracking-tight text-slate-900 group-hover:text-[#0066cc] transition-colors">
+                    Care<span className="text-[#0066cc]">Up</span>
+                  </span>
+                  <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-bold text-[#0066cc] border border-blue-200">
+                    HEALTH
+                  </span>
+                </div>
+                <span className="text-[0.6875rem] leading-[1.25] font-medium tracking-[0.06em] text-slate-500 uppercase">
+                  Doctor Appointments
+                </span>
+              </div>
+            </Link>
+
+            <div className="flex items-center gap-1.5">
               {user && (
                 <Link
                   href={isDoctor ? '/doctor/notifications' : '/patient/notifications'}
@@ -311,8 +484,8 @@ export function Navbar({ user, unreadCount = 0 }: NavbarProps) {
                 >
                   <Bell className="h-5 w-5" />
                   {unreadState > 0 && (
-                    <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#0066cc] text-[10px] font-bold text-white shadow-xs">
-                      {unreadState > 9 ? '9+' : unreadState}
+                    <span className="absolute -top-0.5 -right-0.5 flex min-w-[18px] h-[18px] px-1 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-xs ring-2 ring-white">
+                      {unreadState > 99 ? '99+' : unreadState}
                     </span>
                   )}
                 </Link>
@@ -332,7 +505,7 @@ export function Navbar({ user, unreadCount = 0 }: NavbarProps) {
         </div>
       </header>
 
-      {/* ── Mobile Drawer Backdrop (Outside header so fixed positioning is viewport-relative) ── */}
+      {/* ── Mobile Drawer Backdrop ── */}
       {mobileMenuOpen && (
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 md:hidden transition-opacity duration-300"
@@ -341,7 +514,7 @@ export function Navbar({ user, unreadCount = 0 }: NavbarProps) {
         />
       )}
 
-      {/* ── Mobile Slide-Over Drawer (from Right Side, 100vh height) ── */}
+      {/* ── Mobile Slide-Over Drawer ── */}
       <aside
         className={cn(
           'fixed inset-y-0 right-0 z-50 w-80 max-w-[85vw] h-full h-[100dvh] bg-white shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out md:hidden',
@@ -409,7 +582,6 @@ export function Navbar({ user, unreadCount = 0 }: NavbarProps) {
                   Menu
                 </p>
 
-                {/* Dashboard */}
                 <Link
                   href={isDoctor ? '/doctor/dashboard' : '/patient/dashboard'}
                   onClick={closeMobile}
@@ -427,7 +599,6 @@ export function Navbar({ user, unreadCount = 0 }: NavbarProps) {
                   <ChevronRight className="h-4 w-4 text-slate-300" />
                 </Link>
 
-                {/* Book a visit */}
                 <Link
                   href="/doctors"
                   onClick={closeMobile}
@@ -445,7 +616,6 @@ export function Navbar({ user, unreadCount = 0 }: NavbarProps) {
                   <ChevronRight className="h-4 w-4 text-slate-300" />
                 </Link>
 
-                {/* Appointments */}
                 <Link
                   href={isDoctor ? '/doctor/appointments' : '/patient/appointments'}
                   onClick={closeMobile}
@@ -463,7 +633,6 @@ export function Navbar({ user, unreadCount = 0 }: NavbarProps) {
                   <ChevronRight className="h-4 w-4 text-slate-300" />
                 </Link>
 
-                {/* Payments & Receipts (Patients) */}
                 {!isDoctor && (
                   <Link
                     href="/patient/payments"
@@ -483,7 +652,6 @@ export function Navbar({ user, unreadCount = 0 }: NavbarProps) {
                   </Link>
                 )}
 
-                {/* Notifications with Bell Icon */}
                 <Link
                   href={isDoctor ? '/doctor/notifications' : '/patient/notifications'}
                   onClick={closeMobile}
@@ -499,15 +667,14 @@ export function Navbar({ user, unreadCount = 0 }: NavbarProps) {
                     <span>Notifications</span>
                   </div>
                   {unreadState > 0 ? (
-                    <span className="rounded-full bg-[#0066cc] px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
-                      {unreadState > 9 ? '9+' : unreadState} new
+                    <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
+                      {unreadState > 99 ? '99+' : unreadState} new
                     </span>
                   ) : (
                     <ChevronRight className="h-4 w-4 text-slate-300" />
                   )}
                 </Link>
 
-                {/* Profile */}
                 <Link
                   href={isDoctor ? '/doctor/profile' : '/patient/profile'}
                   onClick={closeMobile}
@@ -624,7 +791,7 @@ export function Navbar({ user, unreadCount = 0 }: NavbarProps) {
           )}
         </div>
 
-        {/* Drawer Bottom Footer (Logout for logged in user) */}
+        {/* Drawer Bottom Footer (Logout) */}
         {user && (
           <div className="p-4 border-t border-slate-100 shrink-0 bg-slate-50/70">
             <Button
