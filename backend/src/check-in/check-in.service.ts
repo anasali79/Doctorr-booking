@@ -202,6 +202,7 @@ export class CheckInService {
         doctorId:      app!.doctorId,
         status:        AppointmentStatus.CHECKED_IN,
         updatedAt:     app!.checkedInAt!.toISOString(),
+        checkedInAt:   app!.checkedInAt!.toISOString(),
       },
     );
 
@@ -210,6 +211,13 @@ export class CheckInService {
     return {
       success: true,
       message: 'Checked in successfully',
+      checkedInAt: app!.checkedInAt!.toISOString(),
+      data: {
+        id: app!.id,
+        status: app!.status,
+        checkedInAt: app!.checkedInAt!.toISOString(),
+        tokenNumber: app!.tokenNumber,
+      },
     };
   }
 
@@ -881,6 +889,7 @@ export class CheckInService {
         doctorId: app!.doctorId,
         status: AppointmentStatus.CHECKED_IN,
         updatedAt: app!.checkedInAt!.toISOString(),
+        checkedInAt: app!.checkedInAt!.toISOString(),
       },
     );
 

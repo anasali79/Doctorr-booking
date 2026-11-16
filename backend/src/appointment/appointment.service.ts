@@ -17,6 +17,7 @@ import { RescheduleRequestStatus } from './enums/reschedule-request-status.enum'
 import { Doctor } from '../doctor/entities/doctor.entity';
 import { Patient } from '../patient/entities/patient.entity';
 import { DoctorLeave } from '../doctor/entities/leave.entity';
+import { LeaveStatus } from '../common/enums/leave-status.enum';
 import { Prescription } from '../prescription/entities/prescription.entity';
 import { BookAppointmentDto } from './dto/book-appointment.dto';
 import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
@@ -659,6 +660,7 @@ export class AppointmentService {
       doctorId: savedAppt.doctorId,
       status: savedAppt.status,
       updatedAt: new Date().toISOString(),
+      checkedInAt: savedAppt.checkedInAt?.toISOString() || new Date().toISOString(),
       patientName: dto.fullName,
       date: savedAppt.date,
       startTime: savedAppt.startTime,
@@ -1196,10 +1198,11 @@ export class AppointmentService {
     if (!doctor) throw new NotFoundException(`Doctor with ID ${appointment.doctorId} not found`);
 
     // ── Doctor leave check ──────────────────────────────────────────────────
-    const leaveOnRescheduleDate = await this.leaveRepo.findOne({
-      where: { doctorId: appointment.doctorId, date: dto.date },
-    });
-    if (leaveOnRescheduleDate) {
+    const isDoctorLeave = await this.availabilityService.isDoctorOnLeave(
+      appointment.doctorId,
+      dto.date,
+    );
+    if (isDoctorLeave) {
       throw new BadRequestException(
         'Doctor is unavailable on this date. Please select another available date.',
       );
@@ -1786,10 +1789,11 @@ export class AppointmentService {
     await this.validateFutureDateTime(appointment.doctorId, dto.date, dto.startTime, dto.endTime);
 
     // ── Doctor leave check ──────────────────────────────────────────────────
-    const leaveOnRescheduleDate = await this.leaveRepo.findOne({
-      where: { doctorId: doctor.id, date: dto.date },
-    });
-    if (leaveOnRescheduleDate) {
+    const isDoctorLeave = await this.availabilityService.isDoctorOnLeave(
+      doctor.id,
+      dto.date,
+    );
+    if (isDoctorLeave) {
       throw new BadRequestException(
         'You are marked as unavailable on this date. Please select another date.',
       );
@@ -2135,10 +2139,8 @@ export class AppointmentService {
     if (!doctor) {
       throw new NotFoundException(`Doctor with ID ${doctorId} not found`);
     }
-    const leaveRecord = await this.leaveRepo.findOne({
-      where: { doctorId, date },
-    });
-    if (leaveRecord) {
+    const isDoctorLeave = await this.availabilityService.isDoctorOnLeave(doctorId, date);
+    if (isDoctorLeave) {
       throw new BadRequestException(
         'Doctor is unavailable on this date. Please select another available date.',
       );

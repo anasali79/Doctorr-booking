@@ -19,10 +19,11 @@ export interface AppointmentEventPayload {
   /** ISO-8601 timestamp of when the status changed */
   updatedAt: string;
 
-  /** Optional fields for booking/reschedule events (doctor toast) */
+  /** Optional fields for booking/reschedule/check-in events */
   patientName?: string;
   doctorName?: string;
   date?: string;
   startTime?: string;
   endTime?: string;
+  checkedInAt?: string;
 }
