@@ -1,7 +1,7 @@
 import React from 'react';
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
-import { getDoctorAppointments } from '@/lib/api/doctors';
+import { getDoctorAppointments, getDoctorProfile } from '@/lib/api/doctors';
 import { DoctorLiveQueueClient } from '@/components/doctor/DoctorLiveQueueClient';
 import { getTodayIST } from '@/lib/utils';
 
@@ -23,11 +23,22 @@ export default async function DoctorAppointmentsPage({ searchParams }: DoctorApp
   const selectedDate = params.date || todayIST;
 
   let appointments: any[] = [];
+  let doctorProfile: any = null;
+
   try {
-    const res = await getDoctorAppointments(selectedDate, token);
-    appointments = res.data || [];
+    const [apptRes, profRes] = await Promise.allSettled([
+      getDoctorAppointments(selectedDate, token),
+      getDoctorProfile(token),
+    ]);
+
+    if (apptRes.status === 'fulfilled') {
+      appointments = apptRes.value.data || [];
+    }
+    if (profRes.status === 'fulfilled') {
+      doctorProfile = profRes.value.data || null;
+    }
   } catch (err) {
-    console.error('Failed to load doctor appointments:', err);
+    console.error('Failed to load doctor appointments or profile:', err);
   }
 
   return (
@@ -35,6 +46,7 @@ export default async function DoctorAppointmentsPage({ searchParams }: DoctorApp
       initialAppointments={appointments}
       selectedDate={selectedDate}
       todayIST={todayIST}
+      doctorId={doctorProfile?.id || user.id}
     />
   );
 }

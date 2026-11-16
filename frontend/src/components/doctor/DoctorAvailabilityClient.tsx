@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SmoothTimePicker } from '@/components/ui/smooth-time-picker';
 import {
   Table,
   TableHeader,
@@ -202,23 +203,11 @@ export function DoctorAvailabilityClient({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="field-label">Start Time</label>
-              <Input
-                type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                className="field-input text-xs font-semibold"
-                required
-              />
+              <SmoothTimePicker value={startTime} onChange={setStartTime} />
             </div>
             <div>
               <label className="field-label">End Time</label>
-              <Input
-                type="time"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                className="field-input text-xs font-semibold"
-                required
-              />
+              <SmoothTimePicker value={endTime} onChange={setEndTime} />
             </div>
           </div>
 

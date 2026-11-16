@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { SmoothDatePicker } from '@/components/ui/smooth-date-picker';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -398,11 +399,11 @@ export function MyDayClient({
   const dateObj = new Date(selectedDate);
   const formattedDateButton = !isNaN(dateObj.getTime())
     ? dateObj.toLocaleDateString('en-GB', {
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      })
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    })
     : selectedDate;
 
   return (
@@ -418,29 +419,41 @@ export function MyDayClient({
           </p>
         </div>
 
-        <div className="flex items-center gap-3 relative">
-          {/* Date Selector Dropdown Button */}
-          <div className="relative">
-            <Button type="button" variant="ghost" onClick={() => setDatePickerOpen(!datePickerOpen)} className="inline-flex items-center gap-2.5 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-xs h-auto">
-              <Calendar className="h-4 w-4 text-slate-500" />
-              <span>{formattedDateButton}</span>
-              <ChevronDown className="h-4 w-4 text-slate-400" />
-            </Button>
+        <div className="flex items-center gap-2">
+          {/* Quick Prev / Next Arrows */}
+          <div className="flex items-center bg-white rounded-xl border border-slate-200/90 shadow-2xs p-0.5">
+            <button
+              type="button"
+              onClick={handlePrevDay}
+              className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+              title="Previous Day"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDateChange(todayIST)}
+              className="px-2 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={handleNextDay}
+              className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+              title="Next Day"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
 
-            {/* Date Picker Popover */}
-            {datePickerOpen && (
-              <div className="absolute right-0 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl z-50">
-                <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
-                  <span className="text-xs font-bold text-slate-700">Select Date</span>
-                  <div className="flex items-center gap-1">
-                    <Button type="button" variant="ghost" size="icon" onClick={handlePrevDay} className="p-1 hover:bg-slate-100 rounded text-slate-500 h-7 w-7"><ChevronLeft className="h-4 w-4" /></Button>
-                    <Button type="button" variant="ghost" onClick={() => handleDateChange(todayIST)} className="px-2 py-0.5 text-[11px] font-semibold text-[#0066cc] hover:bg-blue-50 rounded h-auto">Today</Button>
-                    <Button type="button" variant="ghost" size="icon" onClick={handleNextDay} className="p-1 hover:bg-slate-100 rounded text-slate-500 h-7 w-7"><ChevronRight className="h-4 w-4" /></Button>
-                  </div>
-                </div>
-                <Input type="date" value={selectedDate} onChange={(e) => e.target.value && handleDateChange(e.target.value)} className="w-full rounded-xl border border-slate-200 p-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20 h-auto" />
-              </div>
-            )}
+          {/* Smooth Date Picker */}
+          <div className="min-w-[170px] sm:min-w-[210px]">
+            <SmoothDatePicker
+              value={selectedDate}
+              onChange={handleDateChange}
+              className="px-3.5 py-2 text-xs sm:text-sm font-semibold shadow-xs"
+            />
           </div>
 
           {/* Manage Availability Button */}
@@ -524,10 +537,6 @@ export function MyDayClient({
             {/* Queue Header & Live Badge */}
             <div className="flex items-center gap-3 mb-5">
               <h2 className="text-lg font-bold text-slate-900">Live Patient Queue</h2>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 border border-emerald-200">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Live</span>
-              </span>
             </div>
 
             {/* Search Input */}
@@ -547,10 +556,9 @@ export function MyDayClient({
                   { id: 'no_show', label: 'No-show' },
                 ] as const
               ).map((tab) => (
-                <Button key={tab.id} type="button" variant="ghost" onClick={() => setActiveFilter(tab.id)} className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    activeFilter === tab.id
-                      ? 'bg-[#0066cc] text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80 hover:text-slate-900'
+                <Button key={tab.id} type="button" variant="ghost" onClick={() => setActiveFilter(tab.id)} className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${activeFilter === tab.id
+                  ? 'bg-[#0066cc] text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80 hover:text-slate-900'
                   } h-auto`}>{tab.label}</Button>
               ))}
             </div>
@@ -638,11 +646,10 @@ export function MyDayClient({
                       return (
                         <TableRow key={appt.id}
                           onClick={() => setSelectedApptId(appt.id)}
-                          className={`cursor-pointer transition-colors ${
-                            isSelected
-                              ? 'bg-blue-50/60 font-medium'
-                              : 'hover:bg-slate-50/80'
-                          }`}
+                          className={`cursor-pointer transition-colors ${isSelected
+                            ? 'bg-blue-50/60 font-medium'
+                            : 'hover:bg-slate-50/80'
+                            }`}
                         >
                           {/* Token Number */}
                           <TableCell className="py-3 px-3 font-mono text-xs font-semibold text-slate-500">
@@ -674,11 +681,10 @@ export function MyDayClient({
                           {/* Type */}
                           <TableCell className="py-3 px-3">
                             <span
-                              className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${
-                                isNew
-                                  ? 'bg-sky-50 text-[#0066cc] border border-sky-100'
-                                  : 'bg-slate-100 text-slate-600'
-                              }`}
+                              className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${isNew
+                                ? 'bg-sky-50 text-[#0066cc] border border-sky-100'
+                                : 'bg-slate-100 text-slate-600'
+                                }`}
                             >
                               {isNew ? 'New' : 'Follow-up'}
                             </span>
@@ -833,64 +839,63 @@ export function MyDayClient({
                 </div>
               ) : (
                 sortedAppointments.slice(0, 6).map((item, i) => {
-                const isSelected = currentAppt?.id === item.id;
-                const pName = item.patient?.fullName || 'Patient';
-                const reason = item.patient?.basicHealthInfo || 'General Consultation';
-                const isNew = (item.tokenNumber || i) % 2 === 1;
+                  const isSelected = currentAppt?.id === item.id;
+                  const pName = item.patient?.fullName || 'Patient';
+                  const reason = item.patient?.basicHealthInfo || 'General Consultation';
+                  const isNew = (item.tokenNumber || i) % 2 === 1;
 
-                let statusLabel = 'Upcoming';
-                let statusCls = 'text-slate-500 bg-slate-100';
-                if (item.status === 'CHECKED_IN') {
-                  statusLabel = 'Waiting';
-                  statusCls = 'text-[#0066cc] bg-blue-50 border border-blue-200 font-semibold';
-                } else if (item.status === 'IN_CONSULTATION') {
-                  statusLabel = 'In Consultation';
-                  statusCls = 'text-indigo-700 bg-indigo-50 border border-indigo-200 font-semibold';
-                } else if (item.status === 'COMPLETED') {
-                  statusLabel = 'Completed';
-                  statusCls = 'text-emerald-700 bg-emerald-50 border border-emerald-200';
-                }
+                  let statusLabel = 'Upcoming';
+                  let statusCls = 'text-slate-500 bg-slate-100';
+                  if (item.status === 'CHECKED_IN') {
+                    statusLabel = 'Waiting';
+                    statusCls = 'text-[#0066cc] bg-blue-50 border border-blue-200 font-semibold';
+                  } else if (item.status === 'IN_CONSULTATION') {
+                    statusLabel = 'In Consultation';
+                    statusCls = 'text-indigo-700 bg-indigo-50 border border-indigo-200 font-semibold';
+                  } else if (item.status === 'COMPLETED') {
+                    statusLabel = 'Completed';
+                    statusCls = 'text-emerald-700 bg-emerald-50 border border-emerald-200';
+                  }
 
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => setSelectedApptId(item.id)}
-                    className={`flex items-start gap-3 p-2 rounded-xl cursor-pointer transition-all ${
-                      isSelected ? 'bg-blue-50/70 shadow-xs' : 'hover:bg-slate-50'
-                    }`}
-                  >
-                    {/* Time */}
-                    <div className="w-16 shrink-0 text-xs font-semibold text-slate-600 pt-0.5">
-                      {formatTime(item.startTime)}
-                    </div>
-
-                    {/* Timeline Dot & Line */}
-                    <div className="flex flex-col items-center self-stretch">
-                      <span className="h-2.5 w-2.5 rounded-full bg-[#0066cc] ring-4 ring-blue-50 shrink-0 mt-1" />
-                      {i < Math.min(sortedAppointments.length, 6) - 1 && (
-                        <span className="w-px flex-1 bg-slate-200 my-1" />
-                      )}
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs sm:text-sm font-bold text-slate-900 truncate">
-                        {pName}
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => setSelectedApptId(item.id)}
+                      className={`flex items-start gap-3 p-2 rounded-xl cursor-pointer transition-all ${isSelected ? 'bg-blue-50/70 shadow-xs' : 'hover:bg-slate-50'
+                        }`}
+                    >
+                      {/* Time */}
+                      <div className="w-16 shrink-0 text-xs font-semibold text-slate-600 pt-0.5">
+                        {formatTime(item.startTime)}
                       </div>
-                      <div className="text-[11px] text-slate-400 truncate mt-0.5">
-                        {isNew ? 'New Patient' : 'Follow-up'} • {reason}
+
+                      {/* Timeline Dot & Line */}
+                      <div className="flex flex-col items-center self-stretch">
+                        <span className="h-2.5 w-2.5 rounded-full bg-[#0066cc] ring-4 ring-blue-50 shrink-0 mt-1" />
+                        {i < Math.min(sortedAppointments.length, 6) - 1 && (
+                          <span className="w-px flex-1 bg-slate-200 my-1" />
+                        )}
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                          {pName}
+                        </div>
+                        <div className="text-[11px] text-slate-400 truncate mt-0.5">
+                          {isNew ? 'New Patient' : 'Follow-up'} • {reason}
+                        </div>
+                      </div>
+
+                      {/* Status Pill */}
+                      <div className="shrink-0">
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] ${statusCls}`}>
+                          {statusLabel}
+                        </span>
                       </div>
                     </div>
-
-                    {/* Status Pill */}
-                    <div className="shrink-0">
-                      <span className={`px-2 py-0.5 rounded-md text-[10px] ${statusCls}`}>
-                        {statusLabel}
-                      </span>
-                    </div>
-                  </div>
-                );
-              }))}
+                  );
+                }))}
             </div>
           </div>
 
@@ -975,10 +980,9 @@ export function MyDayClient({
 
               {/* Tabs */}
               <div className="flex items-center gap-6 border-b border-slate-200 text-xs font-semibold">
-                <Button type="button" variant="ghost" onClick={() => setActiveDetailTab('history')} className={`pb-2.5 transition-colors relative ${
-                    activeDetailTab === 'history'
-                      ? 'text-[#0066cc]'
-                      : 'text-slate-500 hover:text-slate-800'
+                <Button type="button" variant="ghost" onClick={() => setActiveDetailTab('history')} className={`pb-2.5 transition-colors relative ${activeDetailTab === 'history'
+                  ? 'text-[#0066cc]'
+                  : 'text-slate-500 hover:text-slate-800'
                   } h-auto p-0 font-semibold rounded-none hover:bg-transparent`}>
                   Medical History
                   {activeDetailTab === 'history' && (
@@ -986,10 +990,9 @@ export function MyDayClient({
                   )}
                 </Button>
 
-                <Button type="button" variant="ghost" onClick={() => setActiveDetailTab('previous')} className={`pb-2.5 transition-colors relative ${
-                    activeDetailTab === 'previous'
-                      ? 'text-[#0066cc]'
-                      : 'text-slate-500 hover:text-slate-800'
+                <Button type="button" variant="ghost" onClick={() => setActiveDetailTab('previous')} className={`pb-2.5 transition-colors relative ${activeDetailTab === 'previous'
+                  ? 'text-[#0066cc]'
+                  : 'text-slate-500 hover:text-slate-800'
                   } h-auto p-0 font-semibold rounded-none hover:bg-transparent`}>
                   Previous Visits
                   {activeDetailTab === 'previous' && (
@@ -997,10 +1000,9 @@ export function MyDayClient({
                   )}
                 </Button>
 
-                <Button type="button" variant="ghost" onClick={() => setActiveDetailTab('notes')} className={`pb-2.5 transition-colors relative ${
-                    activeDetailTab === 'notes'
-                      ? 'text-[#0066cc]'
-                      : 'text-slate-500 hover:text-slate-800'
+                <Button type="button" variant="ghost" onClick={() => setActiveDetailTab('notes')} className={`pb-2.5 transition-colors relative ${activeDetailTab === 'notes'
+                  ? 'text-[#0066cc]'
+                  : 'text-slate-500 hover:text-slate-800'
                   } h-auto p-0 font-semibold rounded-none hover:bg-transparent`}>
                   Notes
                   {activeDetailTab === 'notes' && (
