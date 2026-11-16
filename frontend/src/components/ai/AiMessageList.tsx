@@ -20,6 +20,7 @@ import {
 import { AiConfirmationCard } from './AiConfirmationCard';
 import { DoctorRosterCard } from './DoctorRosterCard';
 import { PatientClinicalDossierCard } from './PatientClinicalDossierCard';
+import { AiOrbAvatar } from '@/components/ui/ai-orb-avatar';
 
 export interface ChatMessage {
   id: string;
@@ -204,8 +205,8 @@ export function AiMessageList({
   if (messages.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center p-6 text-center text-zinc-500">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
-          <Sparkles className="h-6 w-6" />
+        <div className="flex items-center justify-center mb-1">
+          <AiOrbAvatar size="lg" color="blue" glow={true} />
         </div>
         <h3 className="mt-3 font-semibold text-zinc-900 dark:text-zinc-100">
           {currentEmptyText.title}
@@ -232,8 +233,8 @@ export function AiMessageList({
             className={`flex gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}
           >
             {!isUser && (
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm mt-0.5">
-                <Bot className="h-4 w-4" />
+              <div className="shrink-0 mt-0.5">
+                <AiOrbAvatar size="xs" color="blue" glow={false} />
               </div>
             )}
 
@@ -564,8 +565,8 @@ export function AiMessageList({
 
       {isLoading && (
         <div className="flex gap-2.5 justify-start">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm">
-            <Bot className="h-4 w-4" />
+          <div className="shrink-0 mt-0.5">
+            <AiOrbAvatar size="xs" color="blue" isSpeaking={true} glow={false} />
           </div>
           <div className="rounded-2xl rounded-tl-xs bg-zinc-100 px-4 py-3 text-sm text-zinc-500 dark:bg-zinc-800/80 border border-zinc-200/60 dark:border-zinc-700/60">
             <div className="flex items-center gap-1.5">

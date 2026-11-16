@@ -1,7 +1,7 @@
 import React from 'react';
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
-import { getNotifications } from '@/lib/api/notifications';
+import { getNotifications, getUnreadCount } from '@/lib/api/notifications';
 import { PatientNotificationsClient } from '@/components/patient/PatientNotificationsClient';
 
 export const dynamic = 'force-dynamic';
@@ -14,9 +14,19 @@ export default async function PatientNotificationsPage() {
   }
 
   let notifications: any[] = [];
+  let totalUnread = 0;
+  let meta = { total: 0, page: 1, limit: 20, totalPages: 1 };
+
   try {
-    const res = await getNotifications(token);
-    notifications = res.data || [];
+    const [notifRes, unreadRes] = await Promise.all([
+      getNotifications(token),
+      getUnreadCount(token),
+    ]);
+    notifications = (notifRes as any)?.data || [];
+    if ((notifRes as any)?.meta) {
+      meta = (notifRes as any).meta;
+    }
+    totalUnread = unreadRes?.data?.unreadCount ?? unreadRes?.unreadCount ?? 0;
   } catch (err) {
     console.error('Error fetching notifications:', err);
   }
@@ -37,7 +47,11 @@ export default async function PatientNotificationsPage() {
         </p>
       </div>
 
-      <PatientNotificationsClient initialNotifications={notifications} />
+      <PatientNotificationsClient
+        initialNotifications={notifications}
+        initialUnreadCount={totalUnread}
+        initialMeta={meta}
+      />
     </div>
   );
 }

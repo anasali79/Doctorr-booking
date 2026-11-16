@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import { formatDate, formatTime, formatCurrency } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -16,6 +16,9 @@ import {
   DollarSign,
   ArrowRight,
   ShieldAlert,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -62,9 +65,22 @@ interface PaymentItem {
   }>;
 }
 
+interface MetaData {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export function PatientPaymentsClient() {
+  const containerRef = useRef<HTMLDivElement>(null);
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [meta, setMeta] = useState<MetaData>({ total: 0, page: 1, limit: 10, totalPages: 1 });
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  
   const [refundTarget, setRefundTarget] = useState<PaymentItem | null>(null);
   const [refundReason, setRefundReason] = useState('');
   const [refunding, setRefunding] = useState(false);
@@ -76,14 +92,29 @@ export function PatientPaymentsClient() {
     return () => clearInterval(timer);
   }, []);
 
-  const fetchPayments = async () => {
+  const fetchPayments = async (targetPage = page, targetLimit = limit) => {
     try {
       setLoading(true);
       const res = await clientAxios.get<{
         message: string;
         data: PaymentItem[];
-      }>('/api/payment/history');
-      setPayments(res.data.data || []);
+        meta?: MetaData;
+      }>(`/api/payment/history?page=${targetPage}&limit=${targetLimit}`);
+
+      const data = res.data.data || [];
+      setPayments(data);
+
+      if (res.data.meta) {
+        setMeta(res.data.meta);
+        setPage(res.data.meta.page);
+      } else {
+        setMeta({
+          total: data.length,
+          page: targetPage,
+          limit: targetLimit,
+          totalPages: Math.max(1, Math.ceil(data.length / targetLimit)),
+        });
+      }
     } catch (err) {
       toast.error('Failed to load payment history', { description: extractErrorMessage(err) });
     } finally {
@@ -92,8 +123,16 @@ export function PatientPaymentsClient() {
   };
 
   useEffect(() => {
-    fetchPayments();
-  }, []);
+    fetchPayments(page, limit);
+  }, [page, limit]);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > meta.totalPages || newPage === page) return;
+    setPage(newPage);
+    if (containerRef.current) {
+      containerRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   const handleOpenRefund = (payment: PaymentItem) => {
     setRefundTarget(payment);
@@ -123,7 +162,7 @@ export function PatientPaymentsClient() {
       });
 
       setRefundTarget(null);
-      fetchPayments();
+      fetchPayments(page, limit);
     } catch (err) {
       toast.error('Refund Request Failed', {
         description: extractErrorMessage(err),
@@ -155,7 +194,7 @@ export function PatientPaymentsClient() {
         doctorName: p.appointment?.doctor?.fullName || 'Doctor',
         onSuccess: () => {
           toast.success('Payment Received! Your appointment is confirmed.');
-          fetchPayments();
+          fetchPayments(page, limit);
         },
         onFailure: (err) => {
           toast.error('Payment Incomplete', {
@@ -197,8 +236,40 @@ export function PatientPaymentsClient() {
     }
   };
 
+  // Filter payments on current page by status tab
+  const displayedPayments = payments.filter((p) => {
+    if (statusFilter === 'ALL') return true;
+    if (statusFilter === 'COMPLETED') return p.status === 'COMPLETED';
+    if (statusFilter === 'PENDING') return p.status === 'PENDING';
+    if (statusFilter === 'REFUNDED') return p.status === 'REFUNDED' || p.status === 'PARTIALLY_REFUNDED';
+    return true;
+  });
+
+  const startIndex = meta.total === 0 ? 0 : (meta.page - 1) * meta.limit + 1;
+  const endIndex = Math.min(meta.page * meta.limit, meta.total);
+
+  // Helper for generating page numbers with ellipsis
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    const total = meta.totalPages;
+    const current = meta.page;
+
+    if (total <= 7) {
+      for (let i = 1; i <= total; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (current > 3) pages.push('...');
+      const start = Math.max(2, current - 1);
+      const end = Math.min(total - 1, current + 1);
+      for (let i = start; i <= end; i++) pages.push(i);
+      if (current < total - 2) pages.push('...');
+      pages.push(total);
+    }
+    return pages;
+  };
+
   return (
-    <div className="space-y-6">
+    <div ref={containerRef} className="space-y-6">
       {/* Policy banner */}
       <Card className="rounded-2xl border border-blue-100 bg-[#f0f7ff] p-5 shadow-xs">
         <div className="flex items-start gap-3">
@@ -213,23 +284,58 @@ export function PatientPaymentsClient() {
         </div>
       </Card>
 
+      {/* Filter tabs and summary row */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+          {[
+            { id: 'ALL', label: 'All Transactions' },
+            { id: 'COMPLETED', label: 'Paid' },
+            { id: 'PENDING', label: 'Pending' },
+            { id: 'REFUNDED', label: 'Refunds' },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setStatusFilter(tab.id)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                statusFilter === tab.id
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {meta.total > 0 && (
+          <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+            <span>
+              Showing <strong className="text-slate-800">{startIndex}–{endIndex}</strong> of <strong className="text-slate-800">{meta.total}</strong> transactions
+            </span>
+          </div>
+        )}
+      </div>
+
       {/* Payment Records */}
       {loading ? (
-        <div className="flex flex-col items-center justify-center p-12 text-slate-400">
+        <div className="flex flex-col items-center justify-center p-16 text-slate-400 bg-white rounded-2xl border border-slate-100">
           <Loader2 className="w-8 h-8 animate-spin text-[#0066cc] mb-3" />
-          <span className="text-xs font-medium">Loading payments…</span>
+          <span className="text-xs font-semibold text-slate-600">Loading payment history…</span>
         </div>
-      ) : payments.length === 0 ? (
+      ) : displayedPayments.length === 0 ? (
         <Card className="rounded-2xl border border-slate-200 bg-white p-12 text-center shadow-xs">
           <CreditCard className="w-10 h-10 text-slate-300 mx-auto mb-3" />
           <h3 className="text-sm font-bold text-slate-800">No payment records found</h3>
           <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-            When you complete consultation bookings, receipts and refund statuses will appear here.
+            {statusFilter !== 'ALL'
+              ? `No transactions match the "${statusFilter}" filter.`
+              : 'When you complete consultation bookings, receipts and refund statuses will appear here.'}
           </p>
         </Card>
       ) : (
         <div className="space-y-4">
-          {payments.map((p) => {
+          {displayedPayments.map((p) => {
             const amountInRupees = p.amount / 100;
             const remainingBalance = (p.amount - (p.amountRefunded || 0)) / 100;
             const isAppointmentCompleted = p.appointment?.status === 'COMPLETED';
@@ -331,7 +437,7 @@ export function PatientPaymentsClient() {
                               type="button"
                               onClick={() => handleRetryPayment(p)}
                               disabled={retryingId === p.id}
-                              className="text-xs font-bold bg-[#0066cc] hover:bg-[#0052a3] text-white h-8 px-3 rounded-lg shadow-xs"
+                              className="text-xs font-bold bg-[#0066cc] hover:bg-[#0052a3] text-white h-8 px-3 rounded-lg shadow-xs cursor-pointer"
                             >
                               {retryingId === p.id ? (
                                 <Loader2 className="w-3 h-3 animate-spin mr-1" />
@@ -380,6 +486,70 @@ export function PatientPaymentsClient() {
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {meta.totalPages > 1 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 pb-2 border-t border-slate-200/80">
+          <p className="text-xs text-slate-500 font-medium order-2 sm:order-1">
+            Page <strong className="text-slate-800">{meta.page}</strong> of <strong className="text-slate-800">{meta.totalPages}</strong>
+          </p>
+
+          <div className="flex items-center gap-1.5 order-1 sm:order-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(meta.page - 1)}
+              disabled={meta.page <= 1 || loading}
+              className="flex items-center gap-1 h-9 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span>Previous</span>
+            </Button>
+
+            <div className="flex items-center gap-1">
+              {getPageNumbers().map((pNum, idx) => {
+                if (pNum === '...') {
+                  return (
+                    <span key={`dots-${idx}`} className="px-2 text-xs text-slate-400">
+                      …
+                    </span>
+                  );
+                }
+                const pageNumber = pNum as number;
+                const isActive = pageNumber === meta.page;
+                return (
+                  <button
+                    key={`page-${pageNumber}`}
+                    type="button"
+                    onClick={() => handlePageChange(pageNumber)}
+                    disabled={loading}
+                    className={`min-w-[36px] h-9 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {pageNumber}
+                  </button>
+                );
+              })}
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(meta.page + 1)}
+              disabled={meta.page >= meta.totalPages || loading}
+              className="flex items-center gap-1 h-9 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
+            >
+              <span>Next</span>
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       )}
 
@@ -451,4 +621,3 @@ export function PatientPaymentsClient() {
     </div>
   );
 }
-
