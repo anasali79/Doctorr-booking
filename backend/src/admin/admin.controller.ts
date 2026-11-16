@@ -184,6 +184,59 @@ export class AdminController {
     return this.adminService.suspendDoctor(admin.id, id, body.reason);
   }
 
+  // ─── Doctor Leave Requests Management ──────────────────────────────────────
+
+  @Get('leaves')
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  listLeaves(
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '20',
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.adminService.listLeaves({
+      page: Math.max(1, parseInt(page) || 1),
+      limit: Math.min(100, parseInt(limit) || 20),
+      status,
+      search,
+    });
+  }
+
+  @Patch('leaves/:id/approve')
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  approveLeave(
+    @CurrentUser() admin: { id: string },
+    @Param(
+      'id',
+      new ParseUUIDPipe({
+        version: '4',
+        exceptionFactory: () =>
+          new BadRequestException('Invalid leave ID format'),
+      }),
+    )
+    id: string,
+  ) {
+    return this.adminService.approveLeave(admin.id, id);
+  }
+
+  @Patch('leaves/:id/reject')
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  rejectLeave(
+    @CurrentUser() admin: { id: string },
+    @Param(
+      'id',
+      new ParseUUIDPipe({
+        version: '4',
+        exceptionFactory: () =>
+          new BadRequestException('Invalid leave ID format'),
+      }),
+    )
+    id: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.adminService.rejectLeave(admin.id, id, body?.reason);
+  }
+
   // ─── Secure Document Access ─────────────────────────────────────────────────
 
   @Get('doctors/:doctorId/documents/:field')

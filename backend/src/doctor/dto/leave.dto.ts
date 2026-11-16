@@ -13,7 +13,20 @@ export class CreateLeaveDto {
 
   @IsOptional()
   @IsString()
+  @Matches(DATE_REGEX, {
+    message: 'endDate must be in YYYY-MM-DD format, e.g. "2026-06-17"',
+  })
+  endDate?: string;
+
+  @IsOptional()
+  @IsString()
   reason?: string;
 }
 
 export class UpdateLeaveDto extends PartialType(CreateLeaveDto) {}
+
+export class AdminReviewLeaveDto {
+  @IsOptional()
+  @IsString()
+  rejectionReason?: string;
+}

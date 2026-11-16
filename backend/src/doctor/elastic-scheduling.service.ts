@@ -1467,10 +1467,8 @@ export class ElasticSchedulingService {
     }
 
     // Validate doctor leave
-    const leave = await this.leaveRepo.findOne({
-      where: { doctorId: doctor.id, date: dto.proposedDate },
-    });
-    if (leave) {
+    const onLeave = await this.availabilityService.isDoctorOnLeave(doctor.id, dto.proposedDate);
+    if (onLeave) {
       throw new BadRequestException('You are marked on leave on this date');
     }
 
@@ -2195,10 +2193,8 @@ export class ElasticSchedulingService {
       if (patientBookedDates.has(targetDate)) return [];
 
       // Check doctor leave
-      const leave = await this.leaveRepo.findOne({
-        where: { doctorId: doctor.id, date: targetDate },
-      });
-      if (leave) return [];
+      const onLeave = await this.availabilityService.isDoctorOnLeave(doctor.id, targetDate);
+      if (onLeave) return [];
 
       try {
         const availableSlots = await this.availabilityService.getAvailableSlots(doctor.id, targetDate);

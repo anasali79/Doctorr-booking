@@ -18,6 +18,7 @@ import { CustomAvailability } from './entities/custom-availability.entity';
 import { Doctor } from './entities/doctor.entity';
 import { Appointment } from '../appointment/entities/appointment.entity';
 import { DoctorLeave } from './entities/leave.entity';
+import { LeaveStatus } from '../common/enums/leave-status.enum';
 import { AppointmentRescheduleRequest } from '../appointment/entities/appointment-reschedule-request.entity';
 import { RescheduleRequestStatus } from '../appointment/enums/reschedule-request-status.enum';
 import {
@@ -304,15 +305,27 @@ export class AvailabilityService {
       appsByDate[cleanAppDate].push(app);
     }
 
-    // Fetch all doctor leaves in this 30-day range
+    // Fetch all approved doctor leaves in this 30-day range
     const leaves = await this.leaveRepo
       .createQueryBuilder('leave')
       .where('leave.doctorId = :doctorId', { doctorId: doctor.id })
-      .andWhere('leave.date >= :start', { start: startDateStr })
-      .andWhere('leave.date <= :end', { end: endDateStr })
+      .andWhere('leave.status = :status', { status: LeaveStatus.APPROVED })
+      .andWhere('leave.date <= :end AND COALESCE(leave.endDate, leave.date) >= :start', {
+        start: startDateStr,
+        end: endDateStr,
+      })
       .getMany();
 
-    const leavesMap = new Set(leaves.map((l) => l.date));
+    const leavesMap = new Set<string>();
+    for (const l of leaves) {
+      const start = new Date(l.date + 'T00:00:00Z');
+      const end = new Date((l.endDate || l.date) + 'T00:00:00Z');
+      const cur = new Date(start);
+      while (cur <= end) {
+        leavesMap.add(cur.toISOString().split('T')[0]);
+        cur.setUTCDate(cur.getUTCDate() + 1);
+      }
+    }
 
     // 2. Fetch all upcoming custom overrides
     const customOverrides = await this.customRepo
@@ -1404,10 +1417,8 @@ export class AvailabilityService {
     const dayOfWeek = getDayOfWeekFromDate(cleanDate);
 
     // ── Doctor leave check ──────────────────────────────────────────────────
-    const leaveRecord = await this.leaveRepo.findOne({
-      where: { doctorId: doctor.id, date: cleanDate },
-    });
-    if (leaveRecord) {
+    const isDoctorLeave = await this.isDoctorOnLeave(doctor.id, cleanDate);
+    if (isDoctorLeave) {
       return {
         date: cleanDate,
         dayOfWeek,
@@ -1886,10 +1897,8 @@ export class AvailabilityService {
     }
 
     // ── Doctor leave check ──────────────────────────────────────────────────
-    const leaveRecord = await this.leaveRepo.findOne({
-      where: { doctorId: doctor.id, date: cleanDate },
-    });
-    if (leaveRecord) {
+    const isDoctorLeave = await this.isDoctorOnLeave(doctor.id, cleanDate);
+    if (isDoctorLeave) {
       const emptySlots: any = [];
       emptySlots.onLeave = true;
       emptySlots.message = 'Doctor is on leave';
@@ -2511,9 +2520,15 @@ export class AvailabilityService {
    * Check if a doctor has an active approved leave on a given date.
    */
   async isDoctorOnLeave(doctorId: string, date: string): Promise<boolean> {
-    const leaveRecord = await this.leaveRepo.findOne({
-      where: { doctorId, date },
-    });
+    const leaveRecord = await this.leaveRepo
+      .createQueryBuilder('leave')
+      .where('leave.doctorId = :doctorId', { doctorId })
+      .andWhere('leave.status = :status', { status: LeaveStatus.APPROVED })
+      .andWhere(
+        'leave.date <= :date AND COALESCE(leave.endDate, leave.date) >= :date',
+        { date },
+      )
+      .getOne();
     return !!leaveRecord;
   }
 

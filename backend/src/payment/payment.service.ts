@@ -1654,17 +1654,27 @@ export class PaymentService {
   /**
    * Patient Payment History
    */
-  async getPatientPaymentHistory(userId: string) {
+  async getPatientPaymentHistory(userId: string, page?: number, limit?: number) {
     const patient = await this.getPatientByUserId(userId);
 
-    const payments = await this.paymentRepo.find({
+    const pageNum = page !== undefined ? Math.max(1, page) : undefined;
+    const limitNum = limit !== undefined ? Math.min(100, Math.max(1, limit)) : undefined;
+
+    const findOptions: any = {
       where: { patientId: patient.id },
       relations: {
         appointment: { doctor: true },
         refunds: true,
       },
       order: { createdAt: 'DESC' },
-    });
+    };
+
+    if (pageNum !== undefined && limitNum !== undefined) {
+      findOptions.skip = (pageNum - 1) * limitNum;
+      findOptions.take = limitNum;
+    }
+
+    const [payments, total] = await this.paymentRepo.findAndCount(findOptions);
 
     return {
       message: 'Payment history retrieved successfully',
@@ -1703,6 +1713,12 @@ export class PaymentService {
           createdAt: r.createdAt,
         })),
       })),
+      meta: {
+        total,
+        page: pageNum ?? 1,
+        limit: limitNum ?? total,
+        totalPages: limitNum ? Math.ceil(total / limitNum) : 1,
+      },
     };
   }
 
