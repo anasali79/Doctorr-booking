@@ -14,7 +14,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Only patients can view payment history' }, { status: 403 });
     }
 
-    const backendRes = await apiFetch('/api/payment/history', {
+    const searchParams = req.nextUrl.searchParams;
+    const page = searchParams.get('page');
+    const limit = searchParams.get('limit');
+    const query = new URLSearchParams();
+    if (page) query.set('page', page);
+    if (limit) query.set('limit', limit);
+    const queryString = query.toString() ? `?${query.toString()}` : '';
+
+    const backendRes = await apiFetch(`/api/payment/history${queryString}`, {
       method: 'GET',
       token,
     });
