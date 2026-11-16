@@ -53,10 +53,15 @@ function LoginForm() {
 
       toast.success(res.data.message || 'Signed in successfully');
 
+      const role = (res.data.user?.role as string) || '';
       if (nextUrl) {
         router.push(nextUrl);
-      } else if (res.data.user?.role === 'DOCTOR') {
+      } else if (role === 'ADMIN') {
+        router.push('/admin/dashboard');
+      } else if (role === 'DOCTOR') {
         router.push('/doctor/dashboard');
+      } else if (role === 'RECEPTIONIST') {
+        router.push('/receptionist/dashboard');
       } else {
         router.push('/patient/dashboard');
       }

@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Menu,
   X,
+  Plane,
 } from 'lucide-react';
 import { SessionUser } from '@/types';
 import { adminLogout } from '@/lib/api/admin';
@@ -55,6 +56,12 @@ export function AdminSidebarLayout({ user, children }: AdminSidebarLayoutProps) 
       href: '/admin/doctors',
       icon: UserCheck,
       active: pathname.startsWith('/admin/doctors'),
+    },
+    {
+      label: 'Doctor Leaves',
+      href: '/admin/leaves',
+      icon: Plane,
+      active: pathname.startsWith('/admin/leaves'),
     },
     {
       label: 'Delivery Monitor',
