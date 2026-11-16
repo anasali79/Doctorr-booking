@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Sparkles, Bot, Mic } from 'lucide-react';
+import { AiOrbAvatar } from '@/components/ui/ai-orb-avatar';
 
 interface AiFloatingTriggerProps {
   role: 'PATIENT' | 'DOCTOR';
@@ -193,7 +194,7 @@ export function AiFloatingTrigger({
           />
         </div>
 
-        {/* Floating Action Button (Fixed stable dimensions w-12 h-12) */}
+        {/* Floating Action Button (Animated 3D Blinking AI Orb from 21st.dev) */}
         <button
           ref={buttonRef}
           type="button"
@@ -204,32 +205,24 @@ export function AiFloatingTrigger({
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
           aria-label="Open CareUp AI Voice & Chat Assistant"
-          className={`relative flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#0066cc] via-blue-600 to-indigo-600 text-white shadow-xl shadow-blue-600/30 ring-2 ring-white/30 dark:ring-zinc-700/60 transition-transform cursor-grab active:cursor-grabbing ${
-            isDragging ? 'scale-105 opacity-90' : 'hover:scale-105 active:scale-95'
+          className={`relative flex items-center justify-center p-0 rounded-full border-0 outline-none transition-transform cursor-grab active:cursor-grabbing bg-transparent ${
+            isDragging ? 'scale-105 opacity-90' : 'hover:scale-110 active:scale-95'
           }`}
         >
-          {/* Glow ambient pulse backdrop */}
-          <div className="absolute -inset-1 rounded-2xl bg-blue-500/20 blur-md pointer-events-none group-hover:bg-blue-500/35 transition-all" />
+          {/* 3D Animated AI Orb Avatar with blinking eyes */}
+          <AiOrbAvatar
+            size="md"
+            color="blue"
+            glow={true}
+            isSpeaking={isVoiceActive}
+          />
 
-          {/* Live Online Ping Indicator */}
-          <span className="absolute -top-1 -right-1 flex h-3 w-3">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex h-3 w-3 rounded-full border-2 border-white bg-emerald-500 dark:border-zinc-900" />
-          </span>
-
-          {/* Core Icon */}
-          <div className="relative flex items-center justify-center pointer-events-none">
-            {isVoiceActive ? (
-              <div className="flex items-center gap-0.5">
-                <span className="h-3 w-0.5 animate-pulse bg-white rounded-full" />
-                <span className="h-4 w-0.5 animate-pulse bg-white rounded-full [animation-delay:0.15s]" />
-                <span className="h-2 w-0.5 animate-pulse bg-white rounded-full [animation-delay:0.3s]" />
-                <Mic className="h-3.5 w-3.5 ml-0.5 text-white" />
-              </div>
-            ) : (
-              <Sparkles className="h-5 w-5 text-white transition-transform duration-200" />
-            )}
-          </div>
+          {/* Voice Microphone Overlay badge when voice is active */}
+          {isVoiceActive && (
+            <span className="absolute -bottom-1 -right-1 z-20 flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white border-2 border-white shadow-xs">
+              <Mic className="h-2.5 w-2.5 text-white" />
+            </span>
+          )}
         </button>
       </div>
     </div>

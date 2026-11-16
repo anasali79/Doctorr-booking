@@ -23,13 +23,22 @@ export default async function PatientLayout({
   ]);
 
   const profile = profileResult.status === 'fulfilled' ? profileResult.value?.data : null;
-  const unreadCount = notifResult.status === 'fulfilled' ? notifResult.value?.unreadCount || 0 : 0;
+  const unreadCount =
+    notifResult.status === 'fulfilled'
+      ? (notifResult.value as any)?.unreadCount ??
+        (notifResult.value as any)?.data?.unreadCount ??
+        0
+      : 0;
 
   return (
     <div className="flex min-h-screen flex-col bg-[#fafafc] text-zinc-900 relative overflow-hidden">
-      <Navbar user={user} unreadCount={unreadCount} />
+      <Navbar
+        user={user}
+        userName={profile?.fullName}
+        unreadCount={unreadCount}
+      />
 
-      <main className="flex-1">
+      <main className="flex-1 flex flex-col">
         {profile ? (
           <PatientSocketProvider patientId={profile.id} initialToken={token}>
             {children}

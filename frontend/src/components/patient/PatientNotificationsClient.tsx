@@ -5,28 +5,54 @@ import { useRouter } from 'next/navigation';
 import { NotificationItem } from '@/types';
 import { formatDate, formatDateTime } from '@/lib/utils';
 import { toast } from 'sonner';
-import { Bell, CheckCheck, Inbox, Loader2, Settings } from 'lucide-react';
+import { Bell, CheckCheck, Inbox, Loader2, Settings, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { clientAxios, extractErrorMessage } from '@/lib/api/axios';
 import { NotificationPreferencesDialog } from '@/components/common/NotificationPreferencesDialog';
 
+interface MetaData {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 interface PatientNotificationsClientProps {
   initialNotifications: NotificationItem[];
+  initialUnreadCount?: number;
+  initialMeta?: MetaData;
 }
 
 export function PatientNotificationsClient({
   initialNotifications,
+  initialUnreadCount,
+  initialMeta = { total: initialNotifications.length, page: 1, limit: 20, totalPages: 1 },
 }: PatientNotificationsClientProps) {
   const router = useRouter();
-  const [notifications, setNotifications] = useState(initialNotifications);
+  const [notifications, setNotifications] = useState<NotificationItem[]>(initialNotifications);
+  const [unreadCount, setUnreadCount] = useState<number>(
+    initialUnreadCount !== undefined
+      ? initialUnreadCount
+      : initialNotifications.filter((n) => !n.isRead).length
+  );
+  const [meta, setMeta] = useState<MetaData>(initialMeta);
   const [markingAll, setMarkingAll] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+
+  const notifyChange = () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('notification_updated'));
+    }
+  };
 
   const handleMarkAllRead = async () => {
     try {
       setMarkingAll(true);
       await clientAxios.patch('/api/notifications/read-all');
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      setUnreadCount(0);
+      notifyChange();
       toast.success('All notifications marked as read');
       router.refresh();
     } catch (err: unknown) {
@@ -42,20 +68,49 @@ export function PatientNotificationsClient({
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)),
       );
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+      notifyChange();
       router.refresh();
     } catch {
       // Best effort
     }
   };
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const handleLoadMore = async () => {
+    if (loadingMore || meta.page >= meta.totalPages) return;
+    try {
+      setLoadingMore(true);
+      const nextPage = meta.page + 1;
+      const res = await clientAxios.get<any>(`/api/notifications?page=${nextPage}&limit=${meta.limit}`);
+      const newItems = res.data?.data || [];
+      const newMeta = res.data?.meta || { ...meta, page: nextPage };
+      setNotifications((prev) => [...prev, ...newItems]);
+      setMeta(newMeta);
+    } catch (err: unknown) {
+      toast.error('Failed to load more notifications', { description: extractErrorMessage(err) });
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-slate-500">
-          {unreadCount} unread notification{unreadCount === 1 ? '' : 's'}
-        </span>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-bold text-slate-800">
+              {unreadCount} unread notification{unreadCount === 1 ? '' : 's'}
+            </span>
+            {meta.total > 0 && (
+              <span className="text-xs text-slate-400 font-medium">
+                (Showing {notifications.length} of {meta.total})
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-slate-500">
+            Click any unread notification to mark it as read.
+          </p>
+        </div>
 
         <div className="flex items-center gap-2">
           <Button
@@ -151,6 +206,26 @@ export function PatientNotificationsClient({
               )}
             </div>
           ))}
+
+          {meta.page < meta.totalPages && (
+            <div className="pt-4 flex justify-center">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-xs cursor-pointer"
+              >
+                {loadingMore ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-slate-500" />
+                )}
+                <span>Load older notifications ({meta.total - notifications.length} remaining)</span>
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

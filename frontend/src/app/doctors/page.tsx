@@ -66,10 +66,6 @@ export default async function DoctorsPage({ searchParams }: DoctorsPageProps) {
         {/* Header */}
         <div className="flex flex-col justify-between gap-4 pb-8 sm:flex-row sm:items-end border-b border-slate-200/80 mb-8">
           <div>
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-2xs">
-              <Sparkles className="h-3 w-3 text-[#0066cc]" />
-              <span>CAREUP CLINICAL TEAM</span>
-            </div>
             <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
               Meet our doctors
             </h1>
