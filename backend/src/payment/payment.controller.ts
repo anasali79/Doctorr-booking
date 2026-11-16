@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Query,
   Body,
   Headers,
   Req,
@@ -85,8 +86,16 @@ export class PaymentController {
   @Get('history')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.PATIENT)
-  async getPaymentHistory(@CurrentUser() user: { id: string }) {
-    return this.paymentService.getPatientPaymentHistory(user.id);
+  async getPaymentHistory(
+    @CurrentUser() user: { id: string },
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.paymentService.getPatientPaymentHistory(
+      user.id,
+      page ? parseInt(page, 10) : undefined,
+      limit ? parseInt(limit, 10) : undefined,
+    );
   }
 }
 

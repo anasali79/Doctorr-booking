@@ -1,4 +1,4 @@
-export type Role = 'DOCTOR' | 'PATIENT' | 'ADMIN';
+export type Role = 'DOCTOR' | 'PATIENT' | 'ADMIN' | 'RECEPTIONIST';
 
 export type VerificationStatus =
   | 'NOT_SUBMITTED'
@@ -40,6 +40,8 @@ export interface AdminDashboardStats {
   suspendedDoctors: number;
   totalPatients: number;
   totalAppointments: number;
+  pendingLeaves?: number;
+  approvedLeaves?: number;
 }
 
 export interface User {
@@ -127,6 +129,8 @@ export interface Appointment {
   completedAt?: string | null;
   clinicalNotes?: string | null;
   reasonForVisit?: string | null;
+  consultationFee?: number;
+  isWalkIn?: boolean;
   doctor?: Doctor;
   patient?: {
     id: string;
@@ -228,7 +232,24 @@ export interface DoctorLeave {
   id: string;
   doctorId: string;
   date: string; // YYYY-MM-DD
-  reason?: string;
+  endDate?: string | null;
+  reason?: string | null;
+  status?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  rejectionReason?: string | null;
+  approvedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  doctor?: {
+    id: string;
+    fullName: string;
+    specialization: string;
+    profilePictureUrl?: string | null;
+    user?: {
+      id: string;
+      email: string;
+      phone?: string | null;
+    };
+  };
 }
 
 export interface NotificationItem {
@@ -277,6 +298,28 @@ export interface NotificationDeliveryItem {
     id: string;
     date: string;
     startTime: string;
+  };
+}
+
+export interface Receptionist {
+  id: string;
+  userId: string;
+  doctorId: string;
+  fullName: string;
+  email: string;
+  phone?: string | null;
+  deskNumber?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  doctor?: {
+    id: string;
+    fullName: string;
+    specialization: string;
+    consultationFee: number;
+    profileDetails?: string | null;
+    phone?: string | null;
+    currentServingToken?: number | null;
+    email?: string;
   };
 }
 

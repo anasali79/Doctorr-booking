@@ -12,7 +12,9 @@ import { Doctor } from '../doctor/entities/doctor.entity';
 import { Patient } from '../patient/entities/patient.entity';
 import { Appointment } from '../appointment/entities/appointment.entity';
 import { DoctorVerification } from '../doctor/entities/doctor-verification.entity';
+import { DoctorLeave } from '../doctor/entities/leave.entity';
 import { EmailModule } from '../email/email.module';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -23,6 +25,7 @@ import { EmailModule } from '../email/email.module';
       Appointment,
       DoctorVerification,
       AdminAuditLog,
+      DoctorLeave,
     ]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -35,6 +38,7 @@ import { EmailModule } from '../email/email.module';
       }),
     }),
     EmailModule,
+    NotificationModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

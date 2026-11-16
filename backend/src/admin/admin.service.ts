@@ -16,10 +16,15 @@ import { Doctor } from '../doctor/entities/doctor.entity';
 import { Patient } from '../patient/entities/patient.entity';
 import { Appointment } from '../appointment/entities/appointment.entity';
 import { DoctorVerification } from '../doctor/entities/doctor-verification.entity';
+import { DoctorLeave } from '../doctor/entities/leave.entity';
+import { LeaveStatus } from '../common/enums/leave-status.enum';
 import { AdminAuditLog } from './entities/admin-audit-log.entity';
 import { VerificationStatus } from '../common/enums/verification-status.enum';
 import { Role } from '../common/enums/role.enum';
 import { EmailService } from '../email/email.service';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../notification/enums/notification-type.enum';
+import { Optional } from '@nestjs/common';
 
 @Injectable()
 export class AdminService {
@@ -39,12 +44,18 @@ export class AdminService {
     @InjectRepository(DoctorVerification)
     private readonly verificationRepo: Repository<DoctorVerification>,
 
+    @InjectRepository(DoctorLeave)
+    private readonly leaveRepo: Repository<DoctorLeave>,
+
     @InjectRepository(AdminAuditLog)
     private readonly auditLogRepo: Repository<AdminAuditLog>,
 
     private readonly jwtService: JwtService,
     private readonly emailService: EmailService,
     private readonly dataSource: DataSource,
+
+    @Optional()
+    private readonly notificationService?: NotificationService,
   ) {}
 
   // ─── Admin Authentication ───────────────────────────────────────────────────
@@ -103,6 +114,8 @@ export class AdminService {
       suspendedDoctors,
       totalPatients,
       totalAppointments,
+      pendingLeaves,
+      approvedLeaves,
     ] = await Promise.all([
       this.doctorRepo.count(),
       this.verificationRepo.count({
@@ -119,6 +132,12 @@ export class AdminService {
       }),
       this.patientRepo.count(),
       this.appointmentRepo.count(),
+      this.leaveRepo.count({
+        where: { status: LeaveStatus.PENDING },
+      }),
+      this.leaveRepo.count({
+        where: { status: LeaveStatus.APPROVED },
+      }),
     ]);
 
     return {
@@ -131,6 +150,8 @@ export class AdminService {
         suspendedDoctors,
         totalPatients,
         totalAppointments,
+        pendingLeaves,
+        approvedLeaves,
       },
     };
   }
@@ -573,5 +594,172 @@ export class AdminService {
     } catch {
       // Email failures should never break the main operation
     }
+  }
+
+  // ─── Doctor Leaves Review ───────────────────────────────────────────────────
+
+  async listLeaves(params: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    search?: string;
+  }) {
+    const page = Math.max(1, params.page || 1);
+    const limit = Math.min(100, Math.max(1, params.limit || 20));
+
+    const qb = this.leaveRepo
+      .createQueryBuilder('leave')
+      .leftJoinAndSelect('leave.doctor', 'doctor')
+      .leftJoinAndSelect('doctor.user', 'user')
+      .orderBy('leave.createdAt', 'DESC');
+
+    if (params.search) {
+      qb.andWhere(
+        '(doctor.fullName ILIKE :search OR user.email ILIKE :search OR doctor.specialization ILIKE :search OR leave.reason ILIKE :search)',
+        { search: `%${params.search}%` },
+      );
+    }
+
+    if (params.status && params.status !== 'ALL') {
+      qb.andWhere('leave.status = :status', { status: params.status });
+    }
+
+    const [leaves, total] = await qb
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    const [pendingCount, approvedCount, rejectedCount] = await Promise.all([
+      this.leaveRepo.count({ where: { status: LeaveStatus.PENDING } }),
+      this.leaveRepo.count({ where: { status: LeaveStatus.APPROVED } }),
+      this.leaveRepo.count({ where: { status: LeaveStatus.REJECTED } }),
+    ]);
+
+    return {
+      message: 'Leaves retrieved successfully',
+      data: leaves,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        pendingCount,
+        approvedCount,
+        rejectedCount,
+      },
+    };
+  }
+
+  async approveLeave(adminId: string, leaveId: string) {
+    const leave = await this.leaveRepo.findOne({
+      where: { id: leaveId },
+      relations: { doctor: { user: true } },
+    });
+
+    if (!leave) {
+      throw new NotFoundException(`Leave request with ID ${leaveId} not found`);
+    }
+
+    leave.status = LeaveStatus.APPROVED;
+    leave.approvedAt = new Date();
+    leave.approvedBy = adminId;
+    leave.rejectionReason = null;
+
+    const saved = await this.leaveRepo.save(leave);
+
+    // Audit log
+    await this.auditLogRepo
+      .save(
+        this.auditLogRepo.create({
+          adminId,
+          action: 'LEAVE_APPROVED',
+          targetType: 'DOCTOR_LEAVE',
+          targetId: leave.id,
+          metadata: {
+            doctorId: leave.doctorId,
+            date: leave.date,
+            endDate: leave.endDate,
+          },
+        }),
+      )
+      .catch(() => null);
+
+    // In-app doctor notification
+    if (this.notificationService && leave.doctorId) {
+      const dateDisplay =
+        leave.endDate && leave.endDate !== leave.date
+          ? `${leave.date} to ${leave.endDate}`
+          : leave.date;
+      await this.notificationService
+        .createDoctorNotification(
+          leave.doctorId,
+          'Leave Request Approved',
+          `Your leave application for ${dateDisplay} has been approved by administration.`,
+          NotificationType.SCHEDULE_UPDATE,
+        )
+        .catch(() => null);
+    }
+
+    return {
+      message: 'Leave request approved successfully',
+      data: saved,
+    };
+  }
+
+  async rejectLeave(adminId: string, leaveId: string, reason?: string) {
+    const leave = await this.leaveRepo.findOne({
+      where: { id: leaveId },
+      relations: { doctor: { user: true } },
+    });
+
+    if (!leave) {
+      throw new NotFoundException(`Leave request with ID ${leaveId} not found`);
+    }
+
+    leave.status = LeaveStatus.REJECTED;
+    leave.approvedAt = new Date();
+    leave.approvedBy = adminId;
+    leave.rejectionReason = reason || 'Declined by administration';
+
+    const saved = await this.leaveRepo.save(leave);
+
+    // Audit log
+    await this.auditLogRepo
+      .save(
+        this.auditLogRepo.create({
+          adminId,
+          action: 'LEAVE_REJECTED',
+          targetType: 'DOCTOR_LEAVE',
+          targetId: leave.id,
+          reason: leave.rejectionReason,
+          metadata: {
+            doctorId: leave.doctorId,
+            date: leave.date,
+            endDate: leave.endDate,
+          },
+        }),
+      )
+      .catch(() => null);
+
+    // In-app doctor notification
+    if (this.notificationService && leave.doctorId) {
+      const dateDisplay =
+        leave.endDate && leave.endDate !== leave.date
+          ? `${leave.date} to ${leave.endDate}`
+          : leave.date;
+      await this.notificationService
+        .createDoctorNotification(
+          leave.doctorId,
+          'Leave Request Rejected',
+          `Your leave application for ${dateDisplay} was rejected: ${leave.rejectionReason}`,
+          NotificationType.SCHEDULE_UPDATE,
+        )
+        .catch(() => null);
+    }
+
+    return {
+      message: 'Leave request rejected',
+      data: saved,
+    };
   }
 }

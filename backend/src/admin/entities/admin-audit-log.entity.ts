@@ -11,6 +11,8 @@ export type AuditAction =
   | 'DOCTOR_REJECTED'
   | 'DOCTOR_SUSPENDED'
   | 'DOCTOR_RESUBMISSION_REQUESTED'
+  | 'LEAVE_APPROVED'
+  | 'LEAVE_REJECTED'
   | 'ADMIN_LOGIN';
 
 @Entity('admin_audit_logs')
