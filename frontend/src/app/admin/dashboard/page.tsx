@@ -14,6 +14,7 @@ import {
   CalendarCheck,
   ShieldCheck,
   ArrowRight,
+  Plane,
 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -34,9 +35,24 @@ export default async function AdminDashboardPage() {
     suspendedDoctors: 0,
     totalPatients: 0,
     totalAppointments: 0,
+    pendingLeaves: 0,
   };
 
   const statCards = [
+    {
+      label: 'Doctor Leave Requests',
+      value: stats.pendingLeaves ?? 0,
+      icon: Plane,
+      color: 'text-purple-600',
+      bg: 'bg-purple-50',
+      border: 'border-purple-200',
+      badge: (stats.pendingLeaves ?? 0) > 0 ? 'Pending Review' : 'All Clear',
+      badgeColor:
+        (stats.pendingLeaves ?? 0) > 0
+          ? 'bg-purple-100 text-purple-900 border-purple-300'
+          : 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      href: '/admin/leaves?status=PENDING',
+    },
     {
       label: 'Pending Verifications',
       value: stats.pendingVerifications,
