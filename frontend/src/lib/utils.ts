@@ -83,21 +83,66 @@ export function formatDateTime(dateStr: string | Date | undefined | null): strin
   }
 }
 
-/** Formats 'HH:mm' 24h string into 12h AM/PM string */
-export function formatTime(timeStr: string): string {
+/** Formats 'HH:mm' 24h string or ISO timestamp into 12h AM/PM string (IST) */
+export function formatTime(timeStr: string | Date | undefined | null): string {
   if (!timeStr) return '';
   try {
-    const [hoursStr, minutesStr] = timeStr.split(':');
+    if (timeStr instanceof Date) {
+      if (isNaN(timeStr.getTime())) return '';
+      return timeStr.toLocaleTimeString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+    }
+
+    const str = String(timeStr).trim();
+    if (!str) return '';
+
+    // If it's an ISO timestamp or date-time string (e.g. contains 'T' or '-')
+    if (str.includes('T') || (str.includes('-') && str.includes(':'))) {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleTimeString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        });
+      }
+    }
+
+    const [hoursStr, minutesStr] = str.split(':');
     let hours = parseInt(hoursStr, 10);
     const minutes = parseInt(minutesStr, 10);
-    if (isNaN(hours) || isNaN(minutes)) return timeStr;
+    if (isNaN(hours) || isNaN(minutes)) return str;
     const ampm = hours >= 12 ? 'PM' : 'AM';
     hours = hours % 12;
     hours = hours ? hours : 12; // 0 should be 12
     const formattedMinutes = minutes < 10 ? `0${minutes}` : `${minutes}`;
     return `${hours}:${formattedMinutes} ${ampm}`;
   } catch {
-    return timeStr;
+    return String(timeStr);
+  }
+}
+
+/** Returns human-readable elapsed duration since check-in, e.g. '12m in clinic' or 'Just now' */
+export function formatWaitDuration(checkedInAt: string | Date | undefined | null): string {
+  if (!checkedInAt) return '';
+  try {
+    const d = checkedInAt instanceof Date ? checkedInAt : new Date(String(checkedInAt));
+    if (isNaN(d.getTime())) return '';
+    const diffMs = Date.now() - d.getTime();
+    if (diffMs < 0) return 'Just now';
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m in clinic`;
+    const hours = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    return `${hours}h ${remMins}m in clinic`;
+  } catch {
+    return '';
   }
 }
 

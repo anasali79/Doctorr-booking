@@ -17,12 +17,17 @@ export async function getNotifications(token: string) {
 }
 
 export async function getUnreadCount(token: string) {
-  return apiFetch<{
-    message?: string;
-    unreadCount: number;
-  }>('/api/notifications/unread-count', {
+  const res = await apiFetch<any>('/api/notifications/unread-count', {
     token,
   });
+  const unreadCount = res?.data?.unreadCount ?? res?.unreadCount ?? 0;
+  return {
+    message: res?.message,
+    unreadCount,
+    data: {
+      unreadCount,
+    },
+  };
 }
 
 export async function markNotificationAsRead(id: string, token: string) {

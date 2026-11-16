@@ -118,3 +118,39 @@ export async function suspendDoctor(doctorId: string, reason: string, token?: st
     token,
   });
 }
+
+export async function getAdminLeaves(
+  params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    search?: string;
+  },
+  token?: string,
+) {
+  const query = new URLSearchParams();
+  if (params?.page) query.set('page', params.page.toString());
+  if (params?.limit) query.set('limit', params.limit.toString());
+  if (params?.status) query.set('status', params.status);
+  if (params?.search) query.set('search', params.search);
+
+  const qs = query.toString();
+  return apiFetch<any>(`/api/admin/leaves${qs ? `?${qs}` : ''}`, {
+    token,
+  });
+}
+
+export async function approveDoctorLeave(leaveId: string, token?: string) {
+  return apiFetch<any>(`/api/admin/leaves/${leaveId}/approve`, {
+    method: 'PATCH',
+    token,
+  });
+}
+
+export async function rejectDoctorLeave(leaveId: string, reason?: string, token?: string) {
+  return apiFetch<any>(`/api/admin/leaves/${leaveId}/reject`, {
+    method: 'PATCH',
+    body: { reason },
+    token,
+  });
+}
