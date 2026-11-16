@@ -18,5 +18,6 @@ import { NotificationModule } from '../notification/notification.module';
   ],
   controllers: [CheckInController, KioskController],
   providers: [CheckInService],
+  exports: [CheckInService],
 })
 export class CheckInModule {}

@@ -58,6 +58,8 @@ export class PatientService {
       fullName: profile.fullName,
       age: profile.age,
       gender: profile.gender,
+      phone: profile.phone,
+      address: profile.address,
       contactDetails: {
         phone: profile.phone,
         address: profile.address,

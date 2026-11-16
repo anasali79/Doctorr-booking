@@ -17,6 +17,7 @@ import { PaymentModule } from './payment/payment.module';
 import { PrescriptionModule } from './prescription/prescription.module';
 import { AdminModule } from './admin/admin.module';
 import { AiModule } from './ai/ai.module';
+import { ReceptionistModule } from './receptionist/receptionist.module';
 
 @Module({
   controllers: [AppController],
@@ -35,6 +36,7 @@ import { AiModule } from './ai/ai.module';
     }),
     AuthModule,
     UsersModule,
+    ReceptionistModule,
     DoctorModule,
     PatientModule,
     AppointmentModule,
