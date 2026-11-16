@@ -30,11 +30,11 @@ export function LandingHero({ user }: LandingHeroProps) {
           <div className="absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-blue-200/30 blur-3xl pointer-events-none" />
 
           <div className="relative z-10 max-w-3xl mx-auto space-y-6">
-            
+
             {/* Clean Centered Badge Pill */}
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 border border-sky-200 px-3.5 py-1 text-xs font-semibold text-sky-800 shadow-2xs backdrop-blur-xs">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-              <span>Get started in under 2 minutes • No credit card required</span>
+              <span>Get started in under 2 minutes</span>
             </span>
 
             {/* Big Bold Headline */}

@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import {
   User,
   Stethoscope,
@@ -91,7 +92,7 @@ export function LandingRoleTabs() {
   const role = roles.find((r) => r.id === activeTab) || roles[0];
 
   return (
-    <section className="py-20 lg:py-28 bg-white border-b border-slate-100">
+    <section className="py-20 lg:py-28 bg-white">
       <div className="page-container">
         
         {/* Section Title */}

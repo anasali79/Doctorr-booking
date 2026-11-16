@@ -26,7 +26,7 @@ export function LandingCta() {
   return (
     <section className="py-20 lg:py-28 bg-[#fafcff]">
       <div className="page-container space-y-16">
-        
+
         {/* Integration Compatibility Strip */}
         <div className="text-center space-y-5">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-600">
@@ -60,7 +60,7 @@ export function LandingCta() {
           <div className="relative z-10 max-w-2xl mx-auto space-y-6">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 border border-sky-200 px-3.5 py-1 text-xs font-semibold text-sky-800 shadow-2xs backdrop-blur-xs">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-              <span>Get started in under 2 minutes • No credit card required</span>
+              <span>Get started in under 2 minutes</span>
             </span>
 
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-slate-900 leading-tight">
