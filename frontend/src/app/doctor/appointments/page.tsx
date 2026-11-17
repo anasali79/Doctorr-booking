@@ -43,6 +43,7 @@ export default async function DoctorAppointmentsPage({ searchParams }: DoctorApp
 
   return (
     <DoctorLiveQueueClient
+      key={selectedDate}
       initialAppointments={appointments}
       selectedDate={selectedDate}
       todayIST={todayIST}
