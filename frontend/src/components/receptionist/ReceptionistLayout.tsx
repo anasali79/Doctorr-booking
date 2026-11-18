@@ -21,6 +21,7 @@ import {
 import { toast } from 'sonner';
 import { clientAxios } from '@/lib/api/axios';
 import { cn } from '@/lib/utils';
+import { LiquidProfileDropdown } from '@/components/common/LiquidProfileDropdown';
 
 interface ReceptionistLayoutProps {
   user: SessionUser;
@@ -134,25 +135,13 @@ export function ReceptionistLayout({
               </div>
 
               <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
-                <div className="text-right hidden md:block">
-                  <p className="text-xs font-bold text-slate-900 leading-tight">
-                    {receptionist?.fullName || user.email?.split('@')[0]}
-                  </p>
-                  <p className="text-[10px] text-slate-500 font-medium">Front Desk</p>
-                </div>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleLogout}
-                  disabled={loggingOut}
-                  className="rounded-xl border-slate-200 text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:text-rose-700 h-9 gap-1.5 cursor-pointer shadow-2xs"
-                  title="Sign out of Receptionist Portal"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">{loggingOut ? 'Signing out...' : 'Logout'}</span>
-                </Button>
+                <LiquidProfileDropdown
+                  user={user}
+                  userName={receptionist?.fullName || user.email?.split('@')[0]}
+                  roleLabel="Front Desk"
+                  onLogout={handleLogout}
+                  loggingOut={loggingOut}
+                />
               </div>
             </div>
           </div>

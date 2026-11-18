@@ -1,164 +1,44 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, CreditCard, LogOut, Clock } from 'lucide-react';
+import {
+  User,
+  CreditCard,
+  LogOut,
+  Clock,
+  CalendarCheck,
+  CalendarDays,
+  Activity,
+  ShieldCheck,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
 import { SessionUser } from '@/types';
 import { cn } from '@/lib/utils';
 import { DockItem, DockIcon, DockLabel } from '@/components/ui/dock';
 
-const ease = [0.22, 1, 0.36, 1] as const;
-
-interface LiquidProfileDropdownProps {
+export interface LiquidProfileDropdownProps {
   user: SessionUser;
   userName?: string;
   isDoctor?: boolean;
   roleLabel: string;
   onLogout: () => void;
   loggingOut?: boolean;
+  className?: string;
 }
 
-interface MenuItem {
+export interface ProfileMenuItem {
+  id: string;
   label: string;
-  icon?: React.ReactNode;
+  description?: string;
+  icon: React.ReactNode;
   href?: string;
   onClick?: () => void;
   isDanger?: boolean;
 }
 
-function MenuButton({
-  item,
-  isOpen,
-  index,
-}: {
-  item: MenuItem;
-  isOpen: boolean;
-  index: number;
-}) {
-  const [hovered, setHovered] = useState(false);
-  const animatingRef = useRef(false);
-  const pendingLeaveRef = useRef(false);
-  const chars = item.label.split('');
-  const lockDuration = 30 * chars.length + 300;
-
-  const handleEnter = useCallback(() => {
-    pendingLeaveRef.current = false;
-    if (hovered) return;
-    setHovered(true);
-    animatingRef.current = true;
-    setTimeout(() => {
-      animatingRef.current = false;
-      if (pendingLeaveRef.current) {
-        pendingLeaveRef.current = false;
-        setHovered(false);
-      }
-    }, lockDuration);
-  }, [hovered, lockDuration]);
-
-  const handleLeave = useCallback(() => {
-    if (animatingRef.current) {
-      pendingLeaveRef.current = true;
-    } else {
-      setHovered(false);
-    }
-  }, []);
-
-  const buttonContent = (
-    <div
-      onMouseEnter={handleEnter}
-      onMouseLeave={handleLeave}
-      onClick={item.onClick}
-      className={cn(
-        'flex items-center justify-between w-full px-4 py-2 rounded-xl transition-all cursor-pointer select-none group',
-        item.isDanger
-          ? 'hover:bg-rose-50 text-rose-600 hover:text-rose-700'
-          : 'hover:bg-slate-100 text-slate-800 hover:text-slate-950',
-      )}
-    >
-      {/* Icon */}
-      {item.icon && (
-        <span
-          className={cn(
-            'shrink-0 mr-3 transition-transform duration-300 group-hover:scale-115',
-            item.isDanger ? 'text-rose-500' : 'text-[#0066cc] group-hover:text-[#0055b3]',
-          )}
-        >
-          {item.icon}
-        </span>
-      )}
-
-      {/* Rolling letters carousel on hover */}
-      <div
-        className="flex-1 flex overflow-hidden text-[16px] font-bold tracking-tight uppercase leading-none"
-        style={{
-          height: '1.15em',
-        }}
-      >
-        {chars.map((char, i) => (
-          <span
-            key={i}
-            className="inline-block overflow-hidden"
-            style={{ height: '1.15em' }}
-          >
-            <span
-              className="flex flex-col"
-              style={{
-                transitionProperty: 'transform',
-                transitionDuration: hovered ? '700ms' : '0ms',
-                transitionDelay: hovered ? `${28 * i}ms` : '0ms',
-                transform: hovered ? 'translateY(-50%)' : 'translateY(0%)',
-                transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
-              }}
-            >
-              <span
-                className="block text-inherit font-bold"
-                style={{ height: '1.15em', lineHeight: '1.15em' }}
-              >
-                {char === ' ' ? '\u00A0' : char}
-              </span>
-              <span
-                className={cn(
-                  'block font-black',
-                  item.isDanger ? 'text-rose-700' : 'text-[#0066cc]',
-                )}
-                style={{ height: '1.15em', lineHeight: '1.15em' }}
-                aria-hidden
-              >
-                {char === ' ' ? '\u00A0' : char}
-              </span>
-            </span>
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-
-  return (
-    <motion.div
-      animate={{ opacity: isOpen ? 1 : 0, y: isOpen ? 0 : 10 }}
-      transition={{
-        duration: 0.4,
-        delay: isOpen ? 0.3 + 0.07 * index : 0,
-        ease,
-      }}
-      className="w-full"
-    >
-      {item.href ? (
-        <Link href={item.href} className="w-full block">
-          {buttonContent}
-        </Link>
-      ) : (
-        buttonContent
-      )}
-    </motion.div>
-  );
-}
-
-/**
- * Top Navbar Liquid Profile Dropdown:
- * Pill that morphs downwards into the liquid menu card
- */
 function getInitialDisplayName(user?: SessionUser, userName?: string, isDoctor?: boolean): string {
   if (userName?.trim()) return userName.trim();
   const prefix = user?.email?.split('@')[0] || '';
@@ -168,6 +48,134 @@ function getInitialDisplayName(user?: SessionUser, userName?: string, isDoctor?:
   return isDoctor ? 'Doctor' : 'Patient';
 }
 
+function getRoleMenuItems(
+  user: SessionUser,
+  isDoctor: boolean,
+  onLogout: () => void,
+  loggingOut: boolean,
+): ProfileMenuItem[] {
+  if (isDoctor || user.role === 'DOCTOR') {
+    return [
+      {
+        id: 'profile',
+        label: 'Doctor Profile',
+        description: 'Bio, specialty & credentials',
+        icon: <User className="h-4 w-4" />,
+        href: '/doctor/profile',
+      },
+      {
+        id: 'availability',
+        label: 'Availability & Slots',
+        description: 'OPD timings, leaves & limits',
+        icon: <Clock className="h-4 w-4" />,
+        href: '/doctor/availability',
+      },
+      {
+        id: 'my-day',
+        label: 'My Day Command Center',
+        description: "Today's queue & patient rounds",
+        icon: <CalendarDays className="h-4 w-4" />,
+        href: '/doctor/my-day',
+      },
+      {
+        id: 'logout',
+        label: loggingOut ? 'Signing out...' : 'Sign out',
+        description: 'End active session securely',
+        icon: <LogOut className="h-4 w-4" />,
+        onClick: onLogout,
+        isDanger: true,
+      },
+    ];
+  }
+
+  if (user.role === 'PATIENT') {
+    return [
+      {
+        id: 'profile',
+        label: 'My Profile',
+        description: 'Personal info & emergency contact',
+        icon: <User className="h-4 w-4" />,
+        href: '/patient/profile',
+      },
+      {
+        id: 'appointments',
+        label: 'My Appointments',
+        description: 'Scheduled visits & live queue status',
+        icon: <CalendarCheck className="h-4 w-4" />,
+        href: '/patient/appointments',
+      },
+      {
+        id: 'payments',
+        label: 'Payments & History',
+        description: 'Invoices, refunds & billing',
+        icon: <CreditCard className="h-4 w-4" />,
+        href: '/patient/payments',
+      },
+      {
+        id: 'logout',
+        label: loggingOut ? 'Signing out...' : 'Sign out',
+        description: 'End active session securely',
+        icon: <LogOut className="h-4 w-4" />,
+        onClick: onLogout,
+        isDanger: true,
+      },
+    ];
+  }
+
+  if (user.role === 'RECEPTIONIST') {
+    return [
+      {
+        id: 'queue',
+        label: 'Live Queue Desk',
+        description: 'Tokens & patient flow',
+        icon: <Activity className="h-4 w-4" />,
+        href: '/receptionist/queue',
+      },
+      {
+        id: 'appointments',
+        label: 'Clinic Appointments',
+        description: 'Multi-doctor schedule ledger',
+        icon: <CalendarCheck className="h-4 w-4" />,
+        href: '/receptionist/appointments',
+      },
+      {
+        id: 'logout',
+        label: loggingOut ? 'Signing out...' : 'Sign out',
+        description: 'End active session securely',
+        icon: <LogOut className="h-4 w-4" />,
+        onClick: onLogout,
+        isDanger: true,
+      },
+    ];
+  }
+
+  // Fallback / Admin
+  return [
+    {
+      id: 'dashboard',
+      label: 'Admin Dashboard',
+      description: 'Clinic overview & metrics',
+      icon: <ShieldCheck className="h-4 w-4" />,
+      href: '/admin/dashboard',
+    },
+    {
+      id: 'logout',
+      label: loggingOut ? 'Signing out...' : 'Sign out',
+      description: 'End active session securely',
+      icon: <LogOut className="h-4 w-4" />,
+      onClick: onLogout,
+      isDanger: true,
+    },
+  ];
+}
+
+/**
+ * Modern Frosted-Glass Profile Dropdown with:
+ * - Backdrop blur & glassmorphism
+ * - Shared layoutId sliding blue highlight box (from doctor sidebar)
+ * - Focus + Blur on hover (hovered item in sharp focus, others softly blurred)
+ * - Clean readable typography (no text reversing/rolling)
+ */
 export function LiquidProfileDropdown({
   user,
   userName,
@@ -175,8 +183,10 @@ export function LiquidProfileDropdown({
   roleLabel,
   onLogout,
   loggingOut = false,
+  className,
 }: LiquidProfileDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [resolvedName, setResolvedName] = useState<string>(() =>
@@ -202,216 +212,303 @@ export function LiquidProfileDropdown({
   const cleanName = resolvedName.replace(/^Dr\.\s*/i, '').trim();
   const initialLetter = (cleanName[0] || (isDoctor ? 'D' : 'P')).toUpperCase();
 
+  // Close when clicking outside or pressing Escape
   useEffect(() => {
     if (!isOpen) return;
-    const handler = (e: MouseEvent) => {
+    const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false);
+        setHoveredId(null);
       }
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+        setHoveredId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, [isOpen]);
 
-  const menuItems: MenuItem[] = [
-    {
-      label: 'Profile',
-      icon: <User className="h-4 w-4" />,
-      href: isDoctor ? '/doctor/profile' : '/patient/profile',
-      onClick: () => setIsOpen(false),
-    },
-    ...(isDoctor
-      ? [
-          {
-            label: 'Availability',
-            icon: <Clock className="h-4 w-4" />,
-            href: '/doctor/availability',
-            onClick: () => setIsOpen(false),
-          },
-        ]
-      : [
-          {
-            label: 'Payments',
-            icon: <CreditCard className="h-4 w-4" />,
-            href: '/patient/payments',
-            onClick: () => setIsOpen(false),
-          },
-        ]),
-    {
-      label: loggingOut ? 'Signing out...' : 'Sign out',
-      icon: <LogOut className="h-4 w-4" />,
-      onClick: () => {
-        setIsOpen(false);
-        onLogout();
-      },
-      isDanger: true,
-    },
-  ];
-
-  const collapsedWidth = isDoctor ? 152 : 140;
-  const collapsedHeight = 38;
-  const expandedWidth = 240;
-  const expandedHeight = 230;
+  const menuItems = getRoleMenuItems(user, isDoctor, onLogout, loggingOut);
 
   return (
-    <div
-      ref={containerRef}
-      className="relative"
-      style={{
-        width: collapsedWidth,
-        height: collapsedHeight,
-      }}
-    >
-      <motion.div
-        className="overflow-hidden flex flex-col z-50 select-none shadow-2xl border border-slate-200/90 absolute top-0 right-0 bg-white ring-1 ring-black/[0.04]"
-        onClick={() => {
-          if (!isOpen) setIsOpen(true);
-        }}
-        style={{
-          cursor: isOpen ? 'default' : 'pointer',
-          transformOrigin: 'top right',
-        }}
-        animate={{
-          width: isOpen ? expandedWidth : collapsedWidth,
-          height: isOpen ? expandedHeight : collapsedHeight,
-          borderRadius: isOpen ? 26 : 9999,
-          scale: 1,
-        }}
-        whileHover={isOpen ? undefined : { scale: 1.03 }}
-        transition={{
-          duration: 0.8,
-          ease,
-          height: { duration: isOpen ? 0.8 : 0.2 },
-          scale: { duration: 0.25, ease },
-        }}
+    <div ref={containerRef} className={cn('relative inline-block text-left', className)}>
+      {/* ── Profile Trigger Pill ── */}
+      <motion.button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        className={cn(
+          'flex items-center gap-2.5 px-3 py-1.5 rounded-full border transition-all cursor-pointer select-none',
+          isOpen
+            ? 'bg-blue-50/90 border-[#0066cc]/40 text-[#0066cc] shadow-xs ring-2 ring-[#0066cc]/20'
+            : 'bg-white/90 hover:bg-white border-slate-200/90 text-slate-800 shadow-2xs hover:shadow-xs hover:border-slate-300',
+        )}
+        aria-expanded={isOpen}
+        aria-haspopup="true"
       >
-        {/* Layer 1: Base background */}
-        <motion.div
-          className="absolute inset-0 bg-white"
-          animate={{
-            borderColor: isOpen ? 'rgba(203, 213, 225, 0.9)' : 'rgba(226, 232, 240, 0.9)',
-          }}
-          transition={{ duration: isOpen ? 0.15 : 0.3, ease }}
-          style={{
-            borderWidth: 1,
-            borderStyle: 'solid',
-            borderRadius: 'inherit',
-          }}
-        />
+        <div className="relative">
+          <div
+            suppressHydrationWarning
+            className={cn(
+              'w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 transition-colors shadow-2xs',
+              isOpen ? 'bg-[#0066cc] text-white' : 'bg-[#18191f] text-white',
+            )}
+          >
+            {initialLetter}
+          </div>
+          {/* Active Status Dot */}
+          <span className="w-2 h-2 rounded-full bg-emerald-500 border-2 border-white absolute -bottom-0.5 -right-0.5 shadow-2xs" />
+        </div>
 
-        {/* Layer 2: Expanding Liquid Bubble from top */}
-        <motion.div
-          className="absolute left-1/2 bg-white"
-          style={{
-            width: '260%',
-            height: '260%',
-            borderRadius: '50%',
-            x: '-50%',
-          }}
-          animate={{ top: isOpen ? '-18%' : '-260%' }}
-          transition={{
-            duration: 0.8,
-            ease,
-            delay: isOpen ? 0.08 : 0,
-          }}
-        />
-
-        {/* Top Trigger Bar */}
-        <motion.div
-          className="relative z-10 flex items-center justify-between w-full shrink-0 px-2.5 cursor-pointer"
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsOpen(!isOpen);
-          }}
-          style={{ height: collapsedHeight }}
+        <span
+          suppressHydrationWarning
+          className="text-xs font-bold text-slate-800 truncate max-w-[105px]"
         >
-          <div className="flex items-center gap-2 min-w-0">
-            <div
-              suppressHydrationWarning
-              className={cn(
-                'flex items-center justify-center rounded-full font-bold shadow-xs shrink-0 transition-colors',
-                isOpen
-                  ? 'bg-[#0066cc] text-white ring-2 ring-blue-100 h-7 w-7 text-xs'
-                  : 'bg-[#18191f] text-white h-7 w-7 text-xs',
-              )}
-            >
-              {initialLetter}
-            </div>
+          {resolvedName}
+        </span>
 
-            <motion.span
-              suppressHydrationWarning
-              className="text-xs font-bold truncate max-w-[85px] text-slate-800"
-            >
-              {resolvedName}
-            </motion.span>
-          </div>
+        <ChevronDown
+          className={cn(
+            'w-3.5 h-3.5 text-slate-400 transition-transform duration-250',
+            isOpen && 'rotate-180 text-[#0066cc]',
+          )}
+        />
+      </motion.button>
 
-          <div className="relative w-5 h-5 flex items-center justify-center shrink-0">
-            <motion.span
-              className={cn(
-                'absolute block w-3.5 h-[2px] rounded-full transition-colors',
-                isOpen ? 'bg-slate-700' : 'bg-slate-500',
-              )}
-              animate={{
-                rotate: isOpen ? 45 : 0,
-                y: isOpen ? 0 : -3,
-              }}
-              transition={{ duration: 0.4, ease }}
-            />
-            <motion.span
-              className={cn(
-                'absolute block w-3.5 h-[2px] rounded-full transition-colors',
-                isOpen ? 'bg-slate-700' : 'bg-slate-500',
-              )}
-              animate={{
-                rotate: isOpen ? -45 : 0,
-                y: isOpen ? 0 : 3,
-              }}
-              transition={{ duration: 0.4, ease }}
-            />
-          </div>
-        </motion.div>
-
-        {/* Role subtitle when open */}
+      {/* ── Frosted-Glass Dropdown Window (Popping with camera-blur effect) ── */}
+      <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.15 }}
-            className="relative z-10 px-4 pb-2 border-b border-slate-100"
+            style={{ transformOrigin: 'top right' }}
+            initial={{ opacity: 0, scale: 0.85, y: -12, filter: 'blur(10px)' }}
+            animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, scale: 0.88, y: -10, filter: 'blur(8px)' }}
+            transition={{
+              type: 'spring',
+              stiffness: 420,
+              damping: 24,
+              mass: 0.55,
+              filter: { duration: 0.22, ease: [0.16, 1, 0.3, 1] },
+              opacity: { duration: 0.18, ease: 'easeOut' },
+            }}
+            className="absolute right-0 top-full mt-2.5 z-50 w-72 rounded-2xl bg-white/95 backdrop-blur-2xl border border-slate-200/90 shadow-[0_20px_50px_rgba(0,0,0,0.12),0_4px_12px_rgba(0,0,0,0.06)] p-2 select-none ring-1 ring-black/[0.04] overflow-hidden"
           >
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[#0066cc]">
-              {roleLabel} account
-            </span>
+            {/* Header: User Profile Details */}
+            <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-50/80 border border-slate-100/90 mb-1.5">
+              <div
+                suppressHydrationWarning
+                className="w-9 h-9 rounded-full bg-blue-100 text-[#0066cc] font-black text-sm flex items-center justify-center shrink-0 border border-blue-200/60 shadow-2xs"
+              >
+                {initialLetter}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p
+                  suppressHydrationWarning
+                  className="text-xs font-bold text-slate-900 truncate"
+                >
+                  {resolvedName}
+                </p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-blue-50 text-[#0066cc] font-bold text-[9px] uppercase tracking-wider border border-blue-100">
+                    {roleLabel || (isDoctor ? 'Doctor' : 'Patient')}
+                  </span>
+                  <span
+                    suppressHydrationWarning
+                    className="text-[10px] text-slate-400 truncate"
+                  >
+                    {user.email}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Menu Items with Sliding Blue Box & Focus-Blur Effect */}
+            <div
+              className="flex flex-col gap-0.5 relative py-0.5"
+              onMouseLeave={() => setHoveredId(null)}
+            >
+              {menuItems.map((item) => {
+                const isHovered = hoveredId === item.id;
+                const isDimmed = hoveredId !== null && !isHovered;
+
+                return (
+                  <div
+                    key={item.id}
+                    className="relative rounded-xl"
+                    onMouseEnter={() => setHoveredId(item.id)}
+                  >
+                    {/* Shared Sliding Highlight Box */}
+                    {isHovered && (
+                      <motion.div
+                        layoutId="profile-dropdown-sliding-box"
+                        className={cn(
+                          'absolute inset-0 rounded-xl pointer-events-none z-0',
+                          item.isDanger
+                            ? 'bg-rose-50/90 border border-rose-200/90 shadow-2xs'
+                            : 'bg-[#edf4fe] border border-[#cde0fc] shadow-2xs',
+                        )}
+                        transition={{
+                          type: 'spring',
+                          stiffness: 420,
+                          damping: 30,
+                          mass: 0.55,
+                        }}
+                      />
+                    )}
+
+                    {/* Menu Item Content */}
+                    {item.href ? (
+                      <Link
+                        href={item.href}
+                        onClick={() => {
+                          setIsOpen(false);
+                          setHoveredId(null);
+                        }}
+                        className={cn(
+                          'relative z-10 flex items-center justify-between w-full px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all duration-200 select-none',
+                          isHovered
+                            ? item.isDanger
+                              ? 'text-rose-600 font-bold'
+                              : 'text-[#0066cc] font-bold'
+                            : item.isDanger
+                              ? 'text-rose-600 font-medium'
+                              : 'text-slate-700 font-medium',
+                          isDimmed && 'filter blur-[1.2px] opacity-40 scale-[0.98]',
+                        )}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span
+                            className={cn(
+                              'shrink-0 transition-transform duration-200',
+                              isHovered ? 'scale-110' : 'scale-100',
+                              item.isDanger
+                                ? isHovered
+                                  ? 'text-rose-600'
+                                  : 'text-rose-500'
+                                : isHovered
+                                  ? 'text-[#0066cc]'
+                                  : 'text-slate-500',
+                            )}
+                          >
+                            {item.icon}
+                          </span>
+                          <div className="min-w-0 text-left">
+                            <p className="truncate leading-tight">{item.label}</p>
+                            {item.description && (
+                              <p
+                                className={cn(
+                                  'text-[10px] truncate transition-colors font-normal leading-tight mt-0.5',
+                                  isHovered
+                                    ? item.isDanger
+                                      ? 'text-rose-400'
+                                      : 'text-[#0066cc]/70'
+                                    : 'text-slate-400',
+                                )}
+                              >
+                                {item.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <ChevronRight
+                          className={cn(
+                            'w-3.5 h-3.5 transition-all duration-200 shrink-0',
+                            isHovered
+                              ? item.isDanger
+                                ? 'text-rose-500 translate-x-0.5 opacity-100'
+                                : 'text-[#0066cc] translate-x-0.5 opacity-100'
+                              : 'text-slate-300 opacity-0',
+                          )}
+                        />
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsOpen(false);
+                          setHoveredId(null);
+                          item.onClick?.();
+                        }}
+                        className={cn(
+                          'relative z-10 flex items-center justify-between w-full px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all duration-200 select-none text-left',
+                          isHovered
+                            ? item.isDanger
+                              ? 'text-rose-600 font-bold'
+                              : 'text-[#0066cc] font-bold'
+                            : item.isDanger
+                              ? 'text-rose-600 font-medium'
+                              : 'text-slate-700 font-medium',
+                          isDimmed && 'filter blur-[1.2px] opacity-40 scale-[0.98]',
+                        )}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span
+                            className={cn(
+                              'shrink-0 transition-transform duration-200',
+                              isHovered ? 'scale-110' : 'scale-100',
+                              item.isDanger
+                                ? isHovered
+                                  ? 'text-rose-600'
+                                  : 'text-rose-500'
+                                : isHovered
+                                  ? 'text-[#0066cc]'
+                                  : 'text-slate-500',
+                            )}
+                          >
+                            {item.icon}
+                          </span>
+                          <div className="min-w-0 text-left">
+                            <p className="truncate leading-tight">{item.label}</p>
+                            {item.description && (
+                              <p
+                                className={cn(
+                                  'text-[10px] truncate transition-colors font-normal leading-tight mt-0.5',
+                                  isHovered
+                                    ? item.isDanger
+                                      ? 'text-rose-400'
+                                      : 'text-[#0066cc]/70'
+                                    : 'text-slate-400',
+                                )}
+                              >
+                                {item.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <ChevronRight
+                          className={cn(
+                            'w-3.5 h-3.5 transition-all duration-200 shrink-0',
+                            isHovered
+                              ? item.isDanger
+                                ? 'text-rose-500 translate-x-0.5 opacity-100'
+                                : 'text-[#0066cc] translate-x-0.5 opacity-100'
+                              : 'text-slate-300 opacity-0',
+                          )}
+                        />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </motion.div>
         )}
-
-        {/* Menu items */}
-        <div
-          className="relative z-10 flex flex-col gap-1 items-center justify-center flex-1 px-2.5 py-3"
-          style={{
-            pointerEvents: isOpen ? 'auto' : 'none',
-            opacity: isOpen ? 1 : 0,
-            overflow: 'hidden',
-          }}
-        >
-          {menuItems.map((item, idx) => (
-            <MenuButton
-              key={item.label}
-              item={item}
-              isOpen={isOpen}
-              index={idx}
-            />
-          ))}
-        </div>
-      </motion.div>
+      </AnimatePresence>
     </div>
   );
 }
 
 /**
  * Dock Profile Menu Item:
- * Perfectly circular dock item that opens the liquid menu card below the dock on click!
+ * Perfectly circular dock item that opens the frosted-glass menu card below the dock on click!
  */
 export function DockProfileMenu({
   item,
@@ -431,6 +528,7 @@ export function DockProfileMenu({
   loggingOut: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [resolvedName, setResolvedName] = useState<string>(() =>
@@ -454,55 +552,34 @@ export function DockProfileMenu({
   const cleanName = resolvedName.replace(/^Dr\.\s*/i, '').trim();
   const initialLetter = (cleanName[0] || (isDoctor ? 'D' : 'P')).toUpperCase();
 
+  // Close when clicking outside or pressing Escape
   useEffect(() => {
     if (!isOpen) return;
-    const handler = (e: MouseEvent) => {
+    const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false);
+        setHoveredId(null);
       }
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+        setHoveredId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, [isOpen]);
 
-  const menuItems: MenuItem[] = [
-    {
-      label: 'Profile',
-      icon: <User className="h-4 w-4" />,
-      href: isDoctor ? '/doctor/profile' : '/patient/profile',
-      onClick: () => setIsOpen(false),
-    },
-    ...(isDoctor
-      ? [
-          {
-            label: 'Availability',
-            icon: <Clock className="h-4 w-4" />,
-            href: '/doctor/availability',
-            onClick: () => setIsOpen(false),
-          },
-        ]
-      : [
-          {
-            label: 'Payments',
-            icon: <CreditCard className="h-4 w-4" />,
-            href: '/patient/payments',
-            onClick: () => setIsOpen(false),
-          },
-        ]),
-    {
-      label: loggingOut ? 'Signing out...' : 'Sign out',
-      icon: <LogOut className="h-4 w-4" />,
-      onClick: () => {
-        setIsOpen(false);
-        onLogout();
-      },
-      isDanger: true,
-    },
-  ];
+  const menuItems = getRoleMenuItems(user, isDoctor, onLogout, loggingOut);
 
   return (
     <div ref={containerRef} className="relative flex items-end h-full">
-      {/* ── Native DockItem (100% inside dock pill, perfectly aligned) ── */}
+      {/* ── Native DockItem ── */}
       <div
         onClick={() => setIsOpen(!isOpen)}
         className="cursor-pointer flex items-end h-full"
@@ -513,75 +590,221 @@ export function DockProfileMenu({
         </DockItem>
       </div>
 
-      {/* ── Liquid Morph Menu Below Dock ── */}
+      {/* ── Frosted-Glass Dropdown Window Below Dock (Popping with camera-blur effect) ── */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            className="absolute top-full mt-4 right-0 z-[100] overflow-hidden flex flex-col shadow-2xl bg-white border border-slate-200/90 ring-1 ring-black/[0.04]"
             style={{ transformOrigin: 'top right' }}
-            initial={{ width: 44, height: 44, borderRadius: 9999, opacity: 0, scale: 0.8 }}
-            animate={{ width: 230, height: 225, borderRadius: 24, opacity: 1, scale: 1 }}
-            exit={{ width: 44, height: 44, borderRadius: 9999, opacity: 0, scale: 0.8 }}
-            transition={{ duration: 0.65, ease }}
+            initial={{ opacity: 0, scale: 0.85, y: -12, filter: 'blur(10px)' }}
+            animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, scale: 0.88, y: -10, filter: 'blur(8px)' }}
+            transition={{
+              type: 'spring',
+              stiffness: 420,
+              damping: 24,
+              mass: 0.55,
+              filter: { duration: 0.22, ease: [0.16, 1, 0.3, 1] },
+              opacity: { duration: 0.18, ease: 'easeOut' },
+            }}
+            className="absolute top-full mt-3 right-0 z-[100] w-72 rounded-2xl bg-white/95 backdrop-blur-2xl border border-slate-200/90 shadow-[0_20px_50px_rgba(0,0,0,0.12),0_4px_12px_rgba(0,0,0,0.06)] p-2 select-none ring-1 ring-black/[0.04] overflow-hidden"
           >
-            {/* Layer 1: Base background */}
-            <div className="absolute inset-0 bg-white" />
-
-            {/* Layer 2: Expanding Liquid Bubble from top */}
-            <motion.div
-              className="absolute left-1/2 bg-white"
-              style={{
-                width: '260%',
-                height: '260%',
-                borderRadius: '50%',
-                x: '-50%',
-              }}
-              initial={{ top: '-260%' }}
-              animate={{ top: '-20%' }}
-              exit={{ top: '-260%' }}
-              transition={{ duration: 0.7, ease, delay: 0.05 }}
-            />
-
-            {/* Header: User identity */}
-            <div className="relative z-10 flex items-center justify-between px-3.5 py-2.5 border-b border-slate-100">
-              <div className="flex items-center gap-2 min-w-0">
-                <div
+            {/* Header: User Profile Details */}
+            <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-50/80 border border-slate-100/90 mb-1.5">
+              <div
+                suppressHydrationWarning
+                className="w-9 h-9 rounded-full bg-blue-100 text-[#0066cc] font-black text-sm flex items-center justify-center shrink-0 border border-blue-200/60 shadow-2xs"
+              >
+                {initialLetter}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p
                   suppressHydrationWarning
-                  className="flex h-7 w-7 items-center justify-center rounded-full bg-[#0066cc] text-white text-xs font-bold ring-2 ring-blue-100"
+                  className="text-xs font-bold text-slate-900 truncate"
                 >
-                  {initialLetter}
-                </div>
-                <div className="min-w-0">
-                  <p
+                  {resolvedName}
+                </p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-blue-50 text-[#0066cc] font-bold text-[9px] uppercase tracking-wider border border-blue-100">
+                    {roleLabel || (isDoctor ? 'Doctor' : 'Patient')}
+                  </span>
+                  <span
                     suppressHydrationWarning
-                    className="text-xs font-bold text-slate-900 truncate max-w-[120px]"
+                    className="text-[10px] text-slate-400 truncate"
                   >
-                    {resolvedName}
-                  </p>
-                  <p className="text-[9px] uppercase tracking-wider text-[#0066cc] font-semibold">
-                    {roleLabel} account
-                  </p>
+                    {user.email}
+                  </span>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsOpen(false)}
-                className="text-slate-400 hover:text-slate-800 text-xs font-bold p-1 cursor-pointer"
-              >
-                ✕
-              </button>
             </div>
 
-            {/* Menu items */}
-            <div className="relative z-10 flex flex-col gap-1 p-2 flex-1 justify-center">
-              {menuItems.map((menuItem, idx) => (
-                <MenuButton
-                  key={menuItem.label}
-                  item={menuItem}
-                  isOpen={isOpen}
-                  index={idx}
-                />
-              ))}
+            {/* Menu Items with Sliding Blue Box & Focus-Blur Effect */}
+            <div
+              className="flex flex-col gap-0.5 relative py-0.5"
+              onMouseLeave={() => setHoveredId(null)}
+            >
+              {menuItems.map((menuItem) => {
+                const isHovered = hoveredId === menuItem.id;
+                const isDimmed = hoveredId !== null && !isHovered;
+
+                return (
+                  <div
+                    key={menuItem.id}
+                    className="relative rounded-xl"
+                    onMouseEnter={() => setHoveredId(menuItem.id)}
+                  >
+                    {/* Shared Sliding Highlight Box */}
+                    {isHovered && (
+                      <motion.div
+                        layoutId="dock-profile-menu-sliding-box"
+                        className={cn(
+                          'absolute inset-0 rounded-xl pointer-events-none z-0',
+                          menuItem.isDanger
+                            ? 'bg-rose-50/90 border border-rose-200/90 shadow-2xs'
+                            : 'bg-[#edf4fe] border border-[#cde0fc] shadow-2xs',
+                        )}
+                        transition={{
+                          type: 'spring',
+                          stiffness: 420,
+                          damping: 30,
+                          mass: 0.55,
+                        }}
+                      />
+                    )}
+
+                    {/* Menu Item Content */}
+                    {menuItem.href ? (
+                      <Link
+                        href={menuItem.href}
+                        onClick={() => {
+                          setIsOpen(false);
+                          setHoveredId(null);
+                        }}
+                        className={cn(
+                          'relative z-10 flex items-center justify-between w-full px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all duration-200 select-none',
+                          isHovered
+                            ? menuItem.isDanger
+                              ? 'text-rose-600 font-bold'
+                              : 'text-[#0066cc] font-bold'
+                            : menuItem.isDanger
+                              ? 'text-rose-600 font-medium'
+                              : 'text-slate-700 font-medium',
+                          isDimmed && 'filter blur-[1.2px] opacity-40 scale-[0.98]',
+                        )}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span
+                            className={cn(
+                              'shrink-0 transition-transform duration-200',
+                              isHovered ? 'scale-110' : 'scale-100',
+                              menuItem.isDanger
+                                ? isHovered
+                                  ? 'text-rose-600'
+                                  : 'text-rose-500'
+                                : isHovered
+                                  ? 'text-[#0066cc]'
+                                  : 'text-slate-500',
+                            )}
+                          >
+                            {menuItem.icon}
+                          </span>
+                          <div className="min-w-0 text-left">
+                            <p className="truncate leading-tight">{menuItem.label}</p>
+                            {menuItem.description && (
+                              <p
+                                className={cn(
+                                  'text-[10px] truncate transition-colors font-normal leading-tight mt-0.5',
+                                  isHovered
+                                    ? menuItem.isDanger
+                                      ? 'text-rose-400'
+                                      : 'text-[#0066cc]/70'
+                                    : 'text-slate-400',
+                                )}
+                              >
+                                {menuItem.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <ChevronRight
+                          className={cn(
+                            'w-3.5 h-3.5 transition-all duration-200 shrink-0',
+                            isHovered
+                              ? menuItem.isDanger
+                                ? 'text-rose-500 translate-x-0.5 opacity-100'
+                                : 'text-[#0066cc] translate-x-0.5 opacity-100'
+                              : 'text-slate-300 opacity-0',
+                          )}
+                        />
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsOpen(false);
+                          setHoveredId(null);
+                          menuItem.onClick?.();
+                        }}
+                        className={cn(
+                          'relative z-10 flex items-center justify-between w-full px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all duration-200 select-none text-left',
+                          isHovered
+                            ? menuItem.isDanger
+                              ? 'text-rose-600 font-bold'
+                              : 'text-[#0066cc] font-bold'
+                            : menuItem.isDanger
+                              ? 'text-rose-600 font-medium'
+                              : 'text-slate-700 font-medium',
+                          isDimmed && 'filter blur-[1.2px] opacity-40 scale-[0.98]',
+                        )}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span
+                            className={cn(
+                              'shrink-0 transition-transform duration-200',
+                              isHovered ? 'scale-110' : 'scale-100',
+                              menuItem.isDanger
+                                ? isHovered
+                                  ? 'text-rose-600'
+                                  : 'text-rose-500'
+                                : isHovered
+                                  ? 'text-[#0066cc]'
+                                  : 'text-slate-500',
+                            )}
+                          >
+                            {menuItem.icon}
+                          </span>
+                          <div className="min-w-0 text-left">
+                            <p className="truncate leading-tight">{menuItem.label}</p>
+                            {menuItem.description && (
+                              <p
+                                className={cn(
+                                  'text-[10px] truncate transition-colors font-normal leading-tight mt-0.5',
+                                  isHovered
+                                    ? menuItem.isDanger
+                                      ? 'text-rose-400'
+                                      : 'text-[#0066cc]/70'
+                                    : 'text-slate-400',
+                                )}
+                              >
+                                {menuItem.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <ChevronRight
+                          className={cn(
+                            'w-3.5 h-3.5 transition-all duration-200 shrink-0',
+                            isHovered
+                              ? menuItem.isDanger
+                                ? 'text-rose-500 translate-x-0.5 opacity-100'
+                                : 'text-[#0066cc] translate-x-0.5 opacity-100'
+                              : 'text-slate-300 opacity-0',
+                          )}
+                        />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </motion.div>
         )}
@@ -589,3 +812,6 @@ export function DockProfileMenu({
     </div>
   );
 }
+
+// Named alias
+export const SmoothProfileDropdown = LiquidProfileDropdown;
