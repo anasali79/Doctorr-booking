@@ -638,22 +638,6 @@ export function DoctorDashboardInteractive({
                         <div className="flex items-center justify-end gap-1.5">
                           {appt.status === 'CONFIRMED' && (
                             <>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                onClick={() => handleAction(appt.id, 'manual-check-in')}
-                                disabled={loadingId === `${appt.id}-manual-check-in`}
-                                className="px-3 py-1 rounded-full border border-amber-400 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer shadow-2xs h-7.5"
-                                title="Check-in patient into clinic queue"
-                              >
-                                {loadingId === `${appt.id}-manual-check-in` ? (
-                                  <Loader2 className="w-3 h-3 animate-spin" />
-                                ) : (
-                                  <CheckCircle className="w-3.5 h-3.5 text-amber-600" />
-                                )}
-                                <span>Check In</span>
-                              </Button>
-
                               <Popover>
                                 <PopoverTrigger asChild>
                                   <button
@@ -710,50 +694,32 @@ export function DoctorDashboardInteractive({
                           )}
 
                           {appt.status === 'CHECKED_IN' && (
-                            <>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                onClick={() => handleAction(appt.id, 'start-consultation')}
-                                disabled={loadingId === `${appt.id}-start-consultation`}
-                                className="btn-primary !py-1 !px-3 text-[11px] h-7.5"
-                                title="Call patient into doctor cabin"
-                              >
-                                {loadingId === `${appt.id}-start-consultation` ? (
-                                  <Loader2 className="w-3 h-3 animate-spin" />
-                                ) : (
-                                  <PlayCircle className="w-3.5 h-3.5" />
-                                )}
-                                <span>Start Consultation</span>
-                              </Button>
-
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <button
-                                    type="button"
-                                    className="h-7.5 w-7.5 rounded-full border border-slate-200/90 bg-white hover:bg-slate-100 text-slate-600 hover:text-slate-900 flex items-center justify-center transition-colors shadow-2xs cursor-pointer shrink-0"
-                                    title="More options"
-                                    aria-label="More options"
-                                  >
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </button>
-                                </PopoverTrigger>
-                                <PopoverContent
-                                  align="end"
-                                  sideOffset={6}
-                                  className="w-48 p-1.5 rounded-2xl bg-white shadow-xl border border-slate-200/90 text-xs flex flex-col gap-0.5 z-50"
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="h-7.5 w-7.5 rounded-full border border-slate-200/90 bg-white hover:bg-slate-100 text-slate-600 hover:text-slate-900 flex items-center justify-center transition-colors shadow-2xs cursor-pointer shrink-0"
+                                  title="More options"
+                                  aria-label="More options"
                                 >
-                                  <button
-                                    type="button"
-                                    onClick={() => setReschedulingAppt(appt)}
-                                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl hover:bg-blue-50 text-blue-700 font-medium transition-colors text-left cursor-pointer"
-                                  >
-                                    <CalendarSync className="h-3.5 w-3.5 text-blue-600" />
-                                    <span>Reschedule Visit</span>
-                                  </button>
-                                </PopoverContent>
-                              </Popover>
-                            </>
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent
+                                align="end"
+                                sideOffset={6}
+                                className="w-48 p-1.5 rounded-2xl bg-white shadow-xl border border-slate-200/90 text-xs flex flex-col gap-0.5 z-50"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => setReschedulingAppt(appt)}
+                                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl hover:bg-blue-50 text-blue-700 font-medium transition-colors text-left cursor-pointer"
+                                >
+                                  <CalendarSync className="h-3.5 w-3.5 text-blue-600" />
+                                  <span>Reschedule Visit</span>
+                                </button>
+                              </PopoverContent>
+                            </Popover>
                           )}
 
                           {appt.status === 'IN_CONSULTATION' && (

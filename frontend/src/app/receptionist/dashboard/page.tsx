@@ -7,21 +7,31 @@ import { getTodayIST } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ReceptionistDashboardPage() {
+interface ReceptionistDashboardPageProps {
+  searchParams?: Promise<{ doctorId?: string }>;
+}
+
+export default async function ReceptionistDashboardPage({
+  searchParams,
+}: ReceptionistDashboardPageProps) {
   const { user, token } = await getSession();
 
   if (!user || user.role !== 'RECEPTIONIST' || !token) {
     redirect('/login');
   }
 
+  const params = searchParams ? await searchParams : {};
+  const requestedDoctorId = params.doctorId;
   const todayIST = getTodayIST();
   let appointments: any[] = [];
   let doctor: any = null;
+  let allDoctors: any[] = [];
 
   try {
-    const res = await getReceptionistAppointments(token);
+    const res = await getReceptionistAppointments(requestedDoctorId, token);
     appointments = res.data || [];
     doctor = res.doctor || null;
+    allDoctors = res.allDoctors || [];
   } catch (err) {
     console.error('Failed to load receptionist appointments:', err);
   }
@@ -30,6 +40,8 @@ export default async function ReceptionistDashboardPage() {
     <ReceptionistAppointmentsClient
       initialAppointments={appointments}
       doctor={doctor}
+      allDoctors={allDoctors}
+      selectedDoctorId={requestedDoctorId || 'all'}
       todayIST={todayIST}
     />
   );

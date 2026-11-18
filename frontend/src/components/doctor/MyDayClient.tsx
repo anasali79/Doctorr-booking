@@ -34,7 +34,6 @@ import {
   ChevronRight,
   Loader2,
   X,
-  Play,
   Eye,
   Check,
   AlertCircle,
@@ -696,24 +695,7 @@ export function MyDayClient({
                           {/* Action Button */}
                           <TableCell className="py-3 px-3 text-right whitespace-nowrap">
                             <div className="inline-flex items-center gap-1.5 justify-end">
-                              {appt.status === 'CHECKED_IN' ? (
-                                <Button
-                                  type="button"
-                                  size="xs"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleAction(appt.id, 'start-consultation');
-                                  }}
-                                  disabled={actionLoadingId === `${appt.id}-start-consultation`}
-                                  className="inline-flex items-center gap-1 rounded-lg bg-[#0066cc] px-3.5 py-1 text-xs font-semibold text-white hover:bg-[#0055b3] transition-all shadow-xs h-auto"
-                                >
-                                  {actionLoadingId === `${appt.id}-start-consultation` ? (
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    'Start'
-                                  )}
-                                </Button>
-                              ) : appt.status === 'IN_CONSULTATION' ? (
+                              {['CONFIRMED', 'CHECKED_IN', 'IN_CONSULTATION'].includes(appt.status) ? (
                                 <Button
                                   type="button"
                                   variant="outline"
@@ -722,21 +704,9 @@ export function MyDayClient({
                                     e.stopPropagation();
                                     setSelectedApptId(appt.id);
                                   }}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-[#0066cc] bg-white px-3.5 py-1 text-xs font-semibold text-[#0066cc] hover:bg-blue-50 transition-all shadow-xs h-auto"
+                                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all shadow-2xs h-auto"
                                 >
                                   View
-                                </Button>
-                              ) : appt.status === 'CONFIRMED' ? (
-                                <Button
-                                  type="button"
-                                  size="xs"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleAction(appt.id, 'manual-check-in');
-                                  }}
-                                  className="text-slate-500 hover:text-[#0066cc] text-xs font-medium h-auto px-2 py-0.5 rounded border border-slate-200 hover:border-blue-200"
-                                >
-                                  Check In
                                 </Button>
                               ) : appt.status === 'COMPLETED' ? (
                                 <Button
@@ -1129,10 +1099,10 @@ export function MyDayClient({
               {/* Consultation Quick Status Action */}
               <div className="pt-2 flex flex-col gap-2">
                 {currentAppt.status === 'CHECKED_IN' && (
-                  <Button type="button" onClick={() => handleAction(currentAppt.id, 'start-consultation')} disabled={actionLoadingId === `${currentAppt.id}-start-consultation`} className="w-full py-2.5 rounded-xl bg-[#0066cc] hover:bg-[#0055b3] text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-xs transition-colors h-auto">
-                    <Play className="h-3.5 w-3.5" />
-                    <span>Start Consultation</span>
-                  </Button>
+                  <div className="w-full py-2.5 px-3 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-800 text-xs font-semibold flex items-center justify-center gap-2">
+                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Waiting in Queue</span>
+                  </div>
                 )}
 
                 {currentAppt.status === 'IN_CONSULTATION' && (
