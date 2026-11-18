@@ -1,17 +1,16 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Appointment } from '@/types';
 import { formatTime, formatDate, cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { clientAxios } from '@/lib/api/axios';
 import { useAppointmentSocket } from '@/hooks/useAppointmentSocket';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { SmoothDatePicker } from '@/components/ui/smooth-date-picker';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Dialog,
   DialogContent,
@@ -21,55 +20,66 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  RefreshCw,
-  Loader2,
-  UserCheck,
-  PlayCircle,
-  CheckCheck,
-  UserX,
-  Phone,
-  Clock,
-  Activity,
-  Stethoscope,
-  Hash,
-  Search,
+  Users,
   CheckCircle2,
-  Radio,
+  Clock,
+  Hourglass,
+  User,
+  Check,
+  Ban,
+  Search,
+  ChevronDown,
+  RefreshCw,
   UserPlus,
+  CalendarDays,
+  MoreVertical,
+  Loader2,
+  PlayCircle,
   XCircle,
+  ListOrdered,
 } from 'lucide-react';
 
 type ActionType = 'manual-check-in' | 'start-consultation' | 'complete' | 'no-show';
 
-const STATUS_STYLE: Record<string, { label: string; dot: string; text: string; bg: string; border: string }> = {
-  CONFIRMED:       { label: 'Confirmed',       dot: 'bg-sky-500',     text: 'text-sky-700',     bg: 'bg-sky-50',      border: 'border-sky-200' },
-  CHECKED_IN:      { label: 'In Waiting Room', dot: 'bg-amber-500',   text: 'text-amber-700',   bg: 'bg-amber-50',    border: 'border-amber-200' },
-  IN_CONSULTATION: { label: 'In Consult',      dot: 'bg-blue-600 animate-pulse', text: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200' },
-  COMPLETED:       { label: 'Completed',       dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50',  border: 'border-emerald-200' },
-  CANCELLED:       { label: 'Cancelled',       dot: 'bg-rose-400',    text: 'text-rose-600',    bg: 'bg-rose-50',     border: 'border-rose-200' },
-  NO_SHOW:         { label: 'No Show',         dot: 'bg-slate-400',   text: 'text-slate-500',   bg: 'bg-slate-100',   border: 'border-slate-200' },
-};
+interface ReceptionistDoctorInfo {
+  id?: string;
+  fullName?: string;
+  specialization?: string;
+}
 
 interface ReceptionistLiveQueueClientProps {
   initialAppointments: Appointment[];
-  doctor: any;
+  doctor: ReceptionistDoctorInfo | null;
   selectedDate: string;
-  todayIST: string;
+  todayIST?: string;
 }
 
 export function ReceptionistLiveQueueClient({
   initialAppointments,
   doctor,
   selectedDate,
-  todayIST,
 }: ReceptionistLiveQueueClientProps) {
   const router = useRouter();
   const [currentDate, setCurrentDate] = useState<string>(selectedDate);
   const [appointments, setAppointments] = useState<Appointment[]>(initialAppointments);
+  const [prevSelectedDate, setPrevSelectedDate] = useState(selectedDate);
+  const [prevInitialAppts, setPrevInitialAppts] = useState(initialAppointments);
+
+  if (selectedDate !== prevSelectedDate) {
+    setPrevSelectedDate(selectedDate);
+    setCurrentDate(selectedDate);
+  }
+
+  if (initialAppointments !== prevInitialAppts) {
+    setPrevInitialAppts(initialAppointments);
+    setAppointments(initialAppointments);
+  }
+
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'ALL' | 'WAITING' | 'ARRIVING' | 'COMPLETED'>('ALL');
+  const [filterTab, setFilterTab] = useState<'ALL' | 'WAITING' | 'ARRIVING' | 'COMPLETED' | 'NO_SHOW'>('ALL');
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
   // Walk-in modal state
   const [isWalkInOpen, setIsWalkInOpen] = useState(false);
@@ -92,15 +102,6 @@ export function ReceptionistLiveQueueClient({
   const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null);
   const [cancelling, setCancelling] = useState(false);
 
-  // Sync props when SSR/URL changes
-  useEffect(() => {
-    setCurrentDate(selectedDate);
-  }, [selectedDate]);
-
-  useEffect(() => {
-    setAppointments(initialAppointments);
-  }, [initialAppointments]);
-
   // Fetch Queue for a specific date
   const fetchQueueForDate = useCallback(
     async (targetDate: string, silent = false) => {
@@ -109,7 +110,7 @@ export function ReceptionistLiveQueueClient({
         const res = await clientAxios.get(`/api/receptionist/queue?date=${targetDate}`);
         const data = res.data?.data || [];
         setAppointments(Array.isArray(data) ? data : []);
-        if (!silent) toast.success(`Queue loaded for ${targetDate}`);
+        if (!silent) toast.success(`Queue refreshed for ${formatDate(targetDate)}`);
       } catch {
         if (!silent) toast.error('Failed to load queue for date');
       } finally {
@@ -153,19 +154,19 @@ export function ReceptionistLiveQueueClient({
   const handleAction = async (appointmentId: string, action: ActionType) => {
     const lid = `${appointmentId}-${action}`;
     setLoadingId(lid);
+    setActiveMenuId(null);
     try {
       const res = await clientAxios.post(
         `/api/receptionist/appointments/${appointmentId}/action?action=${action}`,
       );
       const labels: Record<ActionType, string> = {
         'manual-check-in': 'Patient Checked In (Waiting in Clinic)',
-        'start-consultation': 'Consultation Started (Now Serving)',
+        'start-consultation': 'Consultation Started (Now In Cabin)',
         complete: 'Consultation Completed',
         'no-show': 'Marked as No Show',
       };
       toast.success(labels[action] || 'Queue updated');
 
-      // Record check-in timestamp locally immediately
       if (action === 'manual-check-in') {
         const checkInTime = res?.data?.checkedInAt || new Date().toISOString();
         setAppointments((prev) =>
@@ -177,8 +178,9 @@ export function ReceptionistLiveQueueClient({
         );
       }
       await fetchQueue(true);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.message || 'Action failed');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } }; message?: string };
+      toast.error(error.response?.data?.error || error.message || 'Action failed');
     } finally {
       setLoadingId(null);
     }
@@ -192,8 +194,9 @@ export function ReceptionistLiveQueueClient({
       toast.success('Appointment cancelled successfully');
       setCancelTarget(null);
       await fetchQueue(true);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Cancellation failed');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } }; message?: string };
+      toast.error(error.response?.data?.error || 'Cancellation failed');
     } finally {
       setCancelling(false);
     }
@@ -216,8 +219,9 @@ export function ReceptionistLiveQueueClient({
       toast.success('Appointment rescheduled successfully');
       setRescheduleTarget(null);
       await fetchQueue(true);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Reschedule failed');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } }; message?: string };
+      toast.error(error.response?.data?.error || 'Reschedule failed');
     } finally {
       setRescheduling(false);
     }
@@ -238,15 +242,16 @@ export function ReceptionistLiveQueueClient({
         gender: walkInGender,
         reason: walkInReason.trim() || undefined,
       });
-      toast.success('Walk-in patient booked & added to live queue!');
+      toast.success('Walk-in patient added to live queue!');
       setIsWalkInOpen(false);
       setWalkInName('');
       setWalkInPhone('');
       setWalkInAge('');
       setWalkInReason('');
       await fetchQueue(true);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Failed to book walk-in patient');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } }; message?: string };
+      toast.error(error.response?.data?.error || 'Failed to book walk-in patient');
     } finally {
       setWalkInSubmitting(false);
     }
@@ -254,1105 +259,963 @@ export function ReceptionistLiveQueueClient({
 
   // KPIs
   const total = appointments.length;
-  const inConsult = appointments.find((a) => a.status === 'IN_CONSULTATION');
-  const waitingList = appointments
-    .filter((a) => a.status === 'CHECKED_IN')
-    .sort((a, b) => (a.tokenNumber ?? 999) - (b.tokenNumber ?? 999));
-  const waitingCount = waitingList.length;
-
-  const expectedList = appointments
-    .filter((a) => a.status === 'CONFIRMED')
-    .sort((a, b) => (a.tokenNumber ?? 999) - (b.tokenNumber ?? 999));
-  const expectedCount = expectedList.length;
-
-  const completedList = appointments
-    .filter((a) => a.status === 'COMPLETED')
-    .sort((a, b) => (a.tokenNumber ?? 999) - (b.tokenNumber ?? 999));
+  const completedList = useMemo(
+    () => appointments.filter((a) => a.status === 'COMPLETED'),
+    [appointments],
+  );
   const completedCount = completedList.length;
 
-  // Next patient in line (first checked-in waiting, or first confirmed if none checked in)
-  const nextInLine = waitingList[0] || expectedList[0] || null;
+  const waitingList = useMemo(
+    () =>
+      appointments
+        .filter((a) => a.status === 'CHECKED_IN')
+        .sort((a, b) => (a.tokenNumber ?? 999) - (b.tokenNumber ?? 999)),
+    [appointments],
+  );
+  const waitingCount = waitingList.length;
 
-  // Ordered queue for sequential display (Now serving first, then checked in, then confirmed, then done)
-  const otherList = appointments.filter((a) => ['CANCELLED', 'NO_SHOW'].includes(a.status));
-  const orderedAppointments = useMemo(() => {
-    return [
-      ...(inConsult ? [inConsult] : []),
-      ...waitingList,
-      ...expectedList,
-      ...completedList,
-      ...otherList,
-    ];
-  }, [inConsult, waitingList, expectedList, completedList, otherList]);
+  const noShowList = useMemo(
+    () => appointments.filter((a) => a.status === 'NO_SHOW'),
+    [appointments],
+  );
+  const noShowCount = noShowList.length;
 
-  // Filtered appointments
-  const filteredAppointments = useMemo(() => {
-    return orderedAppointments.filter((a) => {
-      // Tab filter
-      if (activeTab === 'WAITING' && a.status !== 'CHECKED_IN') return false;
-      if (activeTab === 'ARRIVING' && a.status !== 'CONFIRMED') return false;
-      if (activeTab === 'COMPLETED' && a.status !== 'COMPLETED') return false;
+  // Currently Consulting
+  const inConsult = useMemo(
+    () => appointments.find((a) => a.status === 'IN_CONSULTATION') || null,
+    [appointments],
+  );
 
-      // Search filter
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase().trim();
-      const name = a.patient?.fullName?.toLowerCase() || '';
-      const phone = a.patient?.phone || '';
-      const token = String(a.tokenNumber || '');
-      return name.includes(q) || phone.includes(q) || token.includes(q);
-    });
-  }, [orderedAppointments, activeTab, searchQuery]);
+  // Expected
+  const expectedList = useMemo(
+    () =>
+      appointments
+        .filter((a) => a.status === 'CONFIRMED')
+        .sort((a, b) => (a.tokenNumber ?? 999) - (b.tokenNumber ?? 999)),
+    [appointments],
+  );
+
+  // Next Patient in Line
+  const nextInLine = useMemo(() => {
+    return waitingList[0] || expectedList[0] || null;
+  }, [waitingList, expectedList]);
+
+  // Queue List Filtered
+  const filteredQueue = useMemo(() => {
+    return appointments
+      .filter((a) => {
+        // Tab filter
+        if (filterTab === 'WAITING' && a.status !== 'CHECKED_IN') return false;
+        if (filterTab === 'ARRIVING' && a.status !== 'CONFIRMED') return false;
+        if (filterTab === 'COMPLETED' && a.status !== 'COMPLETED') return false;
+        if (filterTab === 'NO_SHOW' && a.status !== 'NO_SHOW') return false;
+        // In All view, hide rescheduled / cancelled past records
+        if (filterTab === 'ALL' && ['CANCELLED', 'RESCHEDULED'].includes(a.status)) return false;
+
+        // Search query
+        if (!searchQuery.trim()) return true;
+        const q = searchQuery.toLowerCase().trim();
+        const name = a.patient?.fullName?.toLowerCase() || '';
+        const phone = a.patient?.phone || '';
+        const token = String(a.tokenNumber || '');
+        const status = a.status.toLowerCase();
+        return name.includes(q) || phone.includes(q) || token.includes(q) || status.includes(q);
+      })
+      .sort((a, b) => (a.tokenNumber ?? 999) - (b.tokenNumber ?? 999));
+  }, [appointments, filterTab, searchQuery]);
 
   return (
-    <div className="space-y-6 pb-16">
-      {/* ─── Top Control Bar: Doctor & Date & Realtime Indicator ─── */}
-      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
-        <div className="space-y-1">
+    <div className="space-y-6 pb-14 text-slate-900">
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/*                       1. TOP HEADER SECTION                         */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+            <h1 className="text-2xl sm:text-[26px] font-black tracking-tight text-slate-900">
               Live Patient Queue
             </h1>
-            <Badge
-              variant="outline"
+            <span
               className={cn(
-                'text-[10px] font-bold px-2 py-0.5 rounded-full border gap-1 inline-flex items-center',
+                'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border',
                 isConnected
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                   : 'bg-amber-50 text-amber-700 border-amber-200',
               )}
             >
-              <Radio
+              <span
                 className={cn(
-                  'h-3 w-3',
-                  isConnected ? 'text-emerald-500 animate-pulse' : 'text-amber-500',
+                  'w-1.5 h-1.5 rounded-full',
+                  isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500',
                 )}
               />
-              <span>{isConnected ? 'Real-Time Sync Active' : 'Connecting Sync...'}</span>
-            </Badge>
+              {isConnected ? 'Live Sync' : 'Connecting'}
+            </span>
           </div>
-          <p className="text-xs text-slate-600 flex items-center gap-1.5">
-            <span>Managing front-desk for</span>
-            <strong className="text-slate-900">Dr. {doctor?.fullName || 'Doctor'}</strong>
-            <span className="text-slate-400">•</span>
-            <span className="text-slate-500">{doctor?.specialization || 'Clinical Practice'}</span>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Manage patient flow and keep your clinic running smoothly
           </p>
         </div>
 
-        {/* Date Selector & Actions */}
-        <div className="flex items-center gap-2.5 flex-wrap">
+        {/* Date Selector & Walk-in Action */}
+        <div className="flex items-center gap-3">
           <SmoothDatePicker
             value={currentDate}
             onChange={handleDateChange}
-            className="w-40 text-xs rounded-xl"
+            className="w-auto min-w-[210px] h-10 px-3.5 rounded-2xl border-slate-200/90 bg-white text-xs font-semibold shadow-2xs hover:border-blue-400"
           />
-
           <Button
             type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => handleDateChange(todayIST)}
-            disabled={currentDate === todayIST}
-            className={cn(
-              'h-9 px-3 rounded-xl text-xs font-semibold border-slate-200 cursor-pointer',
-              currentDate === todayIST
-                ? 'bg-blue-50 text-[#0066cc] border-blue-200'
-                : 'text-slate-700 hover:bg-slate-50',
-            )}
-          >
-            Today
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            onClick={() => fetchQueue(false)}
-            disabled={refreshing}
-            className="h-9 w-9 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 cursor-pointer"
-            title="Refresh queue"
-          >
-            <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
-          </Button>
-
-          <Button
             onClick={() => setIsWalkInOpen(true)}
-            className="h-9 px-3.5 rounded-xl bg-[#0066cc] hover:bg-[#0052a3] text-white shadow-xs text-xs font-semibold gap-1.5 cursor-pointer"
+            className="h-10 px-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs gap-1.5 shadow-xs cursor-pointer"
           >
             <UserPlus className="h-3.5 w-3.5" />
-            <span>Walk-in Patient</span>
+            <span>+ Walk-in Patient</span>
           </Button>
         </div>
       </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Total Patients */}
+        <div className="bg-white rounded-3xl border border-slate-100 p-5 shadow-xs flex items-center justify-between relative overflow-hidden">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-blue-100/70 text-[#0066cc] flex items-center justify-center shrink-0">
+              <Users className="h-5 w-5" />
+            </div>
+            <div>
+              <span className="text-xs font-semibold text-slate-600 block">
+                Total Patients
+              </span>
+              <div className="text-2xl sm:text-[26px] font-black text-slate-900 leading-tight mt-0.5">
+                {total}
+              </div>
+              <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-0.5 mt-0.5">
+                <span>↑ +1 vs yesterday</span>
+              </span>
+            </div>
+          </div>
+          {/* Mini Blue Sparkline Wave */}
+          <div className="w-16 h-8 text-blue-500 shrink-0 self-end mb-1">
+            <svg className="w-full h-full overflow-visible" viewBox="0 0 70 30" fill="none">
+              <defs>
+                <linearGradient id="blueSpark" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.3" />
+                  <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
+                </linearGradient>
+              </defs>
+              <path d="M 0 24 C 20 24, 30 14, 45 18 C 55 22, 60 8, 70 6 L 70 30 L 0 30 Z" fill="url(#blueSpark)" />
+              <path d="M 0 24 C 20 24, 30 14, 45 18 C 55 22, 60 8, 70 6" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </div>
+        </div>
 
-      {/* ─── 4 Top KPI Cards (Matching Doctor Live Queue Layout Exactly) ─── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Card className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block">
-            Total Patients
-          </span>
-          <div className="text-2xl font-black text-slate-900 tabular-nums mt-1">{total}</div>
-          <span className="text-[11px] text-slate-400 block mt-0.5">Scheduled on this date</span>
-        </Card>
+        {/* Card 2: Completed Today */}
+        <div className="bg-white rounded-3xl border border-slate-100 p-5 shadow-xs flex items-center justify-between relative overflow-hidden">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-100/70 text-emerald-600 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
+            <div>
+              <span className="text-xs font-semibold text-slate-600 block">
+                Completed Today
+              </span>
+              <div className="text-2xl sm:text-[26px] font-black text-slate-900 leading-tight mt-0.5">
+                {completedCount}
+              </div>
+              <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-0.5 mt-0.5">
+                <span>↑ +1 vs yesterday</span>
+              </span>
+            </div>
+          </div>
+          {/* Mini Green Sparkline Wave */}
+          <div className="w-16 h-8 text-emerald-500 shrink-0 self-end mb-1">
+            <svg className="w-full h-full overflow-visible" viewBox="0 0 70 30" fill="none">
+              <defs>
+                <linearGradient id="greenSpark" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
+                  <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+                </linearGradient>
+              </defs>
+              <path d="M 0 22 C 15 22, 28 26, 42 16 C 52 8, 60 12, 70 6 L 70 30 L 0 30 Z" fill="url(#greenSpark)" />
+              <path d="M 0 22 C 15 22, 28 26, 42 16 C 52 8, 60 12, 70 6" stroke="#10b981" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </div>
+        </div>
 
-        <Card className="bg-white rounded-2xl border border-amber-200 bg-amber-50/40 p-4 shadow-xs">
-          <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wide block">
-            Waiting in Clinic
-          </span>
-          <div className="text-2xl font-black text-amber-800 tabular-nums mt-1">{waitingCount}</div>
-          <span className="text-[11px] text-amber-600 block mt-0.5">Checked in & ready</span>
-        </Card>
+        {/* Card 3: Waiting in Clinic */}
+        <div className="bg-white rounded-3xl border border-slate-100 p-5 shadow-xs flex items-center justify-between relative overflow-hidden">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-amber-100/70 text-amber-600 flex items-center justify-center shrink-0">
+              <Clock className="h-5 w-5" />
+            </div>
+            <div>
+              <span className="text-xs font-semibold text-slate-600 block">
+                Waiting in Clinic
+              </span>
+              <div className="text-2xl sm:text-[26px] font-black text-slate-900 leading-tight mt-0.5">
+                {waitingCount}
+              </div>
+              <span className="text-[11px] font-normal text-slate-400 block mt-0.5">
+                Currently waiting
+              </span>
+            </div>
+          </div>
+        </div>
 
-        <Card className="bg-white rounded-2xl border border-sky-200 bg-sky-50/40 p-4 shadow-xs">
-          <span className="text-[11px] font-bold text-sky-700 uppercase tracking-wide block">
-            Still Arriving
-          </span>
-          <div className="text-2xl font-black text-sky-800 tabular-nums mt-1">{expectedCount}</div>
-          <span className="text-[11px] text-sky-600 block mt-0.5">Confirmed appointments</span>
-        </Card>
-
-        <Card className="bg-white rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 shadow-xs">
-          <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wide block">
-            Done Today
-          </span>
-          <div className="text-2xl font-black text-emerald-800 tabular-nums mt-1">{completedCount}</div>
-          <span className="text-[11px] text-emerald-600 block mt-0.5">Consultations completed</span>
-        </Card>
+        {/* Card 4: No Show */}
+        <div className="bg-white rounded-3xl border border-slate-100 p-5 shadow-xs flex items-center justify-between relative overflow-hidden">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-purple-100/70 text-purple-600 flex items-center justify-center shrink-0">
+              <Hourglass className="h-5 w-5" />
+            </div>
+            <div>
+              <span className="text-xs font-semibold text-slate-600 block">
+                No Show
+              </span>
+              <div className="text-2xl sm:text-[26px] font-black text-slate-900 leading-tight mt-0.5">
+                {noShowCount}
+              </div>
+              <span className="text-[11px] font-normal text-slate-400 block mt-0.5">
+                Today
+              </span>
+            </div>
+          </div>
+          {/* Mini Purple Sparkline Wave */}
+          <div className="w-16 h-8 text-purple-500 shrink-0 self-end mb-1">
+            <svg className="w-full h-full overflow-visible" viewBox="0 0 70 30" fill="none">
+              <defs>
+                <linearGradient id="purpleSpark" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#a855f7" stopOpacity="0.3" />
+                  <stop offset="100%" stopColor="#a855f7" stopOpacity="0.0" />
+                </linearGradient>
+              </defs>
+              <path d="M 0 25 C 20 25, 35 22, 50 18 C 60 15, 65 20, 70 14 L 70 30 L 0 30 Z" fill="url(#purpleSpark)" />
+              <path d="M 0 25 C 20 25, 35 22, 50 18 C 60 15, 65 20, 70 14" stroke="#a855f7" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </div>
+        </div>
       </div>
 
-      {/* ─── Spotlight: Now Serving (7 cols) vs Next Up (5 cols) ─── */}
-      <div className="grid md:grid-cols-12 gap-5">
-        {/* NOW SERVING BOARD (7 cols) */}
-        <Card className="md:col-span-7 bg-white rounded-3xl border-2 border-blue-600 p-6 shadow-sm flex flex-col justify-between relative overflow-hidden">
-          <div className="absolute top-0 right-0 px-4 py-1 bg-blue-600 text-white rounded-bl-2xl text-[11px] font-bold uppercase tracking-wider">
-            Active Consultation
-          </div>
-
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
-              <span className="text-xs font-bold uppercase tracking-wider text-blue-800">Now Serving</span>
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/*                       3. MAIN QUEUE CONTENT                         */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      <div className="space-y-6">
+        {/* ── CARD A: CURRENTLY CONSULTING ── */}
+        <div className="rounded-3xl border border-blue-100/90 bg-white overflow-hidden shadow-xs">
+          {/* Top Blue Gradient Banner Header */}
+          <div className="bg-gradient-to-r from-[#0066cc] via-[#1a7ae0] to-[#3b8ef0] px-6 py-3.5 flex items-center justify-between text-white">
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="font-bold text-sm tracking-tight">Currently Consulting</span>
             </div>
-
-            {inConsult ? (
-              <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-                <div className="w-20 h-20 rounded-2xl bg-blue-700 text-white flex flex-col items-center justify-center flex-shrink-0 shadow-xs">
-                  <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">Token</span>
-                  <span className="text-3xl font-black leading-none mt-0.5">
-                    {inConsult.tokenNumber != null ? `#${inConsult.tokenNumber}` : '—'}
-                  </span>
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="text-xl font-bold text-slate-900 truncate">
-                    {inConsult.patient?.fullName || 'Patient'}
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 text-xs text-slate-600">
-                    <span className="flex items-center gap-1 font-semibold text-slate-800">
-                      <Clock className="w-3.5 h-3.5 text-slate-400" />
-                      {formatTime(inConsult.startTime)} – {formatTime(inConsult.endTime)}
-                    </span>
-                    {inConsult.patient?.age && (
-                      <span>{inConsult.patient.age} yrs • {inConsult.patient.gender}</span>
-                    )}
-                    {inConsult.patient?.phone && (
-                      <span className="flex items-center gap-1">
-                        <Phone className="w-3 h-3 text-slate-400" />
-                        {inConsult.patient.phone}
-                      </span>
-                    )}
-                    {inConsult.checkedInAt && (
-                      <span className="inline-flex items-center gap-1 font-semibold text-blue-800 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-md text-[11px]">
-                        <UserCheck className="w-3 h-3 text-blue-600" />
-                        <span>Checked In: {formatTime(inConsult.checkedInAt)}</span>
-                      </span>
-                    )}
-                  </div>
-
-                  {(inConsult.patient?.basicHealthInfo || inConsult.reasonForVisit) && (
-                    <p className="mt-2 text-xs text-slate-600 bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1.5">
-                      <span className="font-semibold text-slate-700">Health info:</span>{' '}
-                      {inConsult.patient?.basicHealthInfo || inConsult.reasonForVisit}
-                    </p>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="py-6 flex flex-col items-center justify-center text-center">
-                <Stethoscope className="w-10 h-10 text-slate-300 mb-2" />
-                <p className="text-base font-bold text-slate-800">No Consultation In Progress</p>
-                <p className="text-xs text-slate-500 mt-1">
-                  {waitingCount > 0
-                    ? `${waitingCount} patient(s) waiting in clinic. Call the next patient to doctor cabin.`
-                    : expectedCount > 0
-                      ? `${expectedCount} patient(s) expected today. Awaiting check-in.`
-                      : 'All patient consultations completed for this date.'}
-                </p>
-              </div>
-            )}
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-100 border border-emerald-300/30 text-xs font-semibold backdrop-blur-sm">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+              <span>Consultation in Progress</span>
+            </div>
           </div>
 
-          {/* Actions / Footer */}
-          <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+          {/* Inner Content Area */}
+          <div className="p-6 relative bg-gradient-to-r from-white via-white to-blue-50/30">
             {inConsult ? (
-              <>
-                <div className="text-xs text-slate-500 font-medium">
-                  {waitingCount} patient(s) waiting after this token
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                {/* Left: Token Box + Patient Info */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+                  {/* Large Token Badge */}
+                  <div className="w-28 h-28 rounded-2xl bg-[#f0f6ff] border border-blue-100/90 flex flex-col items-center justify-center shrink-0 shadow-2xs">
+                    <span className="text-[11px] font-bold tracking-wider text-blue-600 uppercase">
+                      TOKEN
+                    </span>
+                    <span className="text-4xl font-black text-[#0066cc] mt-0.5 leading-none">
+                      {inConsult.tokenNumber != null ? `#${inConsult.tokenNumber}` : '—'}
+                    </span>
+                  </div>
+
+                  {/* Patient Information */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-slate-500 shrink-0" />
+                      <h3 className="text-lg font-bold text-slate-900 leading-tight">
+                        {inConsult.patient?.fullName || 'Patient'}
+                      </h3>
+                    </div>
+
+                    {(inConsult.patient?.age || inConsult.patient?.gender) && (
+                      <div className="flex items-center gap-2 text-xs text-slate-600 font-medium">
+                        <Users className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                        <span>
+                          {[
+                            inConsult.patient?.age ? `${inConsult.patient.age} yrs` : null,
+                            inConsult.patient?.gender || null,
+                          ]
+                            .filter(Boolean)
+                            .join(' • ')}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2 text-xs text-slate-600 font-medium">
+                      <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                      <span>
+                        {formatTime(inConsult.startTime)} – {formatTime(inConsult.endTime)}
+                      </span>
+                    </div>
+
+                    {inConsult.checkedInAt && (
+                      <div className="pt-1">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 border border-sky-200/80 px-3 py-1 text-xs font-semibold text-sky-700">
+                          <Check className="h-3 w-3 text-sky-600" />
+                          <span>
+                            Checked In: {formatTime(inConsult.checkedInAt)}
+                          </span>
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
+
+                {/* Right: Actions */}
+                <div className="flex flex-col gap-2.5 w-full lg:w-48 shrink-0">
                   <Button
                     onClick={() => handleAction(inConsult.id, 'complete')}
                     disabled={loadingId === `${inConsult.id}-complete`}
-                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                    className="w-full h-11 rounded-xl bg-[#0066cc] hover:bg-[#0052a3] text-white font-bold text-xs gap-2 shadow-sm cursor-pointer"
                   >
                     {loadingId === `${inConsult.id}-complete` ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <CheckCheck className="w-4 h-4" />
+                      <Check className="h-4 w-4" />
                     )}
-                    <span>Mark Consultation Complete</span>
+                    <span>Mark as Complete</span>
                   </Button>
+
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     onClick={() => handleAction(inConsult.id, 'no-show')}
                     disabled={loadingId === `${inConsult.id}-no-show`}
-                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+                    className="w-full h-11 rounded-xl bg-white hover:bg-slate-50 text-slate-800 border-slate-200 font-semibold text-xs gap-2 cursor-pointer shadow-2xs"
                   >
-                    No Show
+                    <Ban className="h-4 w-4 text-slate-500" />
+                    <span>Mark as No Show</span>
                   </Button>
                 </div>
-              </>
-            ) : nextInLine && nextInLine.status === 'CHECKED_IN' ? (
-              <div className="w-full flex items-center justify-between gap-3">
-                <div className="text-xs text-slate-600 font-medium">
-                  Ready to call: <span className="font-bold text-slate-900">{nextInLine.patient?.fullName}</span> (Token #{nextInLine.tokenNumber != null ? `#${nextInLine.tokenNumber}` : '—'})
-                </div>
-                <Button
-                  onClick={() => handleAction(nextInLine.id, 'start-consultation')}
-                  disabled={loadingId === `${nextInLine.id}-start-consultation`}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
-                >
-                  {loadingId === `${nextInLine.id}-start-consultation` ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <PlayCircle className="w-4 h-4" />
-                  )}
-                  <span>Call Next Token (#{nextInLine.tokenNumber != null ? nextInLine.tokenNumber : '—'})</span>
-                </Button>
               </div>
             ) : (
-              <div className="text-xs text-slate-400">Queue is idle. Waiting for patient arrival.</div>
-            )}
-          </div>
-        </Card>
+              <div className="py-6 flex flex-col sm:flex-row items-center justify-between gap-5">
+                <div className="flex items-center gap-4">
+                  <div className="w-20 h-20 rounded-2xl bg-slate-100 flex flex-col items-center justify-center shrink-0 text-slate-400">
+                    <span className="text-[10px] font-bold uppercase">Token</span>
+                    <span className="text-2xl font-bold">—</span>
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-slate-900">
+                      Doctor cabin is currently available
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {waitingCount > 0
+                        ? `${waitingCount} patient(s) waiting in clinic. Call the next patient to begin.`
+                        : 'No consultation in progress. Ready for patient arrivals.'}
+                    </p>
+                  </div>
+                </div>
 
-        {/* NEXT IN LINE BOARD (5 cols) */}
-        <Card className="md:col-span-5 bg-white rounded-3xl border border-slate-200 p-6 shadow-xs flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between gap-2 mb-4">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-600">Next In Line</span>
-              {nextInLine && (
-                <Badge
-                  variant="outline"
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold border-0 ${
-                    nextInLine.status === 'CHECKED_IN'
-                      ? 'bg-amber-100 text-amber-800'
-                      : 'bg-sky-100 text-sky-800'
-                  }`}
-                >
-                  {nextInLine.status === 'CHECKED_IN' ? 'In Waiting Room' : 'Expected'}
-                </Badge>
-              )}
-            </div>
-
-            {nextInLine ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3.5">
-                  <div
-                    className={`w-14 h-14 rounded-2xl text-white flex flex-col items-center justify-center flex-shrink-0 shadow-xs ${
-                      nextInLine.status === 'CHECKED_IN' ? 'bg-amber-500' : 'bg-slate-700'
-                    }`}
+                {nextInLine && nextInLine.status === 'CHECKED_IN' && (
+                  <Button
+                    onClick={() => handleAction(nextInLine.id, 'start-consultation')}
+                    disabled={loadingId === `${nextInLine.id}-start-consultation`}
+                    className="h-11 px-6 rounded-xl bg-[#0066cc] hover:bg-[#0052a3] text-white font-bold text-xs gap-2 shrink-0 cursor-pointer shadow-sm"
                   >
-                    <span className="text-[9px] font-bold uppercase tracking-wider opacity-80">Token</span>
-                    <span className="text-xl font-black leading-none mt-0.5">
-                      {nextInLine.tokenNumber != null ? `#${nextInLine.tokenNumber}` : '—'}
-                    </span>
-                  </div>
-                  <div className="min-w-0">
-                    <div className="font-bold text-slate-900 text-base truncate">
-                      {nextInLine.patient?.fullName || 'Patient'}
-                    </div>
-                    <div className="text-xs text-slate-500 font-medium">
-                      Slot: {formatTime(nextInLine.startTime)} – {formatTime(nextInLine.endTime)}
-                    </div>
-                    {nextInLine.patient?.age && (
-                      <div className="text-xs text-slate-400">
-                        {nextInLine.patient.age} yrs • {nextInLine.patient.gender}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 text-xs text-slate-600 space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Queue Position:</span>
-                    <span className="font-bold text-slate-800">#1 Next Up</span>
-                  </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-400">Current Status:</span>
-                      <span className="font-bold text-slate-800">
-                        {nextInLine.status === 'CHECKED_IN' ? (
-                          <span className="text-amber-800 flex items-center gap-1 font-bold">
-                            Waiting in clinic
-                            {nextInLine.checkedInAt && ` • In: ${formatTime(nextInLine.checkedInAt)}`}
-                          </span>
-                        ) : (
-                          'Not checked in yet'
-                        )}
-                      </span>
-                    </div>
-                </div>
-              </div>
-            ) : (
-              <div className="py-8 text-center text-slate-400 text-xs">
-                No upcoming patients remaining in the queue.
+                    <PlayCircle className="h-4 w-4" />
+                    <span>Call Token #{nextInLine.tokenNumber || '1'}</span>
+                  </Button>
+                )}
               </div>
             )}
           </div>
+        </div>
 
-          {nextInLine && (
-            <div className="mt-5 pt-3 border-t border-slate-100 flex items-center gap-2">
-              {nextInLine.status === 'CHECKED_IN' ? (
-                <Button
-                  onClick={() => handleAction(nextInLine.id, 'start-consultation')}
-                  disabled={loadingId === `${nextInLine.id}-start-consultation`}
-                  className="flex-1 flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl py-2.5 text-xs font-bold transition-all shadow-xs cursor-pointer"
-                >
-                  {loadingId === `${nextInLine.id}-start-consultation` ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <PlayCircle className="w-3.5 h-3.5" />
-                  )}
-                  <span>Call to Doctor Cabin</span>
-                </Button>
-              ) : (
-                <Button
-                  onClick={() => handleAction(nextInLine.id, 'manual-check-in')}
-                  disabled={loadingId === `${nextInLine.id}-manual-check-in`}
-                  className="flex-1 flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl py-2.5 text-xs font-bold transition-all shadow-xs cursor-pointer"
-                >
-                  {loadingId === `${nextInLine.id}-manual-check-in` ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <UserCheck className="w-3.5 h-3.5" />
-                  )}
-                  <span>Check In Patient When Arrived</span>
-                </Button>
-              )}
+        {/* ── CARD B: NEXT PATIENT STRIP ── */}
+        <div>
+          <div className="flex items-center gap-2 mb-2 px-1">
+            <span className="h-2 w-2 rounded-full bg-blue-600" />
+            <span className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+              Next Patient
+            </span>
+          </div>
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setRescheduleTarget(nextInLine)}
-                className="rounded-xl border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 h-10 px-3 cursor-pointer"
-              >
-                Reschedule
-              </Button>
+          {nextInLine ? (
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="inline-flex items-center justify-center px-3 py-1 rounded-xl bg-blue-50 border border-blue-100 text-[#0066cc] font-extrabold text-sm shrink-0">
+                  {nextInLine.tokenNumber != null ? `#${nextInLine.tokenNumber}` : '—'}
+                </span>
+
+                <div className="flex items-center gap-3 text-xs text-slate-700 font-medium truncate flex-wrap">
+                  <span className="flex items-center gap-1.5 font-bold text-slate-900">
+                    <User className="h-3.5 w-3.5 text-slate-400" />
+                    {nextInLine.patient?.fullName || 'Patient'}
+                  </span>
+
+                  {(nextInLine.patient?.age || nextInLine.patient?.gender) && (
+                    <>
+                      <span className="text-slate-300 hidden sm:inline">•</span>
+                      <span>
+                        {[
+                          nextInLine.patient?.age ? `${nextInLine.patient.age} yrs` : null,
+                          nextInLine.patient?.gender || null,
+                        ]
+                          .filter(Boolean)
+                          .join(' • ')}
+                      </span>
+                    </>
+                  )}
+
+                  {nextInLine.startTime && (
+                    <>
+                      <span className="text-slate-300 hidden sm:inline">•</span>
+                      <span className="flex items-center gap-1 text-slate-600">
+                        <Clock className="h-3.5 w-3.5 text-slate-400" />
+                        {formatTime(nextInLine.startTime)}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="shrink-0 flex items-center gap-2">
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold',
+                    nextInLine.status === 'CHECKED_IN'
+                      ? 'bg-amber-50 border border-amber-200 text-amber-800'
+                      : 'bg-blue-50 border border-blue-200/70 text-blue-700',
+                  )}
+                >
+                  <Clock
+                    className={cn(
+                      'h-3.5 w-3.5',
+                      nextInLine.status === 'CHECKED_IN' ? 'text-amber-600' : 'text-blue-500',
+                    )}
+                  />
+                  <span>
+                    {nextInLine.status === 'CHECKED_IN'
+                      ? 'Waiting in Clinic'
+                      : 'Expected Soon'}
+                  </span>
+                </span>
+
+                {nextInLine.status === 'CHECKED_IN' ? (
+                  <Button
+                    size="sm"
+                    onClick={() => handleAction(nextInLine.id, 'start-consultation')}
+                    disabled={loadingId === `${nextInLine.id}-start-consultation`}
+                    className="h-8 rounded-xl bg-[#0066cc] hover:bg-[#0052a3] text-white text-xs font-bold px-3 cursor-pointer"
+                  >
+                    Call Cabin
+                  </Button>
+                ) : nextInLine.status === 'CONFIRMED' ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleAction(nextInLine.id, 'manual-check-in')}
+                    disabled={loadingId === `${nextInLine.id}-manual-check-in`}
+                    className="h-8 rounded-xl border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 px-3 cursor-pointer"
+                  >
+                    Check In
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs flex items-center justify-between text-xs text-slate-500">
+              <div className="flex items-center gap-2.5">
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-xl bg-slate-100 text-slate-400 font-bold text-xs">
+                  —
+                </span>
+                <span>No upcoming patient remaining in queue.</span>
+              </div>
+              <span className="text-[11px] text-slate-400 font-medium">Queue is clear</span>
             </div>
           )}
-        </Card>
-      </div>
+        </div>
 
-      {/* ─── Bottom 2-Column Layout: Sequence of Tokens (8 cols) & Side Panels (4 cols) ─── */}
-      <div className="grid lg:grid-cols-12 gap-6 items-start">
-        {/* Sequence of Tokens (8 cols) */}
-        <div className="lg:col-span-8 space-y-3">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-1">
+        {/* ── CARD C: QUEUE LIST TABLE ── */}
+        <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-xs space-y-4">
+          {/* Table Header Row: Title on Left, Search + Filter on Right */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Hash className="w-4 h-4 text-slate-500" />
-              <h2 className="text-sm font-bold text-slate-900">Sequence of Tokens (All Patients)</h2>
-              <span className="text-xs text-slate-500 font-semibold ml-1">
-                {appointments.length} Total
-              </span>
+              <ListOrdered className="h-5 w-5 text-slate-700" />
+              <h3 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+                Queue List
+              </h3>
             </div>
 
-            {/* Filter Tabs */}
-            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200/80 overflow-x-auto">
-              <button
-                type="button"
-                onClick={() => setActiveTab('ALL')}
-                className={cn(
-                  'px-2.5 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer',
-                  activeTab === 'ALL'
-                    ? 'bg-white text-slate-900 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900',
-                )}
-              >
-                All ({appointments.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('WAITING')}
-                className={cn(
-                  'px-2.5 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer',
-                  activeTab === 'WAITING'
-                    ? 'bg-white text-amber-800 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900',
-                )}
-              >
-                In Clinic ({waitingCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('ARRIVING')}
-                className={cn(
-                  'px-2.5 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer',
-                  activeTab === 'ARRIVING'
-                    ? 'bg-white text-sky-800 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900',
-                )}
-              >
-                Expected ({expectedCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('COMPLETED')}
-                className={cn(
-                  'px-2.5 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer',
-                  activeTab === 'COMPLETED'
-                    ? 'bg-white text-emerald-800 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900',
-                )}
-              >
-                Done ({completedCount})
-              </button>
+            <div className="flex items-center gap-2.5">
+              {/* Search Input */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search patient..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-9 pl-9 pr-4 rounded-full border border-slate-200 bg-slate-50 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:border-blue-500 focus:bg-white transition-all w-44 sm:w-56"
+                />
+              </div>
+
+              {/* Filter Dropdown */}
+              <div className="relative">
+                <select
+                  value={filterTab}
+                  onChange={(e) =>
+                    setFilterTab(
+                      e.target.value as 'ALL' | 'WAITING' | 'ARRIVING' | 'COMPLETED' | 'NO_SHOW',
+                    )
+                  }
+                  className="h-9 px-3.5 pr-8 rounded-full border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 focus:outline-hidden focus:border-blue-500 cursor-pointer appearance-none"
+                >
+                  <option value="ALL">All Tokens</option>
+                  <option value="WAITING">Waiting in Clinic</option>
+                  <option value="ARRIVING">Expected</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="NO_SHOW">No Show</option>
+                </select>
+                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+              </div>
             </div>
           </div>
 
-          {/* Search Box */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+          {/* Table Content */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="pb-3 pl-2">Token</th>
+                  <th className="pb-3">Patient Name</th>
+                  <th className="pb-3">Age / Gender</th>
+                  <th className="pb-3">Appointment Time</th>
+                  <th className="pb-3">Status</th>
+                  <th className="pb-3 text-right pr-2">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {filteredQueue.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-slate-400">
+                      No appointments found matching current filter.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredQueue.map((appt, idx) => {
+                    const isWaiting = appt.status === 'CHECKED_IN';
+                    const isConsulting = appt.status === 'IN_CONSULTATION';
+                    const isDone = appt.status === 'COMPLETED';
+                    const isConfirmed = appt.status === 'CONFIRMED';
+                    const isNoShow = appt.status === 'NO_SHOW';
+                    const isRescheduled = appt.status === 'RESCHEDULED';
+                    const isCancelled = appt.status === 'CANCELLED';
+
+                    return (
+                      <tr
+                        key={appt.id}
+                        className="hover:bg-slate-50/70 transition-colors group"
+                      >
+                        {/* Token Column */}
+                        <td className="py-3 pl-2">
+                          <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 font-bold text-xs border border-blue-100">
+                            #{appt.tokenNumber != null ? appt.tokenNumber : idx + 1}
+                          </span>
+                        </td>
+
+                        {/* Patient Name */}
+                        <td className="py-3">
+                          <span className="font-bold text-slate-900 text-sm">
+                            {appt.patient?.fullName || 'Patient'}
+                          </span>
+                        </td>
+
+                        {/* Age / Gender */}
+                        <td className="py-3 text-slate-600">
+                          {appt.patient?.age ? `${appt.patient.age} yrs` : '—'} •{' '}
+                          {appt.patient?.gender || '—'}
+                        </td>
+
+                        {/* Appointment Time */}
+                        <td className="py-3 text-slate-700 font-medium">
+                          {formatTime(appt.startTime)}
+                        </td>
+
+                        {/* Status Badge */}
+                        <td className="py-3">
+                          {isConsulting && (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold text-xs border border-blue-200/80">
+                              <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse" />
+                              <span>In Consult</span>
+                            </span>
+                          )}
+                          {isWaiting && (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-700 font-medium text-xs">
+                              <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+                              <span>Waiting</span>
+                            </span>
+                          )}
+                          {isDone && (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-medium text-xs">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                              <span>Completed</span>
+                            </span>
+                          )}
+                          {isConfirmed && (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-50 text-sky-700 font-medium text-xs">
+                              <span className="h-1.5 w-1.5 rounded-full bg-sky-600" />
+                              <span>Expected</span>
+                            </span>
+                          )}
+                          {isNoShow && (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200 font-semibold text-xs">
+                              <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+                              <span>No Show</span>
+                            </span>
+                          )}
+                          {isRescheduled && (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium text-xs">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                              <span>Rescheduled</span>
+                            </span>
+                          )}
+                          {isCancelled && (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-600 font-medium text-xs">
+                              <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
+                              <span>Cancelled</span>
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Action Menu (3 Dots) */}
+                        <td className="py-3 text-right pr-2">
+                          <Popover
+                            open={activeMenuId === appt.id}
+                            onOpenChange={(open) => setActiveMenuId(open ? appt.id : null)}
+                          >
+                            <PopoverTrigger asChild>
+                              <button
+                                type="button"
+                                className="h-8 w-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 inline-flex items-center justify-center transition-colors cursor-pointer"
+                                title="Actions"
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                              align="end"
+                              className="w-48 p-1.5 bg-white rounded-2xl border border-slate-200 shadow-xl space-y-0.5 text-xs font-semibold"
+                            >
+                              {isWaiting && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleAction(appt.id, 'start-consultation')}
+                                  className="w-full text-left px-3 py-2 rounded-xl text-blue-700 hover:bg-blue-50 flex items-center gap-2 cursor-pointer"
+                                >
+                                  <PlayCircle className="h-4 w-4 text-blue-600" />
+                                  <span>Call to Cabin</span>
+                                </button>
+                              )}
+
+                              {!isWaiting && !isConsulting && !isDone && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleAction(appt.id, 'manual-check-in')}
+                                  className="w-full text-left px-3 py-2 rounded-xl text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 cursor-pointer"
+                                >
+                                  <Check className="h-4 w-4 text-emerald-600" />
+                                  <span>Check In Patient</span>
+                                </button>
+                              )}
+
+                              {isConsulting && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleAction(appt.id, 'complete')}
+                                  className="w-full text-left px-3 py-2 rounded-xl text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 cursor-pointer"
+                                >
+                                  <Check className="h-4 w-4 text-emerald-600" />
+                                  <span>Mark Complete</span>
+                                </button>
+                              )}
+
+                              {!isDone && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleAction(appt.id, 'no-show')}
+                                  className="w-full text-left px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                                >
+                                  <Ban className="h-4 w-4 text-slate-400" />
+                                  <span>Mark No Show</span>
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setRescheduleTarget(appt);
+                                  setActiveMenuId(null);
+                                }}
+                                className="w-full text-left px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                              >
+                                <CalendarDays className="h-4 w-4 text-slate-400" />
+                                <span>Reschedule</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCancelTarget(appt);
+                                  setActiveMenuId(null);
+                                }}
+                                className="w-full text-left px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer"
+                              >
+                                <XCircle className="h-4 w-4 text-rose-500" />
+                                <span>Cancel</span>
+                              </button>
+                            </PopoverContent>
+                          </Popover>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/*                       4. INTERACTIVE MODALS                         */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+
+      {/* WALK-IN PATIENT MODAL */}
+      <Dialog open={isWalkInOpen} onOpenChange={setIsWalkInOpen}>
+    <DialogContent className="sm:max-w-md bg-white rounded-3xl border border-slate-200 p-6 shadow-2xl">
+      <DialogHeader>
+        <DialogTitle className="text-lg font-black text-slate-900 flex items-center gap-2">
+          <UserPlus className="h-5 w-5 text-[#0066cc]" />
+          <span>Add Walk-in Patient</span>
+        </DialogTitle>
+        <DialogDescription className="text-xs text-slate-500">
+          Immediately adds patient to today&apos;s queue and assigns next token.
+        </DialogDescription>
+      </DialogHeader>
+
+      <form onSubmit={handleWalkIn} className="space-y-4 pt-2">
+        <div>
+          <label className="text-xs font-bold text-slate-700 block mb-1">
+            Full Name *
+          </label>
+          <Input
+            placeholder="e.g. Ramesh Sharma"
+            value={walkInName}
+            onChange={(e) => setWalkInName(e.target.value)}
+            required
+            className="h-10 rounded-xl border-slate-200 text-xs"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-bold text-slate-700 block mb-1">
+            Phone Number *
+          </label>
+          <Input
+            placeholder="10-digit mobile number"
+            value={walkInPhone}
+            onChange={(e) => setWalkInPhone(e.target.value)}
+            required
+            className="h-10 rounded-xl border-slate-200 text-xs"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-bold text-slate-700 block mb-1">Age</label>
             <Input
-              type="text"
-              placeholder="Search token #, name or phone number..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-9 rounded-xl border-slate-200 text-xs bg-white"
+              type="number"
+              placeholder="e.g. 34"
+              value={walkInAge}
+              onChange={(e) => setWalkInAge(e.target.value)}
+              className="h-10 rounded-xl border-slate-200 text-xs"
             />
           </div>
 
-          {/* Tokens List */}
-          {filteredAppointments.length === 0 ? (
-            <Card className="bg-white rounded-2xl border border-slate-200 p-10 text-center shadow-xs">
-              <UserX className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm font-bold text-slate-700">No appointments found</p>
-              <p className="text-xs text-slate-400 mt-1">
-                {searchQuery ? 'Try a different search query' : 'No patients in this category.'}
-              </p>
-            </Card>
-          ) : (
-            <div className="space-y-2">
-              {filteredAppointments.map((appt, idx) => {
-                const ss = STATUS_STYLE[appt.status] || STATUS_STYLE.CONFIRMED;
-                const isAct = appt.status === 'IN_CONSULTATION';
-                const isCI = appt.status === 'CHECKED_IN';
-                const isConf = appt.status === 'CONFIRMED';
-                const isDone = ['COMPLETED', 'CANCELLED', 'NO_SHOW'].includes(appt.status);
-
-                return (
-                  <Card
-                    key={appt.id}
-                    className={cn(
-                      'rounded-2xl border transition-all duration-150 overflow-hidden bg-white p-0 shadow-none',
-                      isAct
-                        ? 'border-blue-500 ring-1 ring-blue-500/20 shadow-xs'
-                        : isCI
-                          ? 'border-amber-300 shadow-xs'
-                          : isDone
-                            ? 'border-slate-200/60 bg-slate-50/50 opacity-75'
-                            : 'border-slate-200 hover:border-slate-300 shadow-xs',
-                    )}
-                  >
-                    <div className="flex items-stretch flex-col sm:flex-row">
-                      {/* Token Badge */}
-                      <div
-                        className={cn(
-                          'w-full sm:w-16 flex-shrink-0 flex sm:flex-col items-center justify-between sm:justify-center px-4 py-2 sm:py-3.5 border-b sm:border-b-0 sm:border-r',
-                          isAct
-                            ? 'bg-blue-700 border-blue-800 text-white'
-                            : isCI
-                              ? 'bg-amber-500 border-amber-600 text-white'
-                              : isDone
-                                ? 'bg-slate-100 border-slate-200 text-slate-400'
-                                : 'bg-slate-50 border-slate-200 text-slate-700',
-                        )}
-                      >
-                        <span className="text-[9px] font-bold uppercase tracking-wider opacity-80">
-                          Token
-                        </span>
-                        <span className="text-base font-black leading-none sm:mt-0.5">
-                          {appt.tokenNumber != null ? `#${appt.tokenNumber}` : `#${idx + 1}`}
-                        </span>
-                      </div>
-
-                      {/* Patient Details */}
-                      <div className="flex-1 p-3.5 min-w-0">
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-900 text-sm truncate">
-                              {appt.patient?.fullName || 'Patient'}
-                            </span>
-                            {isAct && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                                Inside Clinic
-                              </span>
-                            )}
-                            {isCI && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                                Waiting in clinic
-                              </span>
-                            )}
-                          </div>
-
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border',
-                              ss.bg,
-                              ss.text,
-                              ss.border,
-                            )}
-                          >
-                            <span className={cn('w-1.5 h-1.5 rounded-full', ss.dot)} />
-                            <span>{ss.label}</span>
-                          </Badge>
-                        </div>
-
-                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
-                          <span className="flex items-center gap-1 font-medium text-slate-700">
-                            <Clock className="w-3 h-3 text-slate-400" />
-                            <span>
-                              {formatTime(appt.startTime)} – {formatTime(appt.endTime)}
-                            </span>
-                          </span>
-                          {appt.patient?.age && (
-                            <span>{appt.patient.age} yrs • {appt.patient.gender}</span>
-                          )}
-                          {appt.patient?.phone && (
-                            <span className="flex items-center gap-1">
-                              <Phone className="w-3 h-3 text-slate-400" />
-                              <span>{appt.patient.phone}</span>
-                            </span>
-                          )}
-                          {appt.checkedInAt && (
-                            <span className="inline-flex items-center gap-1 font-semibold text-amber-800 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-md text-[11px]">
-                              <UserCheck className="w-3 h-3 text-amber-600" />
-                              <span>Check-In: {formatTime(appt.checkedInAt)}</span>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Operational Actions Handled by Front-Desk Receptionist */}
-                      <div className="flex items-center gap-1.5 p-3 sm:pr-3.5 border-t sm:border-t-0 border-slate-100 flex-wrap justify-end">
-                        {/* CONFIRMED Actions: Check In, Reschedule, Cancel */}
-                        {isConf && (
-                          <>
-                            <Button
-                              size="sm"
-                              onClick={() => handleAction(appt.id, 'manual-check-in')}
-                              disabled={loadingId === `${appt.id}-manual-check-in`}
-                              className="rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs h-8 px-3 gap-1 shadow-xs cursor-pointer"
-                            >
-                              {loadingId === `${appt.id}-manual-check-in` ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <UserCheck className="h-3.5 w-3.5" />
-                              )}
-                              <span>Check In</span>
-                            </Button>
-
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setRescheduleTarget(appt)}
-                              className="rounded-xl border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 h-8 px-2.5 cursor-pointer"
-                            >
-                              Reschedule
-                            </Button>
-
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setCancelTarget(appt)}
-                              className="rounded-xl text-rose-600 hover:bg-rose-50 text-xs h-8 px-2.5 cursor-pointer"
-                            >
-                              Cancel
-                            </Button>
-                          </>
-                        )}
-
-                        {/* CHECKED_IN Actions: Call Patient, Reschedule, No Show */}
-                        {isCI && (
-                          <>
-                            <Button
-                              size="sm"
-                              onClick={() => handleAction(appt.id, 'start-consultation')}
-                              disabled={loadingId === `${appt.id}-start-consultation`}
-                              className="rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs h-8 px-3.5 gap-1.5 shadow-xs cursor-pointer"
-                            >
-                              {loadingId === `${appt.id}-start-consultation` ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <PlayCircle className="h-3.5 w-3.5" />
-                              )}
-                              <span>Call Patient</span>
-                            </Button>
-
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setRescheduleTarget(appt)}
-                              className="rounded-xl border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 h-8 px-2.5 cursor-pointer"
-                            >
-                              Reschedule
-                            </Button>
-
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleAction(appt.id, 'no-show')}
-                              disabled={loadingId === `${appt.id}-no-show`}
-                              className="rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 text-xs h-8 px-2.5 cursor-pointer"
-                            >
-                              No Show
-                            </Button>
-                          </>
-                        )}
-
-                        {/* IN_CONSULTATION Actions: Complete or No Show */}
-                        {isAct && (
-                          <>
-                            <Button
-                              size="sm"
-                              onClick={() => handleAction(appt.id, 'complete')}
-                              disabled={loadingId === `${appt.id}-complete`}
-                              className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-8 px-4 gap-1.5 shadow-xs cursor-pointer"
-                            >
-                              {loadingId === `${appt.id}-complete` ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <CheckCheck className="h-3.5 w-3.5" />
-                              )}
-                              <span>Complete</span>
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleAction(appt.id, 'no-show')}
-                              disabled={loadingId === `${appt.id}-no-show`}
-                              className="rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 text-xs h-8 px-2.5 cursor-pointer"
-                            >
-                              No Show
-                            </Button>
-                          </>
-                        )}
-
-                        {/* COMPLETED Badge */}
-                        {appt.status === 'COMPLETED' && (
-                          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200">
-                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                            <span>Done</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
+          <div>
+            <label className="text-xs font-bold text-slate-700 block mb-1">Gender</label>
+            <select
+              value={walkInGender}
+              onChange={(e) => setWalkInGender(e.target.value)}
+              className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800"
+            >
+              <option value="MALE">Male</option>
+              <option value="FEMALE">Female</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </div>
         </div>
 
-        {/* ─── Side Panels (4 cols): Waiting Room & Still Arriving ─── */}
-        <div className="lg:col-span-4 space-y-4">
-          {/* Waiting Room (Checked in) */}
-          <Card className="bg-white rounded-2xl border border-amber-200 overflow-hidden shadow-xs p-0">
-            <div className="px-4 py-3 bg-amber-50/70 border-b border-amber-200 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <UserCheck className="w-4 h-4 text-amber-700" />
-                <span className="text-xs font-bold text-amber-900 uppercase tracking-wide">
-                  Waiting Room ({waitingList.length})
-                </span>
-              </div>
-              <Badge
-                variant="outline"
-                className="text-[11px] text-amber-700 font-semibold border-amber-300 bg-amber-100/60"
-              >
-                In Clinic
-              </Badge>
-            </div>
-
-            {waitingList.length === 0 ? (
-              <div className="p-5 text-center text-xs text-slate-400">
-                No patients waiting in clinic right now.
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
-                {waitingList.map((a, i) => (
-                  <div
-                    key={a.id}
-                    className="p-3 flex items-center justify-between gap-3 hover:bg-slate-50 transition-colors"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-7 h-7 rounded-lg bg-amber-500 text-white flex items-center justify-center text-xs font-black flex-shrink-0">
-                        {a.tokenNumber != null ? `#${a.tokenNumber}` : i + 1}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold text-slate-900 truncate">
-                          {a.patient?.fullName || 'Patient'}
-                        </div>
-                        <div className="text-[11px] text-slate-400 flex items-center gap-1.5 flex-wrap">
-                          <span>Slot: {formatTime(a.startTime)}</span>
-                          {a.checkedInAt && (
-                            <>
-                              <span>•</span>
-                              <span className="text-amber-800 font-semibold flex items-center gap-1">
-                                <UserCheck className="w-3 h-3 text-amber-600" />
-                                <span>In: {formatTime(a.checkedInAt)}</span>
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleAction(a.id, 'start-consultation')}
-                      disabled={loadingId === `${a.id}-start-consultation`}
-                      className="h-8 w-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-all flex-shrink-0 cursor-pointer"
-                      title="Call to Doctor Cabin"
-                    >
-                      {loadingId === `${a.id}-start-consultation` ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <PlayCircle className="w-4 h-4" />
-                      )}
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-
-          {/* Still Arriving (Confirmed, not yet checked in) */}
-          <Card className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs p-0">
-            <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-slate-600" />
-                <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
-                  Still Arriving ({expectedList.length})
-                </span>
-              </div>
-              <Badge variant="outline" className="text-[11px] text-slate-500 font-semibold border-slate-200">
-                Expected
-              </Badge>
-            </div>
-
-            {expectedList.length === 0 ? (
-              <div className="p-5 text-center text-xs text-slate-400">
-                No other confirmed patients for today.
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
-                {expectedList.map((a, i) => (
-                  <div
-                    key={a.id}
-                    className="p-3 flex items-center justify-between gap-3 hover:bg-slate-50 transition-colors"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                        {a.tokenNumber != null ? `#${a.tokenNumber}` : i + 1}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold text-slate-800 truncate">
-                          {a.patient?.fullName || 'Patient'}
-                        </div>
-                        <div className="text-[11px] text-slate-400 flex items-center gap-1.5 flex-wrap">
-                          <span>Slot: {formatTime(a.startTime)}</span>
-                          {a.checkedInAt && (
-                            <>
-                              <span>•</span>
-                              <span className="text-amber-800 font-semibold flex items-center gap-1">
-                                <UserCheck className="w-3 h-3 text-amber-600" />
-                                <span>In: {formatTime(a.checkedInAt)}</span>
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleAction(a.id, 'manual-check-in')}
-                      disabled={loadingId === `${a.id}-manual-check-in`}
-                      className="px-2.5 py-1 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-semibold transition-all flex-shrink-0 cursor-pointer h-7"
-                    >
-                      {loadingId === `${a.id}-manual-check-in` ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        'Check In'
-                      )}
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
+        <div>
+          <label className="text-xs font-bold text-slate-700 block mb-1">
+            Reason / Chief Complaint
+          </label>
+          <Input
+            placeholder="e.g. High fever, headache"
+            value={walkInReason}
+            onChange={(e) => setWalkInReason(e.target.value)}
+            className="h-10 rounded-xl border-slate-200 text-xs"
+          />
         </div>
-      </div>
 
-      {/* ─── Walk-in Booking Modal ─── */}
-      <Dialog open={isWalkInOpen} onOpenChange={setIsWalkInOpen}>
-        <DialogContent className="max-w-md p-6 rounded-3xl bg-white border border-slate-200 shadow-xl">
-          <DialogHeader className="text-left space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="p-2 rounded-xl bg-blue-50 text-[#0066cc]">
-                <UserPlus className="h-5 w-5" />
-              </span>
-              <DialogTitle className="text-lg font-bold text-slate-900">
-                Book Walk-in Patient
-              </DialogTitle>
-            </div>
-            <DialogDescription className="text-xs text-slate-600">
-              Add a walk-in patient directly to Dr. {doctor?.fullName}&apos;s live queue for today.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogFooter className="pt-2 flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setIsWalkInOpen(false)}
+            className="rounded-xl border-slate-200 text-xs font-semibold"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            disabled={walkInSubmitting}
+            className="rounded-xl bg-[#0066cc] hover:bg-[#0052a3] text-white text-xs font-bold px-4"
+          >
+            {walkInSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirm & Add'}
+          </Button>
+        </DialogFooter>
+      </form>
+    </DialogContent>
+  </Dialog>
 
-          <form onSubmit={handleWalkIn} className="space-y-4 pt-2">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700">Patient Full Name *</label>
-              <Input
-                required
-                placeholder="e.g. Ramesh Kumar"
-                value={walkInName}
-                onChange={(e) => setWalkInName(e.target.value)}
-                className="rounded-xl border-slate-200 text-xs"
-              />
-            </div>
+  {/* RESCHEDULE MODAL */ }
+  <Dialog
+    open={Boolean(rescheduleTarget)}
+    onOpenChange={(open) => !open && setRescheduleTarget(null)}
+  >
+    <DialogContent className="sm:max-w-md bg-white rounded-3xl border border-slate-200 p-6 shadow-2xl">
+      <DialogHeader>
+        <DialogTitle className="text-lg font-black text-slate-900 flex items-center gap-2">
+          <CalendarDays className="h-5 w-5 text-[#0066cc]" />
+          <span>Reschedule Appointment</span>
+        </DialogTitle>
+        <DialogDescription className="text-xs text-slate-500">
+          Change date and time slot for {rescheduleTarget?.patient?.fullName}.
+        </DialogDescription>
+      </DialogHeader>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700">Phone Number *</label>
-              <Input
-                required
-                placeholder="e.g. 9876543210"
-                value={walkInPhone}
-                onChange={(e) => setWalkInPhone(e.target.value)}
-                className="rounded-xl border-slate-200 text-xs"
-              />
-            </div>
+      <form onSubmit={handleReschedule} className="space-y-4 pt-2">
+        <div>
+          <label className="text-xs font-bold text-slate-700 block mb-1">New Date</label>
+          <Input
+            type="date"
+            value={rescheduleDate}
+            onChange={(e) => setRescheduleDate(e.target.value)}
+            required
+            className="h-10 rounded-xl border-slate-200 text-xs"
+          />
+        </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700">Age</label>
-                <Input
-                  type="number"
-                  placeholder="e.g. 32"
-                  value={walkInAge}
-                  onChange={(e) => setWalkInAge(e.target.value)}
-                  className="rounded-xl border-slate-200 text-xs"
-                />
-              </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-bold text-slate-700 block mb-1">Start Time</label>
+            <Input
+              type="time"
+              value={rescheduleStartTime}
+              onChange={(e) => setRescheduleStartTime(e.target.value)}
+              required
+              className="h-10 rounded-xl border-slate-200 text-xs"
+            />
+          </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700">Gender</label>
-                <select
-                  value={walkInGender}
-                  onChange={(e) => setWalkInGender(e.target.value)}
-                  className="w-full h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800"
-                >
-                  <option value="MALE">Male</option>
-                  <option value="FEMALE">Female</option>
-                  <option value="OTHER">Other</option>
-                </select>
-              </div>
-            </div>
+          <div>
+            <label className="text-xs font-bold text-slate-700 block mb-1">End Time</label>
+            <Input
+              type="time"
+              value={rescheduleEndTime}
+              onChange={(e) => setRescheduleEndTime(e.target.value)}
+              required
+              className="h-10 rounded-xl border-slate-200 text-xs"
+            />
+          </div>
+        </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700">
-                Consultation Reason / Chief Complaint
-              </label>
-              <Input
-                placeholder="e.g. Fever, Blood pressure check"
-                value={walkInReason}
-                onChange={(e) => setWalkInReason(e.target.value)}
-                className="rounded-xl border-slate-200 text-xs"
-              />
-            </div>
+        <div>
+          <label className="text-xs font-bold text-slate-700 block mb-1">
+            Reason for Rescheduling
+          </label>
+          <Input
+            placeholder="e.g. Patient requested morning slot"
+            value={rescheduleReason}
+            onChange={(e) => setRescheduleReason(e.target.value)}
+            className="h-10 rounded-xl border-slate-200 text-xs"
+          />
+        </div>
 
-            <DialogFooter className="pt-2 flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsWalkInOpen(false)}
-                disabled={walkInSubmitting}
-                className="rounded-xl border-slate-200 text-xs"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={walkInSubmitting}
-                className="rounded-xl bg-[#0066cc] hover:bg-[#0052a3] text-white text-xs font-bold gap-1.5 cursor-pointer"
-              >
-                {walkInSubmitting ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    <span>Booking...</span>
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="h-3.5 w-3.5" />
-                    <span>Generate Token & Add</span>
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+        <DialogFooter className="pt-2 flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setRescheduleTarget(null)}
+            className="rounded-xl border-slate-200 text-xs font-semibold"
+          >
+            Close
+          </Button>
+          <Button
+            type="submit"
+            disabled={rescheduling}
+            className="rounded-xl bg-[#0066cc] hover:bg-[#0052a3] text-white text-xs font-bold px-4"
+          >
+            {rescheduling ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save Reschedule'}
+          </Button>
+        </DialogFooter>
+      </form>
+    </DialogContent>
+  </Dialog>
 
-      {/* ─── Reschedule Modal ─── */}
-      <Dialog
-        open={Boolean(rescheduleTarget)}
-        onOpenChange={(open) => !open && setRescheduleTarget(null)}
-      >
-        <DialogContent className="max-w-md p-6 rounded-3xl bg-white border border-slate-200 shadow-xl">
-          <DialogHeader className="text-left space-y-1">
-            <DialogTitle className="text-lg font-bold text-slate-900">
-              Reschedule Appointment
-            </DialogTitle>
-            <DialogDescription className="text-xs text-slate-600">
-              Select a new date and time slot for{' '}
-              <strong className="text-slate-900">{rescheduleTarget?.patient?.fullName}</strong>.
-            </DialogDescription>
-          </DialogHeader>
+  {/* CANCEL MODAL */ }
+  <Dialog
+    open={Boolean(cancelTarget)}
+    onOpenChange={(open) => !open && setCancelTarget(null)}
+  >
+    <DialogContent className="sm:max-w-md bg-white rounded-3xl border border-slate-200 p-6 shadow-2xl">
+      <DialogHeader>
+        <DialogTitle className="text-lg font-black text-slate-900 flex items-center gap-2 text-rose-600">
+          <XCircle className="h-5 w-5 text-rose-600" />
+          <span>Cancel Appointment?</span>
+        </DialogTitle>
+        <DialogDescription className="text-xs text-slate-500">
+          Are you sure you want to cancel the appointment for{' '}
+          <strong className="text-slate-800">{cancelTarget?.patient?.fullName}</strong>?
+          This action cannot be undone.
+        </DialogDescription>
+      </DialogHeader>
 
-          <form onSubmit={handleReschedule} className="space-y-4 pt-2">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700">New Date *</label>
-              <Input
-                type="date"
-                required
-                value={rescheduleDate}
-                onChange={(e) => setRescheduleDate(e.target.value)}
-                className="rounded-xl border-slate-200 text-xs"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700">Start Time *</label>
-                <Input
-                  type="time"
-                  required
-                  value={rescheduleStartTime}
-                  onChange={(e) => setRescheduleStartTime(e.target.value)}
-                  className="rounded-xl border-slate-200 text-xs"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700">End Time *</label>
-                <Input
-                  type="time"
-                  required
-                  value={rescheduleEndTime}
-                  onChange={(e) => setRescheduleEndTime(e.target.value)}
-                  className="rounded-xl border-slate-200 text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700">Reason for Rescheduling</label>
-              <Input
-                placeholder="e.g. Patient requested morning slot"
-                value={rescheduleReason}
-                onChange={(e) => setRescheduleReason(e.target.value)}
-                className="rounded-xl border-slate-200 text-xs"
-              />
-            </div>
-
-            <DialogFooter className="pt-2 flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setRescheduleTarget(null)}
-                disabled={rescheduling}
-                className="rounded-xl border-slate-200 text-xs"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={rescheduling}
-                className="rounded-xl bg-[#0066cc] hover:bg-[#0052a3] text-white text-xs font-bold gap-1.5 cursor-pointer"
-              >
-                {rescheduling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                <span>Confirm Reschedule</span>
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* ─── Cancel Confirmation Modal ─── */}
-      <Dialog
-        open={Boolean(cancelTarget)}
-        onOpenChange={(open) => !open && setCancelTarget(null)}
-      >
-        <DialogContent className="max-w-sm p-6 rounded-3xl bg-white border border-slate-200 shadow-xl">
-          <DialogHeader className="text-left space-y-1">
-            <div className="h-10 w-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
-              <XCircle className="h-5 w-5" />
-            </div>
-            <DialogTitle className="text-base font-bold text-slate-900">
-              Cancel Appointment?
-            </DialogTitle>
-            <DialogDescription className="text-xs text-slate-600 leading-relaxed">
-              Are you sure you want to cancel the appointment for{' '}
-              <strong className="text-slate-900">{cancelTarget?.patient?.fullName}</strong>{' '}
-              (Token #{cancelTarget?.tokenNumber})? The slot will be freed in the queue.
-            </DialogDescription>
-          </DialogHeader>
-
-          <DialogFooter className="pt-2 flex items-center justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setCancelTarget(null)}
-              disabled={cancelling}
-              className="rounded-xl border-slate-200 text-xs"
-            >
-              No, Keep
-            </Button>
-            <Button
-              type="button"
-              onClick={handleCancel}
-              disabled={cancelling}
-              className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold gap-1.5 cursor-pointer"
-            >
-              {cancelling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-              <span>Yes, Cancel</span>
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+      <DialogFooter className="pt-4 flex items-center justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setCancelTarget(null)}
+          className="rounded-xl border-slate-200 text-xs font-semibold"
+        >
+          Keep Appointment
+        </Button>
+        <Button
+          type="button"
+          onClick={handleCancel}
+          disabled={cancelling}
+          className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-4"
+        >
+          {cancelling ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Yes, Cancel'}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+    </div >
   );
 }
+
+export default ReceptionistLiveQueueClient;

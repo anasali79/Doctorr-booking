@@ -40,7 +40,15 @@ const RESCHEDULE_CUTOFF_MINUTES = 30;
 const CANCEL_CUTOFF_MINUTES = 30;
 
 function toMinutes(time: string): number {
-  const [h, m] = time.split(':').map(Number);
+  if (!time) return 0;
+  const isPM = /pm/i.test(time);
+  const isAM = /am/i.test(time);
+  const clean = time.replace(/\s*(am|pm)/i, '').trim();
+  const parts = clean.split(':').map(Number);
+  let h = parts[0] || 0;
+  const m = parts[1] || 0;
+  if (isPM && h < 12) h += 12;
+  if (isAM && h === 12) h = 0;
   return h * 60 + m;
 }
 
@@ -1489,7 +1497,7 @@ export class AppointmentService {
 
     const whereClause: any = {
       doctorId: doctor.id,
-      status: Not(AppointmentStatus.CANCELLED),
+      status: Not(In([AppointmentStatus.CANCELLED, AppointmentStatus.RESCHEDULED])),
     };
 
     if (date) {
