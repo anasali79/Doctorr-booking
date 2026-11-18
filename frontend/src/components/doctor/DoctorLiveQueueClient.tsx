@@ -8,10 +8,6 @@ import { toast } from 'sonner';
 import { clientAxios } from '@/lib/api/axios';
 import {
   RefreshCw,
-  Loader2,
-  PlayCircle,
-  CheckCheck,
-  UserX,
   Clock,
   Stethoscope,
   FileText,
@@ -314,7 +310,7 @@ export function DoctorLiveQueueClient({
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-slate-500 font-medium">
-                Manage consultations, call waiting patients, and write prescriptions in real-time
+                Live real-time view of patient queue, active consultation, and medical prescriptions
               </p>
             </div>
           </div>
@@ -398,37 +394,13 @@ export function DoctorLiveQueueClient({
                     </div>
                   </div>
 
-                  {/* Action Buttons */}
-                  <div className="flex flex-col sm:flex-row lg:flex-col gap-2.5 shrink-0 min-w-[200px]">
+                  {/* Prescription Action Only (Doctor Clinical Work) */}
+                  <div className="flex items-center shrink-0">
                     <Button
-                      onClick={() => handleAction(activeAppt.id, 'complete')}
-                      disabled={!!loadingId}
+                      onClick={() => setPrescriptionAppt(activeAppt)}
                       className="h-10 px-5 rounded-2xl bg-[#0066cc] hover:bg-[#0052a3] text-white font-bold text-xs sm:text-sm shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all"
                     >
-                      {loadingId === `${activeAppt.id}-complete` ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <CheckCheck className="w-4 h-4" />
-                      )}
-                      <span>Mark as Complete</span>
-                    </Button>
-
-                    <Button
-                      variant="outline"
-                      onClick={() => handleAction(activeAppt.id, 'no-show')}
-                      disabled={!!loadingId}
-                      className="h-10 px-5 rounded-2xl bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs sm:text-sm border border-slate-200/90 shadow-2xs flex items-center justify-center gap-2 cursor-pointer transition-all"
-                    >
-                      <UserX className="w-4 h-4 text-slate-400" />
-                      <span>Mark as No Show</span>
-                    </Button>
-
-                    <Button
-                      variant="ghost"
-                      onClick={() => setPrescriptionAppt(activeAppt)}
-                      className="h-8 px-3 rounded-xl text-[#0066cc] hover:bg-blue-100/60 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      <FileText className="w-3.5 h-3.5 text-[#0066cc]" />
+                      <FileText className="w-4 h-4" />
                       <span>Write / Edit Rx</span>
                     </Button>
                   </div>
@@ -453,7 +425,7 @@ export function DoctorLiveQueueClient({
                       </h2>
                       <p className="text-xs sm:text-sm text-slate-500 font-medium">
                         {waitingCount > 0
-                          ? `${waitingCount} patient(s) waiting in clinic. Call next patient into Cabin Room 1.`
+                          ? `${waitingCount} patient(s) waiting in clinic. Receptionist will call next patient in.`
                           : stillArrivingCount > 0
                             ? `${stillArrivingCount} patient(s) confirmed today. Awaiting check-in.`
                             : 'All patient consultations completed for this date.'}
@@ -467,22 +439,12 @@ export function DoctorLiveQueueClient({
                     </div>
                   </div>
 
-                  {nextUp && nextUp.status === 'CHECKED_IN' && (
-                    <div className="shrink-0 min-w-[200px]">
-                      <Button
-                        onClick={() => handleAction(nextUp.id, 'start-consultation')}
-                        disabled={!!loadingId}
-                        className="h-10 px-5 rounded-2xl bg-[#0066cc] hover:bg-[#0052a3] text-white font-bold text-sm shadow-xs flex items-center justify-center gap-2 cursor-pointer w-full transition-all"
-                      >
-                        {loadingId === `${nextUp.id}-start-consultation` ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <PlayCircle className="w-4 h-4" />
-                        )}
-                        <span>Call Token #{nextUp.tokenNumber || 1} In</span>
-                      </Button>
-                    </div>
-                  )}
+                  <div className="shrink-0">
+                    <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>Cabin Ready</span>
+                    </span>
+                  </div>
                 </div>
               </div>
             )}
@@ -549,21 +511,6 @@ export function DoctorLiveQueueClient({
                   </span>
                 )}
               </div>
-
-              {nextUp && nextUp.status === 'CHECKED_IN' && !activeAppt && (
-                <Button
-                  onClick={() => handleAction(nextUp.id, 'start-consultation')}
-                  disabled={!!loadingId}
-                  className="rounded-2xl bg-[#0066cc] hover:bg-[#0052a3] text-white font-bold text-xs sm:text-sm px-4 h-9 shrink-0 cursor-pointer shadow-xs transition-all flex items-center gap-1.5"
-                >
-                  {loadingId === `${nextUp.id}-start-consultation` ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <PlayCircle className="w-3.5 h-3.5" />
-                  )}
-                  <span>Call into Cabin</span>
-                </Button>
-              )}
             </div>
 
             {/* 3. Queue List Table Card */}
@@ -718,23 +665,6 @@ export function DoctorLiveQueueClient({
                                 >
                                   <FileText className="w-3.5 h-3.5 text-[#0066cc]" />
                                   <span>Rx</span>
-                                </Button>
-                              )}
-
-                              {/* Call In Button: for Checked-In waiting patients */}
-                              {isCheckedIn && (
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleAction(appt.id, 'start-consultation')}
-                                  disabled={!!loadingId}
-                                  className="h-7 px-2.5 rounded-lg bg-[#0066cc] hover:bg-[#0052a3] text-white text-xs font-bold gap-1 cursor-pointer"
-                                >
-                                  {loadingId === `${appt.id}-start-consultation` ? (
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                  ) : (
-                                    <PlayCircle className="w-3 h-3" />
-                                  )}
-                                  <span>Call</span>
                                 </Button>
                               )}
 
