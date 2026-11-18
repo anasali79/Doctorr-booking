@@ -11,7 +11,11 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const date = searchParams.get('date');
-    const query = date ? `?date=${encodeURIComponent(date)}` : '';
+    const doctorId = searchParams.get('doctorId');
+    const params = new URLSearchParams();
+    if (date) params.set('date', date);
+    if (doctorId) params.set('doctorId', doctorId);
+    const query = params.toString() ? `?${params.toString()}` : '';
 
     const res = await apiFetch(`/api/receptionist/queue${query}`, { token });
     return NextResponse.json(res);

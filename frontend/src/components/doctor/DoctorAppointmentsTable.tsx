@@ -320,26 +320,6 @@ export function DoctorAppointmentsTable({
                             <Button
                               type="button"
                               variant="ghost"
-                              onClick={() =>
-                                handleAction(appt.id, 'manual-check-in')
-                              }
-                              disabled={
-                                loadingId === `${appt.id}-manual-check-in`
-                              }
-                              className="px-2.5 py-1 rounded-full border border-amber-400 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer shadow-2xs h-auto"
-                              title="Check-in patient into clinic queue"
-                            >
-                              {loadingId ===
-                              `${appt.id}-manual-check-in` ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                              ) : (
-                                <CheckCircle className="w-3 h-3 text-amber-600" />
-                              )}
-                              <span>Check In</span>
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
                               onClick={() => handleAction(appt.id, 'no-show')}
                               disabled={loadingId === `${appt.id}-no-show`}
                               className="px-2.5 py-1 rounded-full border border-slate-300 bg-slate-50 hover:bg-slate-200 text-slate-800 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer shadow-2xs h-auto"
@@ -377,27 +357,6 @@ export function DoctorAppointmentsTable({
                         )}
 
                         {appt.status === 'CHECKED_IN' && (
-                          <>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            onClick={() =>
-                              handleAction(appt.id, 'start-consultation')
-                            }
-                            disabled={
-                              loadingId === `${appt.id}-start-consultation`
-                            }
-                            className="btn-primary !py-1 !px-3 text-[11px] h-auto"
-                            title="Call patient into doctor cabin"
-                          >
-                            {loadingId ===
-                            `${appt.id}-start-consultation` ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <PlayCircle className="w-3 h-3" />
-                            )}
-                            <span>Start Consultation</span>
-                          </Button>
                           <Button
                             type="button"
                             variant="ghost"
@@ -408,7 +367,6 @@ export function DoctorAppointmentsTable({
                           >
                             <CalendarSync className="w-3.5 h-3.5" />
                           </Button>
-                          </>
                         )}
 
                         {appt.status === 'IN_CONSULTATION' && (

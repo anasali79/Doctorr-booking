@@ -14,6 +14,8 @@ export interface SmoothDatePickerProps {
   disabled?: boolean;
   className?: string;
   placeholder?: string;
+  formatDisplay?: (dateStr: string) => string;
+  customTrigger?: (props: { displayText: string; isOpen: boolean }) => React.ReactNode;
 }
 
 export function SmoothDatePicker({
@@ -24,6 +26,8 @@ export function SmoothDatePicker({
   disabled = false,
   className,
   placeholder = 'Select date',
+  formatDisplay,
+  customTrigger,
 }: SmoothDatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const todayIST = getTodayIST();
@@ -41,6 +45,7 @@ export function SmoothDatePicker({
   // Format display text
   const displayText = useMemo(() => {
     if (!value) return placeholder;
+    if (formatDisplay) return formatDisplay(value);
     if (value === todayIST) return `Today (${formatDate(value)})`;
 
     // Check tomorrow
@@ -54,7 +59,7 @@ export function SmoothDatePicker({
     if (value === tomorrowStr) return `Tomorrow (${formatDate(value)})`;
 
     return formatDate(value);
-  }, [value, todayIST, placeholder]);
+  }, [value, todayIST, placeholder, formatDisplay]);
 
   // Calendar matrix calculation
   const calendarDays = useMemo(() => {
@@ -182,26 +187,30 @@ export function SmoothDatePicker({
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          disabled={disabled}
-          className={cn(
-            'group relative flex w-full items-center justify-between gap-2 rounded-xl border border-slate-200/90 bg-white px-3 py-2 text-left text-xs font-semibold text-slate-800 shadow-2xs transition-all hover:border-blue-400 hover:bg-slate-50/70 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer',
-            isOpen && 'border-blue-600 ring-2 ring-blue-500/20 bg-blue-50/20',
-            className
-          )}
-        >
-          <div className="flex items-center gap-2 truncate">
-            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-blue-600 border border-blue-100/80 group-hover:bg-blue-600 group-hover:text-white transition-colors shrink-0">
-              <Calendar className="h-3.5 w-3.5" />
+        {customTrigger ? (
+          customTrigger({ displayText, isOpen })
+        ) : (
+          <button
+            type="button"
+            disabled={disabled}
+            className={cn(
+              'group relative flex w-full items-center justify-between gap-2 rounded-xl border border-slate-200/90 bg-white px-3 py-2 text-left text-xs font-semibold text-slate-800 shadow-2xs transition-all hover:border-blue-400 hover:bg-slate-50/70 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer',
+              isOpen && 'border-blue-600 ring-2 ring-blue-500/20 bg-blue-50/20',
+              className,
+            )}
+          >
+            <div className="flex items-center gap-2 truncate">
+              <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-blue-600 border border-blue-100/80 group-hover:bg-blue-600 group-hover:text-white transition-colors shrink-0">
+                <Calendar className="h-3.5 w-3.5" />
+              </div>
+              <span className="font-medium text-xs text-slate-900 truncate">
+                {displayText}
+              </span>
             </div>
-            <span className="font-medium text-xs text-slate-900 truncate">
-              {displayText}
-            </span>
-          </div>
 
-          <ChevronDown className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-600 shrink-0 transition-transform duration-200" />
-        </button>
+            <ChevronDown className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-600 shrink-0 transition-transform duration-200" />
+          </button>
+        )}
       </PopoverTrigger>
 
       <PopoverContent

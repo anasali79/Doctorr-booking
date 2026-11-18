@@ -25,6 +25,8 @@ import {
   AlertCircle,
   Loader2,
   Calendar as CalendarIcon,
+  Check,
+  ChevronDown,
 } from 'lucide-react';
 import { Appointment } from '@/types';
 import { StatusBadge } from '@/components/common/StatusBadge';
@@ -41,33 +43,79 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { SmoothDatePicker } from '@/components/ui/smooth-date-picker';
 import { SmoothTimePicker } from '@/components/ui/smooth-time-picker';
 
 type StatusTab = 'ALL' | 'CONFIRMED' | 'CHECKED_IN' | 'IN_CONSULTATION' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
 type DateFilter = 'all' | 'today' | 'upcoming' | 'past' | 'custom';
 
+export interface ReceptionistDoctorInfo {
+  id: string;
+  fullName: string;
+  specialization: string;
+  consultationFee?: number;
+  phone?: string | null;
+}
+
 interface ReceptionistAppointmentsClientProps {
   initialAppointments: Appointment[];
-  doctor: {
-    id: string;
-    fullName: string;
-    specialization: string;
-    consultationFee?: number;
-    phone?: string | null;
-  } | null;
+  doctor: ReceptionistDoctorInfo | null;
+  allDoctors?: ReceptionistDoctorInfo[];
+  selectedDoctorId?: string;
   todayIST: string;
 }
 
 export function ReceptionistAppointmentsClient({
   initialAppointments,
   doctor,
+  allDoctors = [],
+  selectedDoctorId: initialSelectedDoctorId = 'all',
   todayIST,
 }: ReceptionistAppointmentsClientProps) {
   const router = useRouter();
   const [appointments, setAppointments] = useState<Appointment[]>(initialAppointments || []);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  // Doctor Selector State
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>(initialSelectedDoctorId);
+  const [isDoctorSelectOpen, setIsDoctorSelectOpen] = useState(false);
+  const [doctorSearch, setDoctorSearch] = useState('');
+
+  // Fallback doctors list
+  const doctorList = useMemo(() => {
+    if (allDoctors && allDoctors.length > 0) {
+      if (doctor && !allDoctors.some((d) => d.id === doctor.id)) {
+        return [doctor, ...allDoctors];
+      }
+      return allDoctors;
+    }
+    if (doctor) return [doctor];
+    return [];
+  }, [allDoctors, doctor]);
+
+  const filteredDoctors = useMemo(() => {
+    if (!doctorSearch.trim()) return doctorList;
+    const q = doctorSearch.toLowerCase().trim();
+    return doctorList.filter(
+      (d) =>
+        d.fullName.toLowerCase().includes(q) ||
+        d.specialization.toLowerCase().includes(q),
+    );
+  }, [doctorList, doctorSearch]);
+
+  const selectedDoctorObj = useMemo(() => {
+    if (selectedDoctorId === 'all') return null;
+    return doctorList.find((d) => d.id === selectedDoctorId) || doctor;
+  }, [doctorList, selectedDoctorId, doctor]);
+
+  const selectedDoctorLabel = useMemo(() => {
+    if (selectedDoctorId === 'all') return 'All Doctors';
+    if (selectedDoctorObj) return `Dr. ${selectedDoctorObj.fullName}`;
+    return 'Select Doctor';
+  }, [selectedDoctorId, selectedDoctorObj]);
 
   // Filters state
   const [activeTab, setActiveTab] = useState<StatusTab>('ALL');
@@ -92,19 +140,38 @@ export function ReceptionistAppointmentsClient({
   const [cancelling, setCancelling] = useState(false);
 
   // Refresh All Appointments
-  const fetchAppointments = useCallback(async (silent = false) => {
-    if (!silent) setRefreshing(true);
-    try {
-      const res = await clientAxios.get('/api/receptionist/appointments');
-      const data = res.data?.data || [];
-      setAppointments(Array.isArray(data) ? data : []);
-      if (!silent) toast.success('Appointments updated');
-    } catch (err) {
-      if (!silent) toast.error('Failed to load appointments');
-    } finally {
-      if (!silent) setRefreshing(false);
-    }
-  }, []);
+  const fetchAppointments = useCallback(
+    async (targetDoctorId?: string | boolean, silent = false) => {
+      const docId = typeof targetDoctorId === 'string' ? targetDoctorId : selectedDoctorId;
+      const isSilent = typeof targetDoctorId === 'boolean' ? targetDoctorId : silent;
+      if (!isSilent) setRefreshing(true);
+      try {
+        const query =
+          docId && docId !== 'all'
+            ? `?doctorId=${encodeURIComponent(docId)}`
+            : docId === 'all'
+            ? '?doctorId=all'
+            : '';
+        const res = await clientAxios.get(`/api/receptionist/appointments${query}`);
+        const data = res.data?.data || [];
+        setAppointments(Array.isArray(data) ? data : []);
+        if (!isSilent) toast.success('Appointments updated');
+      } catch {
+        if (!isSilent) toast.error('Failed to load appointments');
+      } finally {
+        if (!isSilent) setRefreshing(false);
+      }
+    },
+    [selectedDoctorId],
+  );
+
+  const handleSelectDoctor = (docId: string) => {
+    setSelectedDoctorId(docId);
+    setIsDoctorSelectOpen(false);
+    fetchAppointments(docId);
+    const param = docId && docId !== 'all' ? `?doctorId=${docId}` : '?doctorId=all';
+    router.replace(`/receptionist/appointments${param}`, { scroll: false });
+  };
 
   // Quick Action (Manual Check-In)
   const handleCheckIn = async (appointmentId: string) => {
@@ -245,12 +312,123 @@ export function ReceptionistAppointmentsClient({
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5 relative z-10">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-100/80 text-[#0066cc] text-xs font-bold uppercase tracking-wider">
-                <Stethoscope className="h-3.5 w-3.5" />
-                <span>Dr. {doctor?.fullName || 'Assigned Doctor'}</span>
-              </span>
+              <Popover open={isDoctorSelectOpen} onOpenChange={setIsDoctorSelectOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-100/90 hover:bg-blue-200/80 text-[#0066cc] text-xs font-bold transition-all cursor-pointer group shadow-2xs border border-blue-200"
+                  >
+                    <Stethoscope className="h-3.5 w-3.5 text-[#0066cc]" />
+                    <span>{selectedDoctorLabel}</span>
+                    <ChevronDown className="h-3.5 w-3.5 text-blue-600 group-hover:translate-y-0.5 transition-transform" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  className="w-[320px] p-2.5 rounded-2xl bg-white border border-slate-200 shadow-xl space-y-2 z-50"
+                >
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <Input
+                      type="text"
+                      placeholder="Search doctor..."
+                      value={doctorSearch}
+                      onChange={(e) => setDoctorSearch(e.target.value)}
+                      className="h-8.5 pl-8 pr-2 text-xs rounded-xl bg-slate-50 border-slate-200"
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="max-h-[260px] overflow-y-auto space-y-1 pr-1">
+                    {/* Option: All Doctors */}
+                    <div
+                      onClick={() => handleSelectDoctor('all')}
+                      className={cn(
+                        'px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between cursor-pointer transition-colors',
+                        selectedDoctorId === 'all'
+                          ? 'bg-blue-600 text-white'
+                          : 'hover:bg-slate-100 text-slate-700',
+                      )}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={cn(
+                            'w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0',
+                            selectedDoctorId === 'all' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-700',
+                          )}
+                        >
+                          <Users className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <p className="font-bold">All Doctors</p>
+                          <p
+                            className={cn(
+                              'text-[10px]',
+                              selectedDoctorId === 'all' ? 'text-blue-100' : 'text-slate-400',
+                            )}
+                          >
+                            View ledger across clinic
+                          </p>
+                        </div>
+                      </div>
+                      {selectedDoctorId === 'all' && <Check className="w-4 h-4 stroke-[2.5]" />}
+                    </div>
+
+                    {/* Each Doctor */}
+                    {filteredDoctors.map((doc) => {
+                      const isSelected = selectedDoctorId === doc.id;
+                      const initial = doc.fullName
+                        ? doc.fullName.replace(/^Dr\.\s*/i, '').charAt(0).toUpperCase() || 'D'
+                        : 'D';
+
+                      return (
+                        <div
+                          key={doc.id}
+                          onClick={() => handleSelectDoctor(doc.id)}
+                          className={cn(
+                            'px-3 py-2 rounded-xl text-xs flex items-center justify-between cursor-pointer transition-colors',
+                            isSelected
+                              ? 'bg-blue-600 text-white font-semibold'
+                              : 'hover:bg-slate-100 text-slate-700',
+                          )}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div
+                              className={cn(
+                                'w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0',
+                                isSelected ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-700',
+                              )}
+                            >
+                              {initial}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-bold truncate">{doc.fullName}</p>
+                              <p
+                                className={cn(
+                                  'text-[10px] truncate',
+                                  isSelected ? 'text-blue-100' : 'text-slate-400',
+                                )}
+                              >
+                                {doc.specialization}
+                              </p>
+                            </div>
+                          </div>
+                          {isSelected && <Check className="w-4 h-4 stroke-[2.5] shrink-0 ml-2" />}
+                        </div>
+                      );
+                    })}
+
+                    {filteredDoctors.length === 0 && (
+                      <p className="text-xs text-slate-400 text-center py-3">No matching doctors</p>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
+
               <span className="text-xs text-slate-500 font-medium">
-                {doctor?.specialization || 'General Consultation'}
+                {selectedDoctorId === 'all'
+                  ? `Showing all ${doctorList.length} clinic doctors`
+                  : selectedDoctorObj?.specialization || 'Consultation'}
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
@@ -457,6 +635,7 @@ export function ReceptionistAppointmentsClient({
                     <TableHead className="w-16 text-xs font-bold text-slate-600">Token</TableHead>
                     <TableHead className="text-xs font-bold text-slate-600">Patient Details</TableHead>
                     <TableHead className="text-xs font-bold text-slate-600">Date & Slot</TableHead>
+                    <TableHead className="text-xs font-bold text-slate-600">Doctor</TableHead>
                     <TableHead className="text-xs font-bold text-slate-600">Status</TableHead>
                     <TableHead className="text-xs font-bold text-slate-600">Fee / Type</TableHead>
                     <TableHead className="text-right text-xs font-bold text-slate-600 pr-6">Front Desk Actions</TableHead>
@@ -511,6 +690,18 @@ export function ReceptionistAppointmentsClient({
                             </p>
                             <p className="text-[11px] text-slate-500 font-medium">
                               {formatTime(appt.startTime)} - {formatTime(appt.endTime)}
+                            </p>
+                          </div>
+                        </TableCell>
+
+                        {/* Doctor */}
+                        <TableCell>
+                          <div className="text-xs">
+                            <p className="font-bold text-slate-900 truncate max-w-[140px]">
+                              {appt.doctor?.fullName || selectedDoctorObj?.fullName || doctor?.fullName || 'Assigned Doctor'}
+                            </p>
+                            <p className="text-[11px] text-slate-500 font-medium truncate max-w-[140px]">
+                              {appt.doctor?.specialization || selectedDoctorObj?.specialization || doctor?.specialization || 'Physician'}
                             </p>
                           </div>
                         </TableCell>

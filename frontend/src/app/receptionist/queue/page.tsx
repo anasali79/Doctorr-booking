@@ -8,7 +8,7 @@ import { getTodayIST } from '@/lib/utils';
 export const dynamic = 'force-dynamic';
 
 interface ReceptionistQueuePageProps {
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ date?: string; doctorId?: string }>;
 }
 
 export default async function ReceptionistQueuePage({
@@ -23,14 +23,19 @@ export default async function ReceptionistQueuePage({
   const params = await searchParams;
   const todayIST = getTodayIST();
   const selectedDate = params.date || todayIST;
+  const requestedDoctorId = params.doctorId;
 
   let appointments: any[] = [];
   let doctor: any = null;
+  let allDoctors: any[] = [];
+  let yesterdayStats: { total: number; completed: number } | null = null;
 
   try {
-    const res = await getReceptionistQueue(selectedDate, token);
+    const res = await getReceptionistQueue(selectedDate, requestedDoctorId, token);
     appointments = res.data || [];
     doctor = res.doctor || null;
+    allDoctors = res.allDoctors || [];
+    yesterdayStats = res.yesterdayStats || null;
   } catch (err) {
     console.error('Failed to load receptionist queue:', err);
   }
@@ -39,8 +44,11 @@ export default async function ReceptionistQueuePage({
     <ReceptionistLiveQueueClient
       initialAppointments={appointments}
       doctor={doctor}
+      allDoctors={allDoctors}
+      selectedDoctorId={requestedDoctorId || doctor?.id}
       selectedDate={selectedDate}
       todayIST={todayIST}
+      initialYesterdayStats={yesterdayStats}
     />
   );
 }

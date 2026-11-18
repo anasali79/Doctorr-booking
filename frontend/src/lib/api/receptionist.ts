@@ -15,6 +15,7 @@ export interface CreateWalkInPayload {
   age?: number;
   gender?: string;
   reason?: string;
+  doctorId?: string;
 }
 
 // ─── Doctor endpoints to manage receptionists ────────────────────────────────
@@ -58,7 +59,20 @@ export async function getReceptionistMe(token?: string) {
   });
 }
 
-export async function getReceptionistAppointments(token?: string) {
+export async function getReceptionistAppointments(
+  doctorIdOrToken?: string,
+  token?: string,
+) {
+  let docId: string | undefined = doctorIdOrToken;
+  let authToken: string | undefined = token;
+
+  // Handle case where token is passed as first argument
+  if (!token && doctorIdOrToken && doctorIdOrToken.includes('.')) {
+    authToken = doctorIdOrToken;
+    docId = undefined;
+  }
+
+  const query = docId ? `?doctorId=${encodeURIComponent(docId)}` : '';
   return apiFetch<{
     doctor: {
       id: string;
@@ -68,14 +82,28 @@ export async function getReceptionistAppointments(token?: string) {
       phone?: string | null;
       currentServingToken?: number | null;
     };
+    allDoctors?: Array<{
+      id: string;
+      fullName: string;
+      specialization: string;
+      consultationFee: number;
+      phone?: string | null;
+    }>;
     data: Appointment[];
-  }>('/api/receptionist/appointments', {
-    token,
+  }>(`/api/receptionist/appointments${query}`, {
+    token: authToken,
   });
 }
 
-export async function getReceptionistQueue(date?: string, token?: string) {
-  const query = date ? `?date=${encodeURIComponent(date)}` : '';
+export async function getReceptionistQueue(
+  date?: string,
+  doctorId?: string,
+  token?: string,
+) {
+  const params = new URLSearchParams();
+  if (date) params.set('date', date);
+  if (doctorId) params.set('doctorId', doctorId);
+  const query = params.toString() ? `?${params.toString()}` : '';
   return apiFetch<{
     doctor: {
       id: string;
@@ -84,6 +112,17 @@ export async function getReceptionistQueue(date?: string, token?: string) {
       consultationFee: number;
       phone?: string | null;
       currentServingToken?: number | null;
+    };
+    allDoctors?: Array<{
+      id: string;
+      fullName: string;
+      specialization: string;
+      consultationFee: number;
+      phone?: string | null;
+    }>;
+    yesterdayStats?: {
+      total: number;
+      completed: number;
     };
     data: Appointment[];
   }>(`/api/receptionist/queue${query}`, {

@@ -8,7 +8,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Not, In } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { Receptionist } from './entities/receptionist.entity';
 import { Doctor } from '../doctor/entities/doctor.entity';
@@ -20,6 +20,8 @@ import { CheckInService } from '../check-in/check-in.service';
 import { RescheduleAppointmentDto } from '../appointment/dto/reschedule-appointment.dto';
 import { AppointmentGateway } from '../sockets/appointment.gateway';
 import { Appointment } from '../appointment/entities/appointment.entity';
+import { AppointmentStatus } from '../common/enums/appointment-status.enum';
+import { getTodayIST } from '../common/utils/appointment.utils';
 
 @Injectable()
 export class ReceptionistService {
@@ -199,11 +201,49 @@ export class ReceptionistService {
     };
   }
 
-  async getDoctorQueueForReceptionist(userId: string, date?: string) {
+  async getDoctorQueueForReceptionist(userId: string, date?: string, doctorId?: string) {
     const receptionist = await this.getActiveReceptionistByUserId(userId);
-    const doctor = receptionist.doctor;
+    let doctor = receptionist.doctor;
+
+    if (doctorId && doctorId !== doctor.id) {
+      const targetDoctor = await this.doctorRepo.findOne({
+        where: { id: doctorId },
+        relations: { user: true },
+      });
+      if (targetDoctor) {
+        doctor = targetDoctor;
+      }
+    }
 
     const res = await this.appointmentService.getDoctorAppointments(doctor.userId, date);
+    const allDoctors = await this.doctorRepo.find({
+      order: { fullName: 'ASC' },
+    });
+
+    // Real yesterday comparison stats for selected doctor
+    const targetDate = date || getTodayIST();
+    const [y, m, d] = targetDate.split('-').map(Number);
+    const prevDateObj = new Date(y, m - 1, d - 1);
+    const prevY = prevDateObj.getFullYear();
+    const prevM = String(prevDateObj.getMonth() + 1).padStart(2, '0');
+    const prevD = String(prevDateObj.getDate()).padStart(2, '0');
+    const yesterdayStr = `${prevY}-${prevM}-${prevD}`;
+
+    const yesterdayTotal = await this.appointmentRepo.count({
+      where: {
+        doctorId: doctor.id,
+        date: yesterdayStr,
+        status: Not(In([AppointmentStatus.CANCELLED, AppointmentStatus.RESCHEDULED])),
+      },
+    });
+
+    const yesterdayCompleted = await this.appointmentRepo.count({
+      where: {
+        doctorId: doctor.id,
+        date: yesterdayStr,
+        status: AppointmentStatus.COMPLETED,
+      },
+    });
 
     return {
       doctor: {
@@ -214,17 +254,47 @@ export class ReceptionistService {
         phone: doctor.phone,
         currentServingToken: doctor.currentServingToken,
       },
+      allDoctors: allDoctors.map((d) => ({
+        id: d.id,
+        fullName: d.fullName,
+        specialization: d.specialization,
+        consultationFee: d.consultationFee,
+        phone: d.phone,
+      })),
+      yesterdayStats: {
+        total: yesterdayTotal,
+        completed: yesterdayCompleted,
+      },
       data: res.data || [],
     };
   }
 
-  async getDoctorAllAppointmentsForReceptionist(userId: string) {
+  async getDoctorAllAppointmentsForReceptionist(userId: string, doctorId?: string) {
     const receptionist = await this.getActiveReceptionistByUserId(userId);
-    const doctor = receptionist.doctor;
+    let doctor = receptionist.doctor;
+
+    const allDoctors = await this.doctorRepo.find({
+      order: { fullName: 'ASC' },
+    });
+
+    const whereClause: any = {};
+    if (doctorId && doctorId !== 'all') {
+      const targetDoctor = await this.doctorRepo.findOne({
+        where: { id: doctorId },
+      });
+      if (targetDoctor) {
+        doctor = targetDoctor;
+      }
+      whereClause.doctorId = doctor.id;
+    } else if (doctorId === 'all') {
+      // All doctors - no doctorId filter
+    } else {
+      whereClause.doctorId = doctor.id;
+    }
 
     const appointments = await this.appointmentRepo.find({
-      where: { doctorId: doctor.id },
-      relations: { patient: true },
+      where: whereClause,
+      relations: { patient: true, doctor: true },
       order: { date: 'DESC', startTime: 'ASC' },
     });
 
@@ -237,23 +307,38 @@ export class ReceptionistService {
         phone: doctor.phone,
         currentServingToken: doctor.currentServingToken,
       },
+      allDoctors: allDoctors.map((d) => ({
+        id: d.id,
+        fullName: d.fullName,
+        specialization: d.specialization,
+        consultationFee: d.consultationFee,
+        phone: d.phone,
+      })),
       data: appointments,
     };
   }
 
   async handleAppointmentAction(userId: string, appointmentId: string, action: string) {
     const receptionist = await this.getActiveReceptionistByUserId(userId);
-    const doctor = receptionist.doctor;
+    let doctorUserId = receptionist.doctor.userId;
+
+    const appointment = await this.appointmentRepo.findOne({
+      where: { id: appointmentId },
+      relations: { doctor: { user: true } },
+    });
+    if (appointment?.doctor?.userId) {
+      doctorUserId = appointment.doctor.userId;
+    }
 
     switch (action) {
       case 'manual-check-in':
-        return this.checkInService.manualCheckIn(doctor.userId, appointmentId);
+        return this.checkInService.manualCheckIn(doctorUserId, appointmentId);
       case 'start-consultation':
-        return this.checkInService.startConsultation(doctor.userId, appointmentId);
+        return this.checkInService.startConsultation(doctorUserId, appointmentId);
       case 'complete':
-        return this.checkInService.completeAppointment(doctor.userId, appointmentId);
+        return this.checkInService.completeAppointment(doctorUserId, appointmentId);
       case 'no-show':
-        return this.checkInService.markNoShow(doctor.userId, appointmentId);
+        return this.checkInService.markNoShow(doctorUserId, appointmentId);
       default:
         throw new BadRequestException(`Unknown queue action: ${action}`);
     }
@@ -261,8 +346,18 @@ export class ReceptionistService {
 
   async cancelAppointment(userId: string, appointmentId: string) {
     const receptionist = await this.getActiveReceptionistByUserId(userId);
+    let doctorUserId = receptionist.doctor.userId;
+
+    const appointment = await this.appointmentRepo.findOne({
+      where: { id: appointmentId },
+      relations: { doctor: { user: true } },
+    });
+    if (appointment?.doctor?.userId) {
+      doctorUserId = appointment.doctor.userId;
+    }
+
     return this.appointmentService.cancelAppointmentByDoctor(
-      receptionist.doctor.userId,
+      doctorUserId,
       appointmentId,
     );
   }
@@ -273,8 +368,18 @@ export class ReceptionistService {
     dto: RescheduleAppointmentDto,
   ) {
     const receptionist = await this.getActiveReceptionistByUserId(userId);
+    let doctorUserId = receptionist.doctor.userId;
+
+    const appointment = await this.appointmentRepo.findOne({
+      where: { id: appointmentId },
+      relations: { doctor: { user: true } },
+    });
+    if (appointment?.doctor?.userId) {
+      doctorUserId = appointment.doctor.userId;
+    }
+
     return this.appointmentService.rescheduleAppointmentByDoctor(
-      receptionist.doctor.userId,
+      doctorUserId,
       appointmentId,
       dto,
     );
@@ -288,11 +393,24 @@ export class ReceptionistService {
       age?: number;
       gender?: string;
       reason?: string;
+      doctorId?: string;
     },
   ) {
     const receptionist = await this.getActiveReceptionistByUserId(userId);
+    let doctorUserId = receptionist.doctor.userId;
+
+    if (dto.doctorId && dto.doctorId !== receptionist.doctor.id) {
+      const targetDoctor = await this.doctorRepo.findOne({
+        where: { id: dto.doctorId },
+        relations: { user: true },
+      });
+      if (targetDoctor) {
+        doctorUserId = targetDoctor.userId;
+      }
+    }
+
     return this.appointmentService.createWalkInAppointment(
-      receptionist.doctor.userId,
+      doctorUserId,
       dto,
     );
   }

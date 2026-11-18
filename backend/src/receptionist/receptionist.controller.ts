@@ -96,14 +96,18 @@ export class ReceptionistController {
   getDoctorQueueForReceptionist(
     @CurrentUser() user: { id: string },
     @Query('date') date?: string,
+    @Query('doctorId') doctorId?: string,
   ) {
-    return this.receptionistService.getDoctorQueueForReceptionist(user.id, date);
+    return this.receptionistService.getDoctorQueueForReceptionist(user.id, date, doctorId);
   }
 
   @Get('receptionist/appointments')
   @Roles(Role.RECEPTIONIST)
-  getDoctorAllAppointmentsForReceptionist(@CurrentUser() user: { id: string }) {
-    return this.receptionistService.getDoctorAllAppointmentsForReceptionist(user.id);
+  getDoctorAllAppointmentsForReceptionist(
+    @CurrentUser() user: { id: string },
+    @Query('doctorId') doctorId?: string,
+  ) {
+    return this.receptionistService.getDoctorAllAppointmentsForReceptionist(user.id, doctorId);
   }
 
   @Post('receptionist/appointments/:id/action')
@@ -171,6 +175,7 @@ export class ReceptionistController {
       age?: number;
       gender?: string;
       reason?: string;
+      doctorId?: string;
     },
   ) {
     return this.receptionistService.createWalkIn(user.id, dto);

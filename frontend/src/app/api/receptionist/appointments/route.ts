@@ -9,7 +9,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const res = await apiFetch('/api/receptionist/appointments', { token });
+    const { searchParams } = new URL(req.url);
+    const doctorId = searchParams.get('doctorId');
+    const query = doctorId ? `?doctorId=${encodeURIComponent(doctorId)}` : '';
+
+    const res = await apiFetch(`/api/receptionist/appointments${query}`, { token });
     return NextResponse.json(res);
   } catch (error: any) {
     if (error instanceof ApiError) {

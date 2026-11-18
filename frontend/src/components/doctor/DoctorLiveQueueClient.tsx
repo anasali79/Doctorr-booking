@@ -292,22 +292,6 @@ export function DoctorLiveQueueClient({
                 <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-tight">
                   Doctor Live Queue
                 </h1>
-                <span
-                  className={cn(
-                    'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border',
-                    isConnected
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      : 'bg-amber-50 text-amber-700 border-amber-200',
-                  )}
-                >
-                  <span
-                    className={cn(
-                      'w-1.5 h-1.5 rounded-full',
-                      isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500',
-                    )}
-                  />
-                  {isConnected ? 'Live Sync' : 'Connecting'}
-                </span>
               </div>
               <p className="text-xs sm:text-sm text-slate-500 font-medium">
                 Live real-time view of patient queue, active consultation, and medical prescriptions
@@ -430,20 +414,7 @@ export function DoctorLiveQueueClient({
                             ? `${stillArrivingCount} patient(s) confirmed today. Awaiting check-in.`
                             : 'All patient consultations completed for this date.'}
                       </p>
-                      <div className="pt-1.5">
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-slate-200 text-slate-600 text-xs font-semibold shadow-2xs">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                          <span>Consultation Room 1 Available</span>
-                        </span>
-                      </div>
                     </div>
-                  </div>
-
-                  <div className="shrink-0">
-                    <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs font-semibold">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      <span>Cabin Ready</span>
-                    </span>
                   </div>
                 </div>
               </div>
