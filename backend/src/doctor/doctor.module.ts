@@ -16,6 +16,7 @@ import { DoctorLeave } from './entities/leave.entity';
 import { LeaveService } from './leave.service';
 import { LeaveController } from './leave.controller';
 import { DoctorVerification } from './entities/doctor-verification.entity';
+import { PatientMedicalHistoryLog } from '../patient/entities/patient-medical-history-log.entity';
 import { DoctorVerificationService } from './doctor-verification.service';
 import { DoctorVerificationController } from './doctor-verification.controller';
 import { DoctorVerificationGuard } from '../common/guards/doctor-verification.guard';
@@ -38,6 +39,7 @@ import { SocketsModule } from '../sockets/sockets.module';
       Patient,
       DoctorLeave,
       DoctorVerification,
+      PatientMedicalHistoryLog,
     ]),
     forwardRef(() => AppointmentModule),
     NotificationModule,

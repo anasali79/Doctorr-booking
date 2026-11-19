@@ -13,6 +13,8 @@ import { DoctorVerification } from './entities/doctor-verification.entity';
 import { VerificationStatus } from '../common/enums/verification-status.enum';
 import { Appointment } from '../appointment/entities/appointment.entity';
 import { Patient } from '../patient/entities/patient.entity';
+import { PatientMedicalHistoryLog } from '../patient/entities/patient-medical-history-log.entity';
+import { Prescription } from '../prescription/entities/prescription.entity';
 import { AppointmentStatus } from '../common/enums/appointment-status.enum';
 import { getTodayIST } from '../common/utils/appointment.utils';
 import {
@@ -56,6 +58,8 @@ export class DoctorService {
     private readonly patientRepository: Repository<Patient>,
     @InjectRepository(DoctorVerification)
     private readonly verificationRepository: Repository<DoctorVerification>,
+    @InjectRepository(PatientMedicalHistoryLog)
+    private readonly medicalHistoryLogRepository: Repository<PatientMedicalHistoryLog>,
   ) {}
 
   async createProfile(userId: string, dto: CreateDoctorProfileDto) {
@@ -584,15 +588,34 @@ export class DoctorService {
       throw new NotFoundException('Patient record not found');
     }
 
-    const appointments = await this.appointmentRepository.find({
+    const hasConsultation = await this.appointmentRepository.findOne({
       where: { doctorId: doctor.id, patientId: patient.id },
-      order: { date: 'DESC', startTime: 'DESC' },
     });
 
-    if (appointments.length === 0) {
+    if (!hasConsultation) {
       throw new ForbiddenException(
         'Access denied: You can only access medical records for patients who have scheduled consultations with you.',
       );
+    }
+
+    // Retrieve ALL consultations for this patient across all doctors
+    const appointments = await this.appointmentRepository.find({
+      where: { patientId: patient.id },
+      relations: { doctor: true },
+      order: { date: 'DESC', startTime: 'DESC' },
+    });
+
+    const apptIds = appointments.map((a) => a.id);
+    const prescriptions =
+      apptIds.length > 0
+        ? await this.appointmentRepository.manager.getRepository(Prescription).find({
+            where: { appointmentId: In(apptIds) },
+            select: { id: true, appointmentId: true },
+          })
+        : [];
+    const rxMap = new Map<string, string>();
+    for (const rx of prescriptions) {
+      rxMap.set(rx.appointmentId, rx.id);
     }
 
     const completedVisits = appointments.filter(
@@ -608,7 +631,20 @@ export class DoctorService {
         tokenNumber: a.tokenNumber,
         notes: a.clinicalNotes,
         reasonForVisit: a.reasonForVisit || null,
+        status: a.status,
+        doctor: a.doctor
+          ? {
+              id: a.doctor.id,
+              fullName: a.doctor.fullName,
+              specialization: a.doctor.specialization,
+            }
+          : null,
       }));
+
+    const medicalHistoryLogs = await this.medicalHistoryLogRepository.find({
+      where: { patientId: patient.id },
+      order: { createdAt: 'DESC' },
+    });
 
     return {
       success: true,
@@ -634,6 +670,7 @@ export class DoctorService {
         },
         appointments: appointments.map((a) => ({
           id: a.id,
+          doctorId: a.doctorId,
           date: a.date,
           startTime: a.startTime,
           endTime: a.endTime,
@@ -644,8 +681,18 @@ export class DoctorService {
           reasonForVisit: a.reasonForVisit || null,
           checkedInAt: a.checkedInAt,
           completedAt: a.completedAt,
+          hasPrescription: rxMap.has(a.id),
+          prescriptionId: rxMap.get(a.id) || null,
+          doctor: a.doctor
+            ? {
+                id: a.doctor.id,
+                fullName: a.doctor.fullName,
+                specialization: a.doctor.specialization,
+              }
+            : null,
         })),
         allClinicalNotes,
+        medicalHistoryLogs,
       },
     };
   }
@@ -676,12 +723,36 @@ export class DoctorService {
       );
     }
 
+    const oldNotes = appointment.clinicalNotes;
     appointment.clinicalNotes = notes;
     if (reasonForVisit !== undefined) {
       appointment.reasonForVisit = reasonForVisit;
     }
 
     const saved = await this.appointmentRepository.save(appointment);
+
+    // Audit log doctor clinical consultation notes to patient medical history
+    const patientId = appointment.patientId || appointment.patient?.id;
+    if (patientId && (!oldNotes || oldNotes.trim() !== notes.trim())) {
+      try {
+        await this.medicalHistoryLogRepository.save(
+          this.medicalHistoryLogRepository.create({
+            patientId,
+            changedByUserId: doctor.userId,
+            changedByRole: 'DOCTOR',
+            changedByName: `Dr. ${doctor.fullName || 'Doctor'}`,
+            fieldName: 'clinicalNotes',
+            fieldLabel: 'Doctor Consultation Notes',
+            oldValue: oldNotes && oldNotes.trim().length > 0 ? oldNotes.trim() : null,
+            newValue: notes.trim(),
+            changeReason: `Recorded consultation clinical advice for visit (${appointment.date})`,
+          }),
+        );
+      } catch (logErr) {
+        // Non-blocking log persistence failure
+        console.error('Failed to log doctor clinical note to audit history:', logErr);
+      }
+    }
 
     return {
       success: true,
@@ -728,6 +799,35 @@ export class DoctorService {
       );
     }
 
+    const FIELD_LABELS: Record<string, string> = {
+      allergies: 'Known Allergies',
+      medicalHistory: 'Past Medical History & Chronic Conditions',
+      currentMedication: 'Current Regular Medications',
+      bloodGroup: 'Blood Group',
+      basicHealthInfo: 'General Health Information',
+    };
+
+    const logsToCreate: Partial<PatientMedicalHistoryLog>[] = [];
+    for (const [key, label] of Object.entries(FIELD_LABELS)) {
+      if (key in dto && (dto as any)[key] !== undefined) {
+        const oldVal = (patient as any)[key] ? String((patient as any)[key]).trim() : '';
+        const newVal = (dto as any)[key] ? String((dto as any)[key]).trim() : '';
+        if (oldVal !== newVal) {
+          logsToCreate.push({
+            patientId: patient.id,
+            changedByUserId: doctor.userId,
+            changedByRole: 'DOCTOR',
+            changedByName: `Dr. ${doctor.fullName}`,
+            fieldName: key,
+            fieldLabel: label,
+            oldValue: oldVal.length > 0 ? oldVal : null,
+            newValue: newVal.length > 0 ? newVal : null,
+            changeReason: 'Updated by doctor during consultation',
+          });
+        }
+      }
+    }
+
     if (dto.allergies !== undefined) patient.allergies = dto.allergies;
     if (dto.medicalHistory !== undefined)
       patient.medicalHistory = dto.medicalHistory;
@@ -739,10 +839,51 @@ export class DoctorService {
 
     const saved = await this.patientRepository.save(patient);
 
+    if (logsToCreate.length > 0) {
+      await this.medicalHistoryLogRepository.save(
+        this.medicalHistoryLogRepository.create(logsToCreate),
+      );
+    }
+
     return {
       success: true,
       message: 'Patient medical record updated successfully',
       data: saved,
+    };
+  }
+
+  /**
+   * Retrieves audit history of all medical record updates for a specific patient.
+   */
+  async getPatientMedicalHistoryLogs(userId: string, patientId: string) {
+    const doctor = await this.findByUserIdOrFail(userId);
+
+    const patient = await this.patientRepository.findOne({
+      where: { id: patientId },
+    });
+    if (!patient) {
+      throw new NotFoundException('Patient record not found');
+    }
+
+    const hasConsultation = await this.appointmentRepository.findOne({
+      where: { doctorId: doctor.id, patientId: patient.id },
+    });
+
+    if (!hasConsultation) {
+      throw new ForbiddenException(
+        'Access denied: You can only access medical update history for patients who have consulted with you.',
+      );
+    }
+
+    const logs = await this.medicalHistoryLogRepository.find({
+      where: { patientId: patient.id },
+      order: { createdAt: 'DESC' },
+    });
+
+    return {
+      success: true,
+      count: logs.length,
+      data: logs,
     };
   }
 }

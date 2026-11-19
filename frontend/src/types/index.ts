@@ -99,6 +99,20 @@ export interface Patient {
   user?: User;
 }
 
+export interface PatientMedicalHistoryLog {
+  id: string;
+  patientId: string;
+  changedByUserId?: string | null;
+  changedByRole: 'DOCTOR' | 'PATIENT' | 'ADMIN' | string;
+  changedByName: string;
+  fieldName: string;
+  fieldLabel?: string | null;
+  oldValue: string | null;
+  newValue: string | null;
+  changeReason?: string | null;
+  createdAt: string;
+}
+
 export type AppointmentStatus =
   | 'PENDING_PAYMENT'
   | 'CONFIRMED'

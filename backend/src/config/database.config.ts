@@ -20,6 +20,7 @@ import { DoctorVerification } from '../doctor/entities/doctor-verification.entit
 import { AdminAuditLog } from '../admin/entities/admin-audit-log.entity';
 import { AppointmentRescheduleRequest } from '../appointment/entities/appointment-reschedule-request.entity';
 import { Receptionist } from '../receptionist/entities/receptionist.entity';
+import { PatientMedicalHistoryLog } from '../patient/entities/patient-medical-history-log.entity';
 
 export function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
   const databaseUrl = config.get<string>('DATABASE_URL');
@@ -48,6 +49,7 @@ export function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
       AdminAuditLog,
       AppointmentRescheduleRequest,
       Receptionist,
+      PatientMedicalHistoryLog,
     ],
     synchronize: false,
     migrations: [__dirname + '/../migrations/*.{js,ts}'],

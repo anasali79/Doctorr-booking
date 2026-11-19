@@ -2378,6 +2378,8 @@ export class AppointmentService {
       tokenNumber: appointment.tokenNumber ?? null,
       hasPrescription: Boolean(prescriptionId),
       prescriptionId: prescriptionId ?? null,
+      clinicalNotes: appointment.clinicalNotes ?? null,
+      reasonForVisit: appointment.reasonForVisit ?? null,
       doctor: appointment.doctor
         ? {
           id: appointment.doctor.id,

@@ -19,6 +19,8 @@ import { ReminderJob } from './reminder/entities/reminder-job.entity';
 import { Prescription } from './prescription/entities/prescription.entity';
 import { DoctorVerification } from './doctor/entities/doctor-verification.entity';
 import { AdminAuditLog } from './admin/entities/admin-audit-log.entity';
+import { Receptionist } from './receptionist/entities/receptionist.entity';
+import { PatientMedicalHistoryLog } from './patient/entities/patient-medical-history-log.entity';
 
 config();
 
@@ -44,6 +46,8 @@ const shared: DataSourceOptions = {
     Prescription,
     DoctorVerification,
     AdminAuditLog,
+    Receptionist,
+    PatientMedicalHistoryLog,
   ],
   migrations: [__dirname + '/migrations/*.{js,ts}'],
   ssl:

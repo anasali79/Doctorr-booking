@@ -41,6 +41,11 @@ export class PatientController {
     return this.patientService.updateProfile(user.id, dto);
   }
 
+  @Get('medical-history-logs')
+  getMedicalHistoryLogs(@CurrentUser() user: { id: string }) {
+    return this.patientService.getMedicalHistoryLogs(user.id);
+  }
+
   @Get('dashboard')
   async getDashboard(
     @CurrentUser() user: { id: string; email: string; role: string },
