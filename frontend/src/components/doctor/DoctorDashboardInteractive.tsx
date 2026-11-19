@@ -41,6 +41,7 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { DoctorRescheduleModal } from './DoctorRescheduleModal';
 import { DoctorPrescriptionModal } from '@/components/prescription/DoctorPrescriptionModal';
+import { PatientProfileModal } from './PatientProfileModal';
 
 type StatusTab = 'ALL' | 'CONFIRMED' | 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
 type DateFilter = 'all' | 'today' | 'upcoming';
@@ -79,6 +80,8 @@ export function DoctorDashboardInteractive({
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [reschedulingAppt, setReschedulingAppt] = useState<Appointment | null>(null);
   const [prescriptionAppt, setPrescriptionAppt] = useState<Appointment | null>(null);
+  const [patientModalOpen, setPatientModalOpen] = useState(false);
+  const [modalPatientAppt, setModalPatientAppt] = useState<Appointment | null>(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -636,6 +639,21 @@ export function DoctorDashboardInteractive({
                       {/* Actions (Compact to avoid horizontal slider/overflow) */}
                       <TableCell className="py-2.5 px-3 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            type="button"
+                            size="xs"
+                            variant="outline"
+                            onClick={() => {
+                              setModalPatientAppt(appt);
+                              setPatientModalOpen(true);
+                            }}
+                            className="h-7 px-2.5 rounded-lg border-slate-200 bg-white hover:bg-slate-50 hover:border-blue-300 hover:text-[#0066cc] text-slate-700 text-xs font-semibold gap-1 cursor-pointer transition-all shadow-2xs inline-flex items-center"
+                            title="View Patient Profile"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-slate-500" />
+                            <span>View</span>
+                          </Button>
+
                           {appt.status === 'CONFIRMED' && (
                             <>
                               <Popover>
@@ -835,6 +853,25 @@ export function DoctorDashboardInteractive({
           router.refresh();
         }}
       />
+
+      {/* Patient Profile Modal */}
+      {modalPatientAppt && (
+        <PatientProfileModal
+          key={modalPatientAppt.id || modalPatientAppt.patientId}
+          isOpen={patientModalOpen}
+          onClose={() => {
+            setPatientModalOpen(false);
+            setModalPatientAppt(null);
+          }}
+          patientId={modalPatientAppt.patientId || modalPatientAppt.patient?.id || ''}
+          initialPatient={modalPatientAppt.patient}
+          currentAppointment={modalPatientAppt}
+          currentAppointmentId={modalPatientAppt.id}
+          onRecordUpdated={() => {
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

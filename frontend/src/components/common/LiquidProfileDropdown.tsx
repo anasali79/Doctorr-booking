@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   ChevronDown,
   ChevronRight,
+  FileText,
 } from 'lucide-react';
 import { SessionUser } from '@/types';
 import { cn } from '@/lib/utils';
@@ -98,6 +99,13 @@ function getRoleMenuItems(
         href: '/patient/profile',
       },
       {
+        id: 'medical-records',
+        label: 'Medical Records',
+        description: 'Health summary, allergies & clinical notes',
+        icon: <FileText className="h-4 w-4" />,
+        href: '/patient/medical-records',
+      },
+      {
         id: 'appointments',
         label: 'My Appointments',
         description: 'Scheduled visits & live queue status',
@@ -130,6 +138,13 @@ function getRoleMenuItems(
         description: 'Tokens & patient flow',
         icon: <Activity className="h-4 w-4" />,
         href: '/receptionist/queue',
+      },
+      {
+        id: 'medical-records',
+        label: 'Medical Records',
+        description: 'Health summary, allergies & clinical notes',
+        icon: <FileText className="h-4 w-4" />,
+        href: '/patient/medical-records',
       },
       {
         id: 'appointments',

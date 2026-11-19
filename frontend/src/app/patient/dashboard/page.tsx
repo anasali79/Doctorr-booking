@@ -21,6 +21,7 @@ import {
   Pill,
   Ban,
   Bell,
+  History,
 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -180,7 +181,8 @@ export default async function PatientDashboardPage() {
         <section className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-blue-100 bg-gradient-to-r from-[#EFF6FF] via-[#E8F3FF] to-[#DCEEFF] p-6 sm:p-8 shadow-xs">
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 flex items-center gap-2">
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 flex items-center gap-2.5">
+                <span className="text-2xl sm:text-3xl select-none">👋</span>
                 <span>Welcome back, {firstName}</span>
               </h1>
               <p className="mt-1 text-xs sm:text-sm text-slate-600 font-medium">
@@ -294,30 +296,28 @@ export default async function PatientDashboardPage() {
           </Link>
         </section>
 
-        {/* ═══════════════ 4. UPCOMING CONSULTATION SECTION (REAL DATA) ═══════════════ */}
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
+        {/* ═══════════════ 4. UPCOMING CONSULTATION SECTION (MATCHES SCREENSHOT) ═══════════════ */}
+        <section className="rounded-2xl sm:rounded-3xl border border-blue-100/80 bg-[#EAF3FD] p-4 sm:p-5 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2">
-              <div className="flex h-6 w-6 items-center justify-center text-[#0066cc]">
-                <Calendar className="h-4 w-4" />
+              <div className="flex h-7 w-7 items-center justify-center text-[#0066cc]">
+                <Clock className="h-5 w-5" />
               </div>
-              <h2 className="text-sm sm:text-base font-bold text-slate-900">
+              <h2 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight">
                 Upcoming Consultation ({upcoming.length})
               </h2>
             </div>
-            {upcoming.length > 0 && (
-              <Link
-                href="/patient/appointments"
-                className="inline-flex items-center gap-1 text-xs sm:text-sm font-bold text-[#0066cc] hover:underline"
-              >
-                <span>View All</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            )}
+            <Link
+              href="/patient/appointments"
+              className="inline-flex items-center gap-1 text-xs sm:text-sm font-bold text-[#0066cc] hover:underline transition-all"
+            >
+              <span>View All</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
           </div>
 
           {nextVisit ? (
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-2xs transition-all hover:shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-2xl border border-blue-100/70 bg-white p-4 sm:p-5 shadow-2xs transition-all hover:shadow-sm">
               {/* Doctor Info */}
               <div className="flex items-center gap-3.5">
                 <DoctorAvatar
@@ -379,15 +379,15 @@ export default async function PatientDashboardPage() {
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-2xs">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-[#0066cc] shrink-0">
-                <Calendar className="h-6 w-6" />
+            <div className="flex items-center gap-3.5 sm:gap-4 rounded-2xl border border-blue-100/60 bg-white p-4 sm:p-5 shadow-2xs">
+              <div className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-2xl bg-blue-50 text-[#0066cc] shrink-0 border border-blue-100/60">
+                <Calendar className="h-6 w-6 sm:h-7 sm:w-7" />
               </div>
               <div>
                 <h3 className="text-sm sm:text-base font-bold text-slate-900">
                   No Upcoming Consultations
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
                   You do not have any active appointments scheduled. Book a certified doctor anytime.
                 </p>
               </div>
@@ -451,24 +451,24 @@ export default async function PatientDashboardPage() {
               </div>
             </Link>
 
-            {/* Action 3: Medical Notes */}
+            {/* Action 3: Medical Records */}
             <Link
-              href="/patient/profile"
-              className="group flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-5 shadow-2xs transition-all hover:border-emerald-300 hover:shadow-sm"
+              href="/patient/medical-records"
+              className="group flex flex-col justify-between rounded-2xl border border-blue-200/90 bg-blue-50/50 p-5 shadow-2xs transition-all hover:border-blue-400 hover:shadow-sm"
             >
               <div>
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
                   <FileText className="h-5 w-5" />
                 </div>
-                <h3 className="mt-3 text-sm font-bold text-slate-900 transition-colors group-hover:text-emerald-600">
-                  Medical Notes
+                <h3 className="mt-3 text-sm font-bold text-slate-900 transition-colors group-hover:text-[#0066cc]">
+                  Medical Records
                 </h3>
                 <p className="mt-1 text-xs text-slate-500 leading-relaxed">
-                  Update basic health history, allergies &amp; contact
+                  View your health profile, allergies &amp; notes
                 </p>
               </div>
               <div className="mt-4 flex justify-end">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 transition-colors group-hover:bg-emerald-600 group-hover:text-white">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-50 text-[#0066cc] transition-colors group-hover:bg-[#0066cc] group-hover:text-white">
                   <ChevronRight className="h-4 w-4" />
                 </div>
               </div>
@@ -499,129 +499,7 @@ export default async function PatientDashboardPage() {
           </div>
         </section>
 
-        {/* ═══════════════ 6. MEDICAL RECORD & HEALTH NOTES ═══════════════ */}
-        <section className="space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-            <div>
-              <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4 text-[#0066cc]" />
-                <h2 className="text-sm sm:text-base font-bold text-slate-900">
-                  Medical Record &amp; Health Notes
-                </h2>
-              </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Your real clinical summary, allergies, and doctor consultation notes
-              </p>
-            </div>
-            <Link
-              href="/patient/profile"
-              className="inline-flex items-center gap-1 text-xs sm:text-sm font-bold text-[#0066cc] hover:underline"
-            >
-              <span>Edit Medical Profile</span>
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
-            {/* Column 1: Health Summary */}
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-2xs space-y-4">
-              <h3 className="text-xs sm:text-sm font-bold text-slate-900 border-b border-slate-100 pb-3">
-                Health Summary
-              </h3>
-              <div className="space-y-3 text-xs">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-slate-500">Registered Patient</span>
-                  <span className="font-bold text-slate-900">{profile.fullName || 'rahul'}</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-slate-500">Age</span>
-                  <span className="font-bold text-slate-900">
-                    {profile.age || "NA"} • {profile.gender === 'FEMALE' ? 'Female' : 'Male'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-slate-500">Blood Group</span>
-                  <span className="font-bold text-slate-900">
-                    {profile.bloodGroup || 'Not specified'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-slate-500">Primary Contact</span>
-                  <span className="font-bold text-slate-900">
-                    {profile.phone || (profile as any).contactDetails?.phone || (user as any)?.phone || 'None'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Column 2: Allergies & Meds */}
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-2xs space-y-4">
-              <h3 className="text-xs sm:text-sm font-bold text-slate-900 border-b border-slate-100 pb-3">
-                Allergies &amp; Meds
-              </h3>
-              <div className="space-y-3.5 text-xs">
-                <div>
-                  <div className="flex items-center gap-1.5 text-slate-800 font-semibold">
-                    <Ban className="h-3.5 w-3.5 text-red-500" />
-                    <span>Known Allergies</span>
-                  </div>
-                  <p className="mt-0.5 text-slate-500 text-[11px] pl-5">
-                    {profile.allergies?.trim() || 'No known allergies reported'}
-                  </p>
-                </div>
-
-                <div>
-                  <div className="flex items-center gap-1.5 text-slate-800 font-semibold">
-                    <FileText className="h-3.5 w-3.5 text-blue-500" />
-                    <span>Medical History &amp; Conditions</span>
-                  </div>
-                  <p className="mt-0.5 text-slate-500 text-[11px] pl-5">
-                    {profile.medicalHistory?.trim() || 'No chronic conditions recorded'}
-                  </p>
-                </div>
-
-                <div>
-                  <div className="flex items-center gap-1.5 text-slate-800 font-semibold">
-                    <Pill className="h-3.5 w-3.5 text-emerald-500" />
-                    <span>Current Medications</span>
-                  </div>
-                  <p className="mt-0.5 text-slate-500 text-[11px] pl-5">
-                    {profile.currentMedication?.trim() || 'No active medications recorded'}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Column 3: Doctor Notes */}
-            <div className="flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-5 shadow-2xs space-y-4">
-              <div>
-                <div className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-900 border-b border-slate-100 pb-3">
-                  <FileText className="h-4 w-4 text-[#0066cc]" />
-                  <span>Doctor Notes</span>
-                </div>
-
-                <div className="py-6 text-center">
-                  <FileText className="mx-auto h-8 w-8 text-slate-300" />
-                  <p className="mt-2 text-xs font-semibold text-slate-800">
-                    No clinical notes recorded yet
-                  </p>
-                  <p className="mt-1 text-[11px] text-slate-400 max-w-xs mx-auto leading-relaxed">
-                    Clinical advice recorded by your doctor during visits will appear here.
-                  </p>
-                </div>
-              </div>
-
-              <Link
-                href="/patient/profile"
-                className="w-full rounded-xl bg-blue-50 py-2.5 text-center text-xs font-semibold text-[#0066cc] transition-colors hover:bg-blue-100 block"
-              >
-                Update Medical Information
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        {/* ═══════════════ 7. RECENT CONSULTATIONS & CLINIC SUPPORT (REAL DATA) ═══════════════ */}
+        {/* ═══════════════ 6. RECENT CONSULTATIONS & CLINIC SUPPORT (REAL DATA) ═══════════════ */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {/* Recent Consultations */}
           <div className="space-y-3">
@@ -643,52 +521,72 @@ export default async function PatientDashboardPage() {
               )}
             </div>
 
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-2xs space-y-2.5">
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-2xs divide-y divide-slate-100">
               {past.length > 0 ? (
                 past.slice(0, 3).map((item: any) => (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between rounded-xl p-2.5 sm:p-3 transition-colors hover:bg-slate-50"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 py-3.5 first:pt-1 last:pb-1 transition-colors hover:bg-slate-50/60 rounded-xl px-1 sm:px-2"
                   >
-                    <div>
-                      <span className="text-xs sm:text-sm font-bold text-slate-900 block">
-                        Dr. {item.doctor?.fullName || 'Doctor'}
-                      </span>
-                      <span className="text-[11px] text-slate-500 block mt-0.5">
-                        {formatDate(item.date)} • {formatTime(item.startTime)}
-                      </span>
+                    {/* Doctor Avatar + Name + Specialization */}
+                    <div className="flex items-center gap-3 shrink-0">
+                      <DoctorAvatar
+                        name={item.doctor?.fullName || 'Doctor'}
+                        size="sm"
+                        className="h-11 w-11 rounded-full border border-blue-100 shadow-2xs shrink-0"
+                      />
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900 leading-tight">
+                          Dr. {item.doctor?.fullName || 'Doctor'}
+                        </h4>
+                        <p className="text-xs text-slate-500 font-medium mt-0.5">
+                          {item.doctor?.specialization || 'General Physician'}
+                        </p>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    {/* Date & Time + Status Pill */}
+                    <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+                      <span className="text-xs font-semibold text-slate-500 whitespace-nowrap">
+                        {formatDate(item.date)} • {formatTime(item.startTime)}
+                      </span>
+
                       <span
-                        className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${item.status === 'COMPLETED'
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : item.status === 'CANCELLED'
-                            ? 'bg-slate-100 text-slate-500'
-                            : 'bg-amber-50 text-amber-700'
-                          }`}
+                        className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${
+                          item.status === 'COMPLETED'
+                            ? 'bg-[#ECFDF3] text-[#027A48] border border-emerald-200/60'
+                            : item.status === 'CANCELLED'
+                            ? 'bg-[#EDF2F7] text-[#475569] border border-slate-200/60'
+                            : item.status === 'NO_SHOW'
+                            ? 'bg-[#FEF6EE] text-[#F79009] border border-orange-200/60'
+                            : 'bg-blue-50 text-blue-700 border border-blue-200/60'
+                        }`}
                       >
                         {item.status}
                       </span>
+                    </div>
 
+                    {/* Book Again Button with Calendar Icon */}
+                    <div className="shrink-0 self-start sm:self-auto">
                       <Link
                         href={item.doctor?.id ? `/doctors/${item.doctor.id}` : '/doctors'}
-                        className="rounded-lg border border-slate-200/90 bg-white px-3 py-1 text-xs font-semibold text-slate-700 transition-colors hover:border-[#0066cc] hover:text-[#0066cc]"
+                        className="inline-flex items-center gap-2 rounded-2xl border border-slate-200/90 bg-white hover:border-[#0066cc] hover:bg-blue-50/40 px-3.5 sm:px-4 py-2 text-xs font-bold text-slate-800 shadow-2xs transition-all cursor-pointer group"
                       >
-                        Book Again
+                        <Calendar className="h-4 w-4 text-slate-700 group-hover:text-[#0066cc] transition-colors shrink-0" />
+                        <span>Book Again</span>
                       </Link>
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="py-6 text-center text-slate-400">
+                <div className="py-8 text-center text-slate-400">
                   <p className="text-xs text-slate-500">No previous consultations on record.</p>
                   <Link
                     href="/doctors"
                     className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#0066cc] hover:underline"
                   >
                     <span>Browse Doctors</span>
-                    <ArrowRight className="h-3 w-3" />
+                    <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 </div>
               )}
@@ -752,6 +650,33 @@ export default async function PatientDashboardPage() {
                 </div>
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* ═══════════════ 7. BOTTOM BANNER: NEED TO UPDATE YOUR MEDICAL INFO (IMAGE 1) ═══════════════ */}
+        <section className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-blue-100 bg-gradient-to-r from-[#EFF6FF] via-[#E8F3FF] to-white p-5 sm:p-6 shadow-2xs">
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-[#0066cc]">
+                <FileText className="h-6 w-6 text-[#0066cc]" />
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900">
+                  Need to update your medical info?
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+                  Keep your records up to date for better care.
+                </p>
+              </div>
+            </div>
+
+            <Link
+              href="/patient/medical-records"
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl sm:rounded-2xl bg-[#0066cc] px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-white shadow-xs transition-all hover:bg-[#0052a3]"
+            >
+              <span>Update Now</span>
+              <ArrowRight className="h-4 w-4" />
+            </Link>
           </div>
         </section>
       </div>
