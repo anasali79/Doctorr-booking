@@ -146,8 +146,22 @@ export async function getDoctorPatientRecord(patientId: string, token?: string) 
       };
       appointments: any[];
       allClinicalNotes: any[];
+      medicalHistoryLogs?: any[];
     };
   }>(`/api/doctor/patients/${patientId}`, {
+    token,
+  });
+}
+
+export async function getDoctorPatientMedicalHistoryLogs(
+  patientId: string,
+  token?: string,
+) {
+  return apiFetch<{
+    success: boolean;
+    count: number;
+    data: any[];
+  }>(`/api/doctor/patients/${patientId}/medical-history-logs`, {
     token,
   });
 }

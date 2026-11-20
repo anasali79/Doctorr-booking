@@ -215,6 +215,16 @@ export class DoctorController {
     );
   }
 
+  @Get('patients/:patientId/medical-history-logs')
+  @UseGuards(JwtAuthGuard, RolesGuard, DoctorVerificationGuard)
+  @Roles(Role.DOCTOR)
+  getPatientMedicalHistoryLogs(
+    @CurrentUser() user: { id: string },
+    @Param('patientId') patientId: string,
+  ) {
+    return this.doctorService.getPatientMedicalHistoryLogs(user.id, patientId);
+  }
+
   // ─── Next Available Appointment (Public) ────────────────────────────────────
   // GET /api/doctor/:doctorId/next-available?searchWindow=30
   @Get(':doctorId/next-available')
