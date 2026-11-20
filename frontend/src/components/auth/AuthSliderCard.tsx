@@ -323,7 +323,7 @@ export function AuthSliderCard({ initialMode = 'signin' }: AuthSliderCardProps) 
             style={{ transformOrigin: 'center center' }}
           >
             <img
-              src="/images/auth-doctor-torch-clean.png"
+              src="/images/auth.png"
               alt="Doctor exploring medical records with flashlight"
               className="w-full h-full object-cover object-[30%_62%] select-none pointer-events-none"
             />
@@ -355,7 +355,7 @@ export function AuthSliderCard({ initialMode = 'signin' }: AuthSliderCardProps) 
                 </div>
               </div>
               <span className="text-white font-extrabold text-sm sm:text-base tracking-tight drop-shadow-xs">
-                med<span className="text-blue-200">explorer</span>
+                Care<span className="text-blue-200">UP</span>
               </span>
             </Link>
           </div>
@@ -375,7 +375,7 @@ export function AuthSliderCard({ initialMode = 'signin' }: AuthSliderCardProps) 
             style={{ transformOrigin: 'center center' }}
           >
             <img
-              src="/images/auth-doctor-torch-clean.png"
+              src="/images/auth.png"
               alt="Doctor exploring medical records with flashlight"
               className="w-full h-full object-cover select-none pointer-events-none"
             />

@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
 import { getPatientProfile } from '@/lib/api/patient';
 import { PatientProfileForm } from '@/components/patient/PatientProfileForm';
-import { UserCheck, Sparkles } from 'lucide-react';
+import { UserCheck } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,9 +14,10 @@ export default async function PatientProfilePage() {
   }
 
   let profile = null;
+
   try {
-    const res = await getPatientProfile(token);
-    profile = res.data;
+    const profileRes = await getPatientProfile(token);
+    profile = profileRes?.data || null;
   } catch {
     profile = null;
   }
@@ -32,10 +33,6 @@ export default async function PatientProfilePage() {
           <UserCheck className="w-6 h-6" />
         </div>
         <div>
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-bold text-[#0066cc]">
-            <Sparkles className="h-3.5 w-3.5 text-[#0066cc]" />
-            <span>ACCOUNT SETTINGS</span>
-          </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 mt-1">
             Patient Profile
           </h1>
@@ -45,8 +42,10 @@ export default async function PatientProfilePage() {
         </div>
       </div>
 
-      <div className="rounded-3xl border border-slate-200/90 bg-white shadow-sm p-6 sm:p-8">
-        <PatientProfileForm initialData={profile} isSetup={false} />
+      <div className="space-y-8">
+        <div className="rounded-3xl border border-slate-200/90 bg-white shadow-sm p-6 sm:p-8">
+          <PatientProfileForm initialData={profile} isSetup={false} />
+        </div>
       </div>
     </div>
   );

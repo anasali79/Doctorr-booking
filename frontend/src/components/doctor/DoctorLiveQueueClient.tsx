@@ -18,11 +18,13 @@ import {
   CheckCircle2,
   Hourglass,
   Search,
+  Eye,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { SmoothDatePicker } from '@/components/ui/smooth-date-picker';
 import { DoctorPrescriptionModal } from '@/components/prescription/DoctorPrescriptionModal';
+import { PatientProfileModal } from './PatientProfileModal';
 import { useAppointmentSocket } from '@/hooks/useAppointmentSocket';
 
 type ActionType = 'start-consultation' | 'complete' | 'no-show';
@@ -50,6 +52,8 @@ export function DoctorLiveQueueClient({
   const [prescriptionAppt, setPrescriptionAppt] = useState<Appointment | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [patientModalOpen, setPatientModalOpen] = useState(false);
+  const [modalPatientAppt, setModalPatientAppt] = useState<Appointment | null>(null);
 
   // Sync state when props change during render
   if (initialAppointments !== prevInitialAppointments) {
@@ -378,8 +382,20 @@ export function DoctorLiveQueueClient({
                     </div>
                   </div>
 
-                  {/* Prescription Action Only (Doctor Clinical Work) */}
-                  <div className="flex items-center shrink-0">
+                  {/* Prescription Action & View Profile (Doctor Clinical Work) */}
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setModalPatientAppt(activeAppt);
+                        setPatientModalOpen(true);
+                      }}
+                      className="h-10 px-4 rounded-2xl border-blue-200 bg-white hover:bg-blue-50 text-[#0066cc] font-bold text-xs sm:text-sm shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span>View Profile</span>
+                    </Button>
                     <Button
                       onClick={() => setPrescriptionAppt(activeAppt)}
                       className="h-10 px-5 rounded-2xl bg-[#0066cc] hover:bg-[#0052a3] text-white font-bold text-xs sm:text-sm shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all"
@@ -482,6 +498,23 @@ export function DoctorLiveQueueClient({
                   </span>
                 )}
               </div>
+
+              {nextUp && (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  onClick={() => {
+                    setModalPatientAppt(nextUp);
+                    setPatientModalOpen(true);
+                  }}
+                  className="h-7 px-2.5 rounded-lg border-slate-200 bg-white hover:bg-slate-50 hover:border-blue-300 hover:text-[#0066cc] text-slate-700 text-xs font-semibold gap-1 cursor-pointer transition-all shadow-2xs inline-flex items-center shrink-0 self-start md:self-center"
+                  title="View Next Patient Profile"
+                >
+                  <Eye className="w-3.5 h-3.5 text-slate-500" />
+                  <span>View Profile</span>
+                </Button>
+              )}
             </div>
 
             {/* 3. Queue List Table Card */}
@@ -626,30 +659,37 @@ export function DoctorLiveQueueClient({
 
                             {/* Action Column */}
                             <td className="py-3.5 px-5 sm:px-6 text-right whitespace-nowrap">
-                              {/* Prescription Button: ONLY for In Progress or Completed */}
-                              {(isConsulting || isCompleted) && (
+                              <div className="inline-flex items-center gap-1.5 justify-end">
                                 <Button
-                                  size="sm"
+                                  type="button"
+                                  size="xs"
                                   variant="outline"
-                                  onClick={() => setPrescriptionAppt(appt)}
-                                  className="h-7 px-2.5 rounded-lg border-blue-200 bg-blue-50/80 hover:bg-blue-100 text-[#0066cc] text-xs font-bold gap-1 cursor-pointer"
+                                  onClick={() => {
+                                    setModalPatientAppt(appt);
+                                    setPatientModalOpen(true);
+                                  }}
+                                  className="h-7 px-2.5 rounded-lg border-slate-200 bg-white hover:bg-slate-50 hover:border-blue-300 hover:text-[#0066cc] text-slate-700 text-xs font-semibold gap-1 cursor-pointer transition-all shadow-2xs inline-flex items-center"
+                                  title="View Full Patient Profile"
                                 >
-                                  <FileText className="w-3.5 h-3.5 text-[#0066cc]" />
-                                  <span>Rx</span>
+                                  <Eye className="w-3.5 h-3.5 text-slate-500" />
+                                  <span>View</span>
                                 </Button>
-                              )}
 
-                              {/* Expected notice */}
-                              {isConfirmed && (
-                                <span className="text-[11px] text-slate-400 font-medium">
-                                  Awaiting Check-in
-                                </span>
-                              )}
-
-                              {/* No Show / Cancelled */}
-                              {(isNoShow || isCancelled) && (
-                                <span className="text-xs text-slate-300 font-medium">—</span>
-                              )}
+                                {/* Prescription Button: ONLY for In Progress or Completed */}
+                                {(isConsulting || isCompleted) && (
+                                  <Button
+                                    type="button"
+                                    size="xs"
+                                    variant="outline"
+                                    onClick={() => setPrescriptionAppt(appt)}
+                                    className="h-7 px-2.5 rounded-lg border-blue-200 bg-blue-50/80 hover:bg-blue-100 text-[#0066cc] text-xs font-bold gap-1 cursor-pointer inline-flex items-center"
+                                    title="Write or View Prescription (Rx)"
+                                  >
+                                    <FileText className="w-3.5 h-3.5 text-[#0066cc]" />
+                                    <span>Rx</span>
+                                  </Button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );
@@ -733,6 +773,25 @@ export function DoctorLiveQueueClient({
           fetchAppointments(activeDate);
         }}
       />
+
+      {/* ── 7. Patient Profile Modal ── */}
+      {modalPatientAppt && (
+        <PatientProfileModal
+          key={modalPatientAppt.id || modalPatientAppt.patientId}
+          isOpen={patientModalOpen}
+          onClose={() => {
+            setPatientModalOpen(false);
+            setModalPatientAppt(null);
+          }}
+          patientId={modalPatientAppt.patientId || modalPatientAppt.patient?.id || ''}
+          initialPatient={modalPatientAppt.patient}
+          currentAppointment={modalPatientAppt}
+          currentAppointmentId={modalPatientAppt.id}
+          onRecordUpdated={() => {
+            fetchAppointments(activeDate);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Calendar,
   CreditCard,
+  FileText,
   LayoutDashboard,
   Stethoscope,
   ChevronRight,
@@ -148,6 +149,11 @@ export function Navbar({ user, userName, unreadCount = 0 }: NavbarProps) {
       },
       ...(!isDoctor
         ? [
+          {
+            title: 'Medical Records',
+            icon: <FileText className="h-full w-full text-slate-600" />,
+            href: '/patient/medical-records',
+          },
           {
             title: 'Payments',
             icon: <CreditCard className="h-full w-full text-slate-600" />,
@@ -291,20 +297,36 @@ export function Navbar({ user, userName, unreadCount = 0 }: NavbarProps) {
                           )}
                         </Link>
                         {!isDoctor && (
-                          <Link
-                            href="/patient/payments"
-                            className={cn(
-                              'relative px-4 py-2 text-xs font-semibold transition-all duration-200',
-                              pathname.startsWith('/patient/payments')
-                                ? 'text-[#0066cc]'
-                                : 'text-slate-600 hover:text-slate-900',
-                            )}
-                          >
-                            <span>Payments</span>
-                            {pathname.startsWith('/patient/payments') && (
-                              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0066cc] rounded-full" />
-                            )}
-                          </Link>
+                          <>
+                            <Link
+                              href="/patient/medical-records"
+                              className={cn(
+                                'relative px-4 py-2 text-xs font-semibold transition-all duration-200',
+                                pathname.startsWith('/patient/medical-record')
+                                  ? 'text-[#0066cc]'
+                                  : 'text-slate-600 hover:text-slate-900',
+                              )}
+                            >
+                              <span>Medical Records</span>
+                              {pathname.startsWith('/patient/medical-record') && (
+                                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0066cc] rounded-full" />
+                              )}
+                            </Link>
+                            <Link
+                              href="/patient/payments"
+                              className={cn(
+                                'relative px-4 py-2 text-xs font-semibold transition-all duration-200',
+                                pathname.startsWith('/patient/payments')
+                                  ? 'text-[#0066cc]'
+                                  : 'text-slate-600 hover:text-slate-900',
+                              )}
+                            >
+                              <span>Payments</span>
+                              {pathname.startsWith('/patient/payments') && (
+                                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0066cc] rounded-full" />
+                              )}
+                            </Link>
+                          </>
                         )}
                       </>
                     ) : (
@@ -634,22 +656,40 @@ export function Navbar({ user, userName, unreadCount = 0 }: NavbarProps) {
                 </Link>
 
                 {!isDoctor && (
-                  <Link
-                    href="/patient/payments"
-                    onClick={closeMobile}
-                    className={cn(
-                      'flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors',
-                      pathname.startsWith('/patient/payments')
-                        ? 'bg-blue-50 text-[#0066cc] font-semibold'
-                        : 'text-slate-700 hover:bg-slate-50',
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <CreditCard className="h-4 w-4 text-[#0066cc]" />
-                      <span>Payments</span>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-slate-300" />
-                  </Link>
+                  <>
+                    <Link
+                      href="/patient/medical-records"
+                      onClick={closeMobile}
+                      className={cn(
+                        'flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors',
+                        pathname.startsWith('/patient/medical-record')
+                          ? 'bg-blue-50 text-[#0066cc] font-semibold'
+                          : 'text-slate-700 hover:bg-slate-50',
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-4 w-4 text-[#0066cc]" />
+                        <span>Medical Records</span>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-slate-300" />
+                    </Link>
+                    <Link
+                      href="/patient/payments"
+                      onClick={closeMobile}
+                      className={cn(
+                        'flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors',
+                        pathname.startsWith('/patient/payments')
+                          ? 'bg-blue-50 text-[#0066cc] font-semibold'
+                          : 'text-slate-700 hover:bg-slate-50',
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <CreditCard className="h-4 w-4 text-[#0066cc]" />
+                        <span>Payments</span>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-slate-300" />
+                    </Link>
+                  </>
                 )}
 
                 <Link

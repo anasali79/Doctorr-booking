@@ -830,6 +830,19 @@ export function PatientAppointmentsClient({
                   </div>
                 )}
 
+                {/* Doctor Clinical Notes */}
+                {Boolean(appt.clinicalNotes && appt.clinicalNotes.trim().length > 0) && (
+                  <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-2xl space-y-1 text-xs">
+                    <span className="text-[10px] font-bold text-[#0066cc] uppercase tracking-wider flex items-center gap-1">
+                      <FileText className="w-3 h-3" />
+                      Doctor Consultation Notes
+                    </span>
+                    <p className="text-slate-800 whitespace-pre-line font-medium leading-relaxed">
+                      {appt.clinicalNotes}
+                    </p>
+                  </div>
+                )}
+
                 {/* Prescription button (whenever prescription issued) */}
                 {Boolean(appt.hasPrescription) && (
                   <div className="pt-2 border-t border-black/[0.06]">

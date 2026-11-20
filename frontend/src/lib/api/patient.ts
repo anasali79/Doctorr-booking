@@ -4,6 +4,7 @@ import {
   PatientDashboardResponse,
   Appointment,
   ApiResponse,
+  PatientMedicalHistoryLog,
 } from '@/types';
 import { PatientProfileInput, BookingInput, RescheduleInput } from '../schemas';
 
@@ -83,3 +84,14 @@ export async function reschedulePatientAppointment(
     token,
   });
 }
+
+export async function getPatientMedicalHistoryLogs(token: string) {
+  return apiFetch<{
+    success?: boolean;
+    count?: number;
+    data: PatientMedicalHistoryLog[];
+  }>('/api/patient/medical-history-logs', {
+    token,
+  });
+}
+

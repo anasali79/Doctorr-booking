@@ -118,6 +118,7 @@ export function MyDayClient({
 
   // Patient Profile Modal & Historical Record
   const [patientModalOpen, setPatientModalOpen] = useState(false);
+  const [modalPatientAppt, setModalPatientAppt] = useState<Appointment | null>(null);
   const [rescheduleModalOpen, setRescheduleModalOpen] = useState(false);
   const [reschedulingAppt, setReschedulingAppt] = useState<Appointment | null>(null);
   const [prescriptionModalOpen, setPrescriptionModalOpen] = useState(false);
@@ -695,20 +696,24 @@ export function MyDayClient({
                           {/* Action Button */}
                           <TableCell className="py-3 px-3 text-right whitespace-nowrap">
                             <div className="inline-flex items-center gap-1.5 justify-end">
-                              {['CONFIRMED', 'CHECKED_IN', 'IN_CONSULTATION'].includes(appt.status) ? (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="xs"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedApptId(appt.id);
-                                  }}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all shadow-2xs h-auto"
-                                >
-                                  View
-                                </Button>
-                              ) : appt.status === 'COMPLETED' ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="xs"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedApptId(appt.id);
+                                  setModalPatientAppt(appt);
+                                  setPatientModalOpen(true);
+                                }}
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-blue-300 hover:text-[#0066cc] transition-all shadow-2xs h-auto cursor-pointer"
+                                title="View Patient Profile"
+                              >
+                                <Eye className="h-3 w-3 text-slate-500" />
+                                <span>View</span>
+                              </Button>
+
+                              {appt.status === 'COMPLETED' && (
                                 <Button
                                   type="button"
                                   size="xs"
@@ -723,8 +728,6 @@ export function MyDayClient({
                                   <FileText className="h-3 w-3 text-emerald-600" />
                                   <span>Rx</span>
                                 </Button>
-                              ) : (
-                                <span className="text-slate-300">—</span>
                               )}
 
                               {['CONFIRMED', 'CHECKED_IN'].includes(appt.status) && (
@@ -877,7 +880,10 @@ export function MyDayClient({
                 <Button
                   type="button"
                   variant="ghost"
-                  onClick={() => setPatientModalOpen(true)}
+                  onClick={() => {
+                    setModalPatientAppt(currentAppt);
+                    setPatientModalOpen(true);
+                  }}
                   className="text-xs font-semibold text-[#0066cc] hover:underline p-0 h-auto hover:bg-transparent"
                 >
                   View All
@@ -1145,7 +1151,10 @@ export function MyDayClient({
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setPatientModalOpen(true)}
+                  onClick={() => {
+                    setModalPatientAppt(currentAppt);
+                    setPatientModalOpen(true);
+                  }}
                   className="w-full py-2.5 rounded-xl border border-[#0066cc] text-[#0066cc] hover:bg-blue-50 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors h-auto"
                 >
                   <span>View Full Patient Profile</span>
@@ -1271,17 +1280,22 @@ export function MyDayClient({
         }}
       />
 
-      {currentAppt && (
+      {(modalPatientAppt || currentAppt) && (
         <PatientProfileModal
+          key={(modalPatientAppt || currentAppt)?.id || (modalPatientAppt || currentAppt)?.patientId}
           isOpen={patientModalOpen}
-          onClose={() => setPatientModalOpen(false)}
-          patientId={currentAppt.patientId || currentAppt.patient?.id || ''}
-          initialPatient={currentAppt.patient}
-          currentAppointment={currentAppt}
-          currentAppointmentId={currentAppt.id}
+          onClose={() => {
+            setPatientModalOpen(false);
+            setModalPatientAppt(null);
+          }}
+          patientId={(modalPatientAppt || currentAppt)?.patientId || (modalPatientAppt || currentAppt)?.patient?.id || ''}
+          initialPatient={(modalPatientAppt || currentAppt)?.patient}
+          currentAppointment={modalPatientAppt || currentAppt}
+          currentAppointmentId={(modalPatientAppt || currentAppt)?.id}
           onRecordUpdated={() => {
             fetchAppointmentsForDate(selectedDate);
-            const pid = currentAppt.patientId || currentAppt.patient?.id;
+            const activeTarget = modalPatientAppt || currentAppt;
+            const pid = activeTarget?.patientId || activeTarget?.patient?.id;
             if (pid) {
               setPatientHistory((prev) => {
                 const copy = { ...prev };
